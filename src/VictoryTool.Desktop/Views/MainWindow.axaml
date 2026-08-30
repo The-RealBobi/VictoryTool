@@ -21,7 +21,7 @@
 
     <Grid Grid.Row="1" Margin="24">
       <Grid>
-        <Border Classes="panel fade-surface" IsVisible="{Binding IsOnboardingVisible}" Opacity="{Binding IsOnboardingVisible, Converter={StaticResource BooleanToOpacity}}" IsHitTestVisible="{Binding IsOnboardingVisible}" Width="620" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <Border Classes="panel fade-surface" Opacity="{Binding IsOnboardingVisible, Converter={StaticResource BooleanToOpacity}}" IsHitTestVisible="{Binding IsOnboardingVisible}" Width="620" HorizontalAlignment="Center" VerticalAlignment="Center">
           <StackPanel Spacing="16">
             <TextBlock Classes="page-title" Text="{Binding Text.WelcomeTitle}" />
             <TextBlock Classes="muted" Text="{Binding Text.WelcomeBody}" TextWrapping="Wrap" />
@@ -35,7 +35,7 @@
           </StackPanel>
         </Border>
 
-        <Border Classes="panel fade-surface" IsVisible="{Binding IsMainMenuVisible}" Opacity="{Binding IsMainMenuVisible, Converter={StaticResource BooleanToOpacity}}" IsHitTestVisible="{Binding IsMainMenuVisible}" Width="760" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="28">
+        <Border Classes="panel fade-surface" Opacity="{Binding IsMainMenuVisible, Converter={StaticResource BooleanToOpacity}}" IsHitTestVisible="{Binding IsMainMenuVisible}" Width="760" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="28">
           <StackPanel Spacing="22">
             <TextBlock Classes="page-title" Text="{Binding WizardText.WhatWouldYouLike}" />
             <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
@@ -46,7 +46,7 @@
           </StackPanel>
         </Border>
 
-        <Border Classes="panel fade-surface" IsVisible="{Binding IsIncorporationVisible}" Opacity="{Binding IsIncorporationVisible, Converter={StaticResource BooleanToOpacity}}" IsHitTestVisible="{Binding IsIncorporationVisible}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Padding="32" DragDrop.AllowDrop="True" DragDrop.DragOver="BatchDragOver" DragDrop.Drop="BatchDrop">
+        <Border Classes="panel fade-surface" Opacity="{Binding IsIncorporationVisible, Converter={StaticResource BooleanToOpacity}}" IsHitTestVisible="{Binding IsIncorporationVisible}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Padding="32" DragDrop.AllowDrop="True" DragDrop.DragOver="BatchDragOver" DragDrop.Drop="BatchDrop">
           <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="16">
             <Grid ColumnDefinitions="*,Auto">
               <TextBlock Classes="page-title" Text="{Binding WizardText.IncorporationTitle}" />
@@ -86,6 +86,10 @@
                 </ComboBox.ItemTemplate>
               </ComboBox>
             </Grid>
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <Button Command="{Binding OpenLocalesJsonCommand}" Content="{Binding WizardText.EditLocalesJson}" />
+              <TextBlock VerticalAlignment="Center" Classes="muted" Text="{Binding LocalesJsonPath}" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
             <TextBlock Classes="section-title" Text="{Binding WizardText.WesternName}" />
             <TextBox Text="{Binding SelectedLocalizationEditorRow.LocalizedName}" />
             <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
@@ -346,7 +350,7 @@
                 </Border>
                 <TextBlock FontSize="20" FontWeight="SemiBold" Text="{Binding ReviewDisplayName}" TextTrimming="CharacterEllipsis" />
                 <TextBlock Classes="muted" Text="{Binding ReviewSeries}" TextTrimming="CharacterEllipsis" />
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="8">
                   <StackPanel Spacing="2">
                     <TextBlock Classes="muted" Text="{Binding WizardText.Affinity}" />
                     <TextBlock FontWeight="SemiBold" Text="{Binding ReviewAffinity}" />
@@ -355,22 +359,18 @@
                     <TextBlock Classes="muted" Text="{Binding WizardText.Position}" />
                     <TextBlock FontWeight="SemiBold" Text="{Binding ReviewMainPosition}" />
                   </StackPanel>
+                  <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Spacing="2">
+                    <TextBlock Classes="muted" Text="{Binding WizardText.OriginGame}" />
+                    <TextBlock FontWeight="SemiBold" Text="{Binding ReviewOriginGame}" TextTrimming="CharacterEllipsis" />
+                  </StackPanel>
                 </Grid>
               </StackPanel>
             </Grid>
-            <Border Grid.Row="2" IsVisible="{Binding HasDiagnostics}" Background="#2B1820" BorderBrush="#9E4B5C" BorderThickness="1" CornerRadius="6" Padding="10">
-              <ScrollViewer MaxHeight="120" VerticalScrollBarVisibility="Auto">
-                <StackPanel Spacing="4">
-                  <TextBlock FontWeight="SemiBold" Text="{Binding Text.Diagnostics}" />
-                  <TextBlock FontSize="11" TextWrapping="Wrap" Text="{Binding DiagnosticReport}" />
-                </StackPanel>
-              </ScrollViewer>
-            </Border>
             <Button Grid.Row="3" Classes="primary" HorizontalAlignment="Right" Click="SaveCharacterPackage" Content="{Binding WizardText.SaveCharacter}" />
           </Grid>
         </Border>
 
-        <Border IsVisible="{Binding IsPostSavePromptVisible}" Background="#E60A1428" Padding="28" HorizontalAlignment="Center" VerticalAlignment="Center" CornerRadius="10">
+        <Border Classes="fade-surface" Opacity="{Binding IsPostSavePromptVisible, Converter={StaticResource BooleanToOpacity}}" IsHitTestVisible="{Binding IsPostSavePromptVisible}" Background="#E60A1428" Padding="28" HorizontalAlignment="Center" VerticalAlignment="Center" CornerRadius="10">
           <StackPanel Spacing="16" Width="520">
             <TextBlock Classes="page-title" Text="{Binding WizardText.SaveToBatchQuestion}" TextWrapping="Wrap" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">

@@ -107,6 +107,8 @@ public sealed class GameTaxonomyIndex
 
     public string ResolveAcademicYear(uint id, string locale)
     {
+        if (id == 0)
+            return locale.Equals("es", StringComparison.OrdinalIgnoreCase) ? "Desconocido" : "Unknown";
         if (!_academicYears.TryGetValue(id, out var item))
             return $"Unknown academic year (0x{id:X8})";
         if (ResolveText(item.NameTextId, locale) is { } text)

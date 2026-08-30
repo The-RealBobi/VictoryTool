@@ -320,6 +320,7 @@ public sealed class ExportPlanner : IExportPlanner
                 var variants = CharacterRarityCatalog.OrderForRuntime(
                         CharacterRarityCatalog.EnsureDraftVariants(storedVariants))
                     ?? storedVariants;
+                var symbolicId = ResolvePackageSymbolicId(manifest.Character, entry.Id);
                 expectedVariantCount += variants.Count;
                 var rarityGroups = variants
                     .GroupBy(variant => variant.Gameplay.SpecialRarity ?? 0)
@@ -330,7 +331,7 @@ public sealed class ExportPlanner : IExportPlanner
                     variantDiagnostics.Add(new Diagnostic(
                         "export.variant_rarity_duplicate",
                         DiagnosticSeverity.Warning,
-                        $"Character '{manifest.Character.SymbolicId}' has {group.Count()} parameter rows with rarity {group.Key}.",
+                        $"Character '{symbolicId}' has {group.Count()} parameter rows with rarity {group.Key}.",
                         group.Key == 0
                             ? "All rows will be exported, but Delivery uses the first rarity-0 row because the game may apply another hidden variant key."
                             : "All rows will be exported; use the rarity selector to edit each row independently."));
@@ -341,10 +342,10 @@ public sealed class ExportPlanner : IExportPlanner
                     variantDiagnostics.Add(new Diagnostic(
                         "export.delivery_primary_rarity_missing",
                         DiagnosticSeverity.Error,
-                        $"Character '{manifest.Character.SymbolicId}' has no rarity-0 parameter row.",
+                        $"Character '{symbolicId}' has no rarity-0 parameter row.",
                         "Delivery rewards the first rarity. Add or preserve a rarity-0 variant before exporting."));
                 }
-                packages.Add(new ExportPackagePlan(entry.Id, entry.PackagePath, manifest.Character.SymbolicId));
+                packages.Add(new ExportPackagePlan(entry.Id, entry.PackagePath, symbolicId));
                 requests.Add(new ExportIdRequest(
                     entry.Id,
                     "character",
@@ -354,23 +355,23 @@ public sealed class ExportPlanner : IExportPlanner
                 {
                     var domain = variantIndex == 0 ? "parameter" : "parameterVariant";
                     requests.Add(new ExportIdRequest(entry.Id, domain,
-                        $"{manifest.Character.SymbolicId}.variant.{variantIndex}"));
+                        $"{symbolicId}.variant.{variantIndex}"));
                     if (acquisition is AcquisitionMode.Delivery && variantIndex == 0)
                     {
                         requests.Add(new ExportIdRequest(entry.Id, "delivery",
-                            $"{manifest.Character.SymbolicId}.delivery.variant.0"));
+                            $"{symbolicId}.delivery.variant.0"));
                         requests.Add(new ExportIdRequest(entry.Id, "deliveryReceived",
-                            $"{manifest.Character.SymbolicId}.delivery.received.variant.0"));
+                            $"{symbolicId}.delivery.received.variant.0"));
                     }
                 }
                 requests.Add(new ExportIdRequest(
-                    entry.Id, "nameText", $"{manifest.Character.SymbolicId}.name.full"));
+                    entry.Id, "nameText", $"{symbolicId}.name.full"));
                 requests.Add(new ExportIdRequest(
-                    entry.Id, "nameText", $"{manifest.Character.SymbolicId}.name.short"));
+                    entry.Id, "nameText", $"{symbolicId}.name.short"));
                 requests.Add(new ExportIdRequest(
-                    entry.Id, "nameText", $"{manifest.Character.SymbolicId}.name.upper"));
+                    entry.Id, "nameText", $"{symbolicId}.name.upper"));
                 requests.Add(new ExportIdRequest(
-                    entry.Id, "descriptionText", $"{manifest.Character.SymbolicId}.description"));
+                    entry.Id, "descriptionText", $"{symbolicId}.description"));
                 if (acquisition is AcquisitionMode.Delivery)
                 {
                     if (TryCreateCharacterDeliveryOperation(profile, entry.Id, 0, out var deliveryOperation, out var deliveryDiagnostic))
@@ -385,7 +386,7 @@ public sealed class ExportPlanner : IExportPlanner
                 {
                     characterModelOperations.Add(modelOperation);
                     requests.Add(new ExportIdRequest(
-                        entry.Id, "model", $"{manifest.Character.SymbolicId}.model"));
+                        entry.Id, "model", $"{symbolicId}.model"));
                 }
                 if (customModelDiagnostic is not null) modelDiagnostics.Add(customModelDiagnostic);
 
@@ -396,7 +397,7 @@ public sealed class ExportPlanner : IExportPlanner
                     {
                         shopCharacterOperations.Add(shopOperation!);
                         requests.Add(new ExportIdRequest(
-                            entry.Id, "shopItem", $"{manifest.Character.SymbolicId}.shop.item"));
+                            entry.Id, "shopItem", $"{symbolicId}.shop.item"));
                     }
                     else
                     {
@@ -1313,6 +1314,17 @@ public sealed class ExportPlanner : IExportPlanner
         // numeric ID remains the CRC32 of this exact generated name.
         var suffix = ExportIdAllocator.ComputeCrc32(batchEntryId.ToString("N")) % 1_000_000u;
         return $"c99{suffix:D6}";
+    }
+
+    private static string ResolvePackageSymbolicId(CharacterDraft character, Guid batchEntryId)
+    {
+        // Older packages created every clone as character.main. Keep them
+        // importable in one batch by deriving a stable package key from the
+        // persisted batch entry instead of rejecting the whole batch.
+        if (!string.Equals(character.SymbolicId, "character.main", StringComparison.OrdinalIgnoreCase))
+            return character.SymbolicId;
+
+        return $"character.{batchEntryId:N}";
     }
 
     private static bool IsCustomCharacterName(string? value) =>

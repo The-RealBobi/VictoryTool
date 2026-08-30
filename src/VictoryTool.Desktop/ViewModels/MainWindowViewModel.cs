@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Globalization;
+using System.Text.Json;
 using System.Windows.Input;
 using Avalonia.Media.Imaging;
 using VictoryTool.Application.Assets;
@@ -306,6 +308,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private CharacterDraft? _activeDraft;
     private Guid? _activeDraftId;
     private bool _isUpdatingActiveDraftField;
+    private bool _isUpdatingBodyTypeChoice;
     private bool _isRemoveDraftConfirmationVisible;
     private WorkspaceKind _activeWorkspace = WorkspaceKind.Project;
     private WizardStep _wizardStep = WizardStep.Setup;
@@ -314,6 +317,7 @@ public sealed class MainWindowViewModel : ObservableObject
     // remains available as an explicit batch choice with its own requirements.
     private AcquisitionMode _acquisitionMode = AcquisitionMode.Delivery;
     private string _exportOutputPath = string.Empty;
+    private bool _exportOutputPathGenerated;
     private ExportPlan? _currentExportPlan;
     private UiText _text = UiText.English;
     private WizardText _wizardText = WizardText.English;
@@ -352,6 +356,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private string? _modificationSourcePath;
     private string? _lastSavedPackagePath;
     private bool _isPostSavePromptVisible;
+    private string? _localesJsonPath;
 
     public MainWindowViewModel()
         : this(new FileSystemCharacterCatalogService(), new CharacterCloneService())
@@ -437,6 +442,7 @@ public sealed class MainWindowViewModel : ObservableObject
         MoveBatchEntryUpCommand = new DelegateCommand(() => MoveSelectedBatchEntry(-1));
         MoveBatchEntryDownCommand = new DelegateCommand(() => MoveSelectedBatchEntry(1));
         SaveDraftCommand = new AsyncCommand(SaveDraftAsync);
+        OpenLocalesJsonCommand = new AsyncCommand(OpenLocalesJsonAsync);
         CancelIndexingCommand = new DelegateCommand(CancelIndexing);
         ClearCharacterFiltersCommand = new DelegateCommand(ClearCharacterFilters);
         DuplicateSelectedCharacterCommand = new DelegateCommand(DuplicateSelectedCharacter);
@@ -585,6 +591,7 @@ public sealed class MainWindowViewModel : ObservableObject
         .ToArray();
 
     public IReadOnlyList<int> AcademicYearOptions => DistinctBaseValues(metadata => metadata.AcademicYear);
+    private string UnknownAcademicYearLabel => SelectedLanguageCode == "es" ? "Desconocido" : "Unknown";
     public IReadOnlyList<int> GenderOptions => DistinctBaseValues(metadata => metadata.Gender);
     public IReadOnlyList<int> BodyTypeOptions => CharacterBodyTypeCatalog.Values;
     public IReadOnlyList<IdentityChoice> BodyTypeChoices => BodyTypeOptions
@@ -803,6 +810,11 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         if (WizardStep == WizardStep.Setup) { if (IsWorkspaceReady) ReturnToMainMenu(); return; }
         if (!CanGoBack) return;
+        if (WizardStep == WizardStep.Character)
+        {
+            ReturnToMainMenu();
+            return;
+        }
         var index = Array.IndexOf(WizardSteps, WizardStep);
         if (index <= 0) { ReturnToMainMenu(); return; }
         WizardStep = WizardSteps[index - 1];
@@ -1008,7 +1020,7 @@ public sealed class MainWindowViewModel : ObservableObject
     public int? PlayerCardGender => SelectedCharacter?.BaseMetadata?.Gender;
     public int? PlayerCardBodyType => ActiveDraftBodyType ?? SelectedCharacter?.BaseMetadata?.BodyType;
     public string PlayerCardAcademicYear => SelectedCharacter?.BaseMetadata is { AcademicYear: 0 }
-        ? "Unknown"
+        ? UnknownAcademicYearLabel
         : SelectedCharacter?.BaseMetadata is { } characterBase
             ? SelectedCharacter.Taxonomy?.ResolveAcademicYear(
             unchecked((uint)characterBase.AcademicYear), PlayerCardLocale)
@@ -1021,6 +1033,8 @@ public sealed class MainWindowViewModel : ObservableObject
         ?? string.Empty;
 
     public string ReviewSeries => GetActiveDraftField("Identity.SeriesName", "Unknown");
+
+    public string ReviewOriginGame => GetActiveDraftField("Identity.OriginGameName", "Unknown");
 
     public string ReviewAffinity => ResolveAffinityName(
         ActiveDraft?.Gameplay?.Affinity is { } affinity
@@ -1358,6 +1372,8 @@ public sealed class MainWindowViewModel : ObservableObject
                 OnPropertyChanged(nameof(ActiveDraftTeamAssociationChoice));
                 if (previous?.SymbolicId != value?.SymbolicId)
                 {
+                    _localesJsonPath = null;
+                    OnPropertyChanged(nameof(LocalesJsonPath));
                     OnPropertyChanged(nameof(AppearanceModelOptions));
                     OnPropertyChanged(nameof(AppearanceUniformOptions));
                     OnPropertyChanged(nameof(AppearanceShoesOptions));
@@ -1437,7 +1453,7 @@ public sealed class MainWindowViewModel : ObservableObject
         .Select(group => new IdentityChoice(
             group.Key.ToString(CultureInfo.InvariantCulture),
             group.First().Taxonomy?.ResolveAcademicYear(unchecked((uint)group.Key), PlayerCardLocale)
-                ?? (group.Key == 0 ? "Unknown" : $"Academic year {group.Key}")))
+                ?? (group.Key == 0 ? UnknownAcademicYearLabel : $"Academic year {group.Key}")))
         .OrderBy(choice => choice.Label, StringComparer.CurrentCultureIgnoreCase)
         .ToArray();
 
@@ -1712,8 +1728,23 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public void SetActiveDraftBodyType(IdentityChoice? choice)
     {
-        if (choice is not null)
+        if (choice is null
+            || _isUpdatingBodyTypeChoice
+            || string.Equals(
+                ActiveDraftBodyType?.ToString(CultureInfo.InvariantCulture),
+                choice.Value,
+                StringComparison.Ordinal))
+            return;
+
+        _isUpdatingBodyTypeChoice = true;
+        try
+        {
             UpdateActiveDraftField("Identity.BodyType", choice.Value);
+        }
+        finally
+        {
+            _isUpdatingBodyTypeChoice = false;
+        }
     }
 
     public string ActiveDraftSkinColor
@@ -2409,6 +2440,7 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(ReviewDisplayName));
         OnPropertyChanged(nameof(ReviewSeries));
+        OnPropertyChanged(nameof(ReviewOriginGame));
         OnPropertyChanged(nameof(ReviewAffinity));
         OnPropertyChanged(nameof(ReviewMainPosition));
     }
@@ -2481,9 +2513,17 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _exportOutputPath;
         set
         {
+            _exportOutputPathGenerated = false;
             if (SetProperty(ref _exportOutputPath, value))
                 InvalidateExportPlan();
         }
+    }
+
+    public void SetGeneratedExportOutputPath(string path)
+    {
+        _exportOutputPathGenerated = true;
+        if (SetProperty(ref _exportOutputPath, path))
+            InvalidateExportPlan();
     }
 
     public ExportPlan? CurrentExportPlan
@@ -2588,6 +2628,8 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _draftPackagePath;
         set => SetProperty(ref _draftPackagePath, value);
     }
+
+    public string? LocalesJsonPath => _localesJsonPath;
 
     public UiText Text
     {
@@ -2775,6 +2817,7 @@ public sealed class MainWindowViewModel : ObservableObject
     public ICommand MoveBatchEntryUpCommand { get; }
     public ICommand MoveBatchEntryDownCommand { get; }
     public ICommand SaveDraftCommand { get; }
+    public ICommand OpenLocalesJsonCommand { get; }
     public ICommand CancelIndexingCommand { get; }
     public ICommand ClearCharacterFiltersCommand { get; }
     public ICommand DuplicateSelectedCharacterCommand { get; }
@@ -3251,6 +3294,9 @@ public sealed class MainWindowViewModel : ObservableObject
 
         try
         {
+            if (!await ApplyEditedLocalesAsync())
+                return;
+
             if (string.IsNullOrWhiteSpace(ActiveDraft.Acquisition?.Method))
             {
                 ActiveDraft = ActiveDraft with
@@ -3275,6 +3321,89 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
+    public async Task OpenLocalesJsonAsync()
+    {
+        if (ActiveDraft is null)
+        {
+            StatusMessage = SelectedLanguageCode == "es"
+                ? "Selecciona o crea un personaje antes de editar los locales."
+                : "Select or create a character before editing locales.";
+            return;
+        }
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_localesJsonPath) || !File.Exists(_localesJsonPath))
+            {
+                var directory = Path.Combine(Path.GetTempPath(), "VictoryTool", "locales");
+                Directory.CreateDirectory(directory);
+                _localesJsonPath = Path.Combine(directory, $"{SanitizeFileName(ActiveDraft.DisplayName)}-{Guid.NewGuid():N}.json");
+                await File.WriteAllTextAsync(
+                    _localesJsonPath,
+                    CharacterLocalizationJson.Serialize(ActiveDraft.Localization),
+                    CancellationToken.None);
+                OnPropertyChanged(nameof(LocalesJsonPath));
+            }
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = _localesJsonPath,
+                UseShellExecute = true,
+            });
+            StatusMessage = SelectedLanguageCode == "es"
+                ? "Edita el JSON de locales y pulsa Guardar cuando termines."
+                : "Edit the locales JSON and press Save when you are finished.";
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            StatusMessage = exception.Message;
+        }
+    }
+
+    private async Task<bool> ApplyEditedLocalesAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_localesJsonPath)) return true;
+        if (!File.Exists(_localesJsonPath))
+        {
+            StatusMessage = SelectedLanguageCode == "es"
+                ? "No se encuentra el JSON de locales temporal; vuelve a abrirlo antes de guardar."
+                : "The temporary locales JSON cannot be found; open it again before saving.";
+            return false;
+        }
+
+        try
+        {
+            var json = await File.ReadAllTextAsync(_localesJsonPath, CancellationToken.None);
+            var localization = CharacterLocalizationJson.Deserialize(json);
+            ActiveDraft = ActiveDraft! with { Localization = localization };
+            if (_activeDraftId is { } draftId)
+            {
+                Project.UpdateDraft(draftId, ActiveDraft);
+                UpdateDraftRosterItem(draftId, ActiveDraft);
+            }
+            RebuildLocalizationEditorRows();
+            NotifyReviewChanged();
+            QueueRecoverySave();
+            return true;
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or JsonException)
+        {
+            StatusMessage = SelectedLanguageCode == "es"
+                ? $"El JSON de locales no es válido: {exception.Message}"
+                : $"The locales JSON is invalid: {exception.Message}";
+            return false;
+        }
+    }
+
+    private static string SanitizeFileName(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var sanitized = new string(value.Select(character => invalid.Contains(character) ? '_' : character).ToArray()).Trim();
+        return string.IsNullOrWhiteSpace(sanitized) ? "character" : sanitized;
+    }
+
     private void SetDefaultShopAcquisition(Guid entryId)
     {
         Project.SetAcquisition(
@@ -3297,6 +3426,9 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         try
         {
+            if (_exportOutputPathGenerated
+                && (Directory.Exists(ExportOutputPath) || File.Exists(ExportOutputPath)))
+                SetGeneratedExportOutputPath(GetNextExportPath(ExportOutputPath));
             if (AcquisitionMode is AcquisitionMode.Shop or AcquisitionMode.Both)
                 EnsureShopAcquisitionDefaults();
             CurrentExportPlan = _playerCardAssetProfile is { } profile
@@ -3357,12 +3489,23 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             var result = await _exportExecutor.ExecuteAsync(CurrentExportPlan, CancellationToken.None);
             StatusMessage = $"Export published to {result.OutputPath}.";
+            SetGeneratedExportOutputPath(GetNextExportPath(result.OutputPath));
         }
         catch (Exception exception) when (
             exception is InvalidOperationException or NotSupportedException or IOException or UnauthorizedAccessException)
         {
             StatusMessage = exception.Message;
         }
+    }
+
+    private static string GetNextExportPath(string previousPath)
+    {
+        var parent = Path.GetDirectoryName(previousPath) ?? Path.GetTempPath();
+        var stem = Path.GetFileName(previousPath);
+        var candidate = Path.Combine(parent, $"{stem} (2)");
+        for (var suffix = 3; Directory.Exists(candidate) || File.Exists(candidate); suffix++)
+            candidate = Path.Combine(parent, $"{stem} ({suffix})");
+        return candidate;
     }
 
     public void ToggleLanguage()

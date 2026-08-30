@@ -1,7 +1,8 @@
 # VictoryTool
 
-VictoryTool is a cross-platform .NET 10/Avalonia application for editing
-character data and creating `.vrchara` packages and mod projects.
+VictoryTool is a cross-platform .NET 10/Avalonia application for editing character data, creating `.vrchara` packages, and composing reproducible multi-character mod projects.
+
+The application validates a compatible game-data directory without modifying it, supports localized character editing, previews portraits and uniforms, and writes reproducible project exports.
 
 ## Build and run
 
@@ -11,24 +12,15 @@ dotnet build VictoryTool.slnx --no-restore
 dotnet run --project src/VictoryTool.Desktop/VictoryTool.Desktop.csproj --no-build
 ```
 
-The application asks the user to select a compatible game-data directory and
-does not modify that source directory. Project data is stored in the platform
-application-data directory.
+To create a distributable build, use `scripts/build.sh` on macOS/Linux or
+`scripts/build.ps1` on Windows. Both scripts read the version from
+`Directory.Build.props` and place the ZIP in `dist/`.
 
-The version is shared by `Directory.Build.props`. To update two checkouts to
-the same version:
-
-```sh
-./scripts/sync-version.sh 1.0.0 /path/to/private /path/to/public
-```
-
-On Windows, use `scripts/sync-version.ps1` from PowerShell with the same three
-arguments.
+The application stores its global dump setting and recovery files under the platform application-data directory. All source dump files remain read-only.
 
 ## Projects
 
 - `VictoryTool.CfgBin`: structured game-data readers and conservative writers.
 - `VictoryTool.G4`: G4TX and NXTCH texture support.
-- `VictoryTool.Application`: character models, package persistence and export
-  planning.
+- `VictoryTool.Application`: character models, package persistence and export planning.
 - `VictoryTool.Desktop`: the Avalonia desktop application.

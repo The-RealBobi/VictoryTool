@@ -53,7 +53,7 @@ public sealed class CharacterPortraitLoader : ICharacterPortraitLoader
         ArgumentNullException.ThrowIfNull(request);
         var character = request.Character;
         ArgumentNullException.ThrowIfNull(character);
-        var portraitPath = request.Kind is CharacterPortraitKind.UniformCompatible or CharacterPortraitKind.RosterThumbnail
+        var portraitPath = request.Kind == CharacterPortraitKind.UniformCompatible
             ? character.UniformPortraitResourcePath ?? character.PortraitResourcePath
             : character.StandardPortraitResourcePath ?? character.PortraitResourcePath;
         if (string.IsNullOrWhiteSpace(portraitPath))
@@ -62,7 +62,7 @@ public sealed class CharacterPortraitLoader : ICharacterPortraitLoader
         if (portraitPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
             return LoadPng(portraitPath, request.Kind);
 
-        var entryName = request.Kind is CharacterPortraitKind.UniformCompatible or CharacterPortraitKind.RosterThumbnail
+        var entryName = request.Kind == CharacterPortraitKind.UniformCompatible
             ? character.PortraitMetadata?.UniformPortraitEntryName
                 ?? character.PortraitMetadata?.StandardPortraitEntryName
             : character.PortraitMetadata?.StandardPortraitEntryName

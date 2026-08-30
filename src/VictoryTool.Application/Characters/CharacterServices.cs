@@ -698,7 +698,7 @@ public sealed class CharacterCloneService : ICharacterCloneService
         ArgumentNullException.ThrowIfNull(source);
         var fields = new Dictionary<string, string?>(source.Fields, StringComparer.Ordinal);
         return new CharacterDraft(
-            "character.main",
+            CreateSymbolicId(),
             source.Id,
             source.DisplayName,
             fields,
@@ -744,7 +744,7 @@ public sealed class CharacterCloneService : ICharacterCloneService
         ArgumentNullException.ThrowIfNull(source);
         return source with
         {
-            SymbolicId = $"custom.{Guid.NewGuid():N}",
+            SymbolicId = CreateSymbolicId(),
             DisplayName = $"{source.DisplayName} Copy",
             Fields = new Dictionary<string, string?>(source.Fields, StringComparer.Ordinal),
             Assets = source.Assets is { } assets
@@ -763,6 +763,8 @@ public sealed class CharacterCloneService : ICharacterCloneService
                 : source.Variants.Select(CloneVariant).ToArray(),
         };
     }
+
+    private static string CreateSymbolicId() => $"custom.{Guid.NewGuid():N}";
 
     private static CharacterDraftLocalization CloneLocalization(CharacterDraftLocalization? source)
     {
