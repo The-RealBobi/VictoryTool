@@ -1,21 +1,36 @@
 # VictoryTool
 
-VictoryTool is a cross-platform .NET 10/Avalonia application for editing character data, creating `.vrchara` packages, and composing reproducible multi-character mod projects.
+VictoryTool is a tool for adding your own custom characters to the game as if they were part of the original roster.
 
-The application validates a compatible game-data directory without modifying it, supports localized character editing, previews portraits and uniforms, and writes reproducible project exports.
+You can create a new character based on an existing one and customize parameters such as:
+
+* Name
+* Game of origin
+* Affinity
+* Special Moves
+* Gender
+* Uniform
+* Team
+
+## Installing your character
+
+To install the generated mod, you will need a modding tool such as [Viola](https://github.com/SuperTavor/Viola).
+
+## Obtaining your character in-game
+
+Once the mod has been installed:
+
+1. Go to **Info → Get Promotions**.
+2. Find the promotion containing your character's spirit.
+3. Summon the character.
 
 ## Build and run
-
-```sh
 dotnet run --project ./src/VictoryTool.Desktop/VictoryTool.Desktop.csproj
-```
 
-To create a distributable build, use `scripts/build.sh` on macOS/Linux or
-`./scripts/build.ps1` on Windows.
+To create a standalone executable, use scripts/build.sh on macOS/Linux or
+./scripts/build.ps1 on Windows.
 
-## Projects
-
-- `VictoryTool.CfgBin`: structured game-data readers and conservative writers.
-- `VictoryTool.G4`: G4TX and NXTCH texture support.
-- `VictoryTool.Application`: character models, package persistence and export planning.
-- `VictoryTool.Desktop`: the Avalonia desktop application.
+> [!WARNING]
+> **VictoryTool may cause irreversible damage to your save data.**
+>
+> Make sure to create a backup of your save file before using the tool, in case anything goes wrong.
