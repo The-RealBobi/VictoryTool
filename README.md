@@ -34,3 +34,9 @@ To create a standalone executable, use scripts/build.sh on macOS/Linux or
 > **VictoryTool may cause irreversible damage to your save data.**
 >
 > Make sure to create a backup of your save file before using the tool, in case anything goes wrong.
+>
+> **Using custom characters in online matches may cause unexpected issues and could potentially result in your account being banned.**
+>
+> Do not use VictoryTool-generated characters in online features or matches.
+>
+> **You are solely responsible for any damage, data loss, account penalties, or other consequences resulting from the use of this tool or the characters created with it.**
