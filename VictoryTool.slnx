@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/VictoryTool.CfgBin/VictoryTool.CfgBin.csproj" />
+    <Project Path="src/VictoryTool.G4/VictoryTool.G4.csproj" />
+    <Project Path="src/VictoryTool.Application/VictoryTool.Application.csproj" />
+    <Project Path="src/VictoryTool.Desktop/VictoryTool.Desktop.csproj" />
+  </Folder>
+</Solution>

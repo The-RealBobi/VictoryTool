@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>VictoryTool.G4</AssemblyName>
+    <RootNamespace>VictoryTool.G4</RootNamespace>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,390 @@
+<Window
+    x:Class="VictoryTool.Desktop.Views.MainWindow"
+    x:DataType="vm:MainWindowViewModel"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:cp="clr-namespace:Avalonia.Controls;assembly=Avalonia.Controls.ColorPicker"
+    xmlns:vm="using:VictoryTool.Desktop.ViewModels"
+    xmlns:views="using:VictoryTool.Desktop.Views"
+    Title="VictoryTool"
+    Width="1280"
+    Height="800"
+    MinWidth="900"
+    MinHeight="620">
+  <Grid RowDefinitions="76,*,48">
+    <Border Background="{DynamicResource DockNavyBrush}" BorderBrush="{DynamicResource LowBorderBrush}" BorderThickness="0,0,0,1" Padding="24,0">
+      <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+        <TextBlock FontSize="28" FontWeight="Bold" Text="VICTORY TOOL" />
+        <ComboBox Grid.Column="1" Width="120" ItemsSource="{Binding LanguageCodes}" SelectedItem="{Binding SelectedLanguageCode}" />
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1" Margin="24">
+      <Grid>
+        <Border Classes="panel fade-surface" IsVisible="{Binding IsOnboardingVisible}" Opacity="{Binding IsOnboardingVisible, Converter={StaticResource BooleanToOpacity}}" IsHitTestVisible="{Binding IsOnboardingVisible}" Width="620" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <StackPanel Spacing="16">
+            <TextBlock Classes="page-title" Text="{Binding Text.WelcomeTitle}" />
+            <TextBlock Classes="muted" Text="{Binding Text.WelcomeBody}" TextWrapping="Wrap" />
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+              <TextBox Text="{Binding GameDumpInput}" PlaceholderText="{Binding Text.DumpPath}" />
+              <Button Grid.Column="1" Click="SelectDumpFolder" Content="{Binding WizardText.Browse}" />
+              <Button Grid.Column="2" Classes="primary" Command="{Binding LoadGameDumpCommand}" Content="{Binding Text.LoadDump}" />
+            </Grid>
+            <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsIndexing}" />
+            <TextBlock Classes="muted" Text="{Binding IndexProgressMessage}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+
+        <Border Classes="panel fade-surface" IsVisible="{Binding IsMainMenuVisible}" Opacity="{Binding IsMainMenuVisible, Converter={StaticResource BooleanToOpacity}}" IsHitTestVisible="{Binding IsMainMenuVisible}" Width="760" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="28">
+          <StackPanel Spacing="22">
+            <TextBlock Classes="page-title" Text="{Binding WizardText.WhatWouldYouLike}" />
+            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
+              <Button Command="{Binding BeginCreateCommand}" Content="{Binding WizardText.CreateNewCharacter}" />
+              <Button Grid.Column="1" Click="SelectModificationPackage" Content="{Binding WizardText.ModifyNewCharacter}" />
+              <Button Grid.Column="2" Command="{Binding BeginIncorporationCommand}" Content="{Binding WizardText.ImportIntoVictoryRoad}" />
+            </Grid>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="panel fade-surface" IsVisible="{Binding IsIncorporationVisible}" Opacity="{Binding IsIncorporationVisible, Converter={StaticResource BooleanToOpacity}}" IsHitTestVisible="{Binding IsIncorporationVisible}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Padding="32" DragDrop.AllowDrop="True" DragDrop.DragOver="BatchDragOver" DragDrop.Drop="BatchDrop">
+          <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="16">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Classes="page-title" Text="{Binding WizardText.IncorporationTitle}" />
+              <Button Grid.Column="1" Command="{Binding PreviousWizardStepCommand}" Content="{Binding WizardText.Back}" IsEnabled="{Binding CanGoBack}" />
+            </Grid>
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="10">
+              <Button Click="SelectBatchPackage" Classes="primary" Content="{Binding WizardText.AddPackage}" />
+              <TextBlock VerticalAlignment="Center" Classes="muted" Text="{Binding WizardText.DropPackage}" />
+            </StackPanel>
+            <ListBox Grid.Row="2" ItemsSource="{Binding Batch}" SelectedItem="{Binding SelectedBatchEntry}">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="8">
+                    <TextBlock VerticalAlignment="Center" Text="{Binding PackagePath}" TextTrimming="CharacterEllipsis" />
+                    <Button Grid.Column="1" Click="RemoveBatchPackage" Content="{Binding $parent[ListBox].DataContext.WizardText.Remove}" />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <Button Grid.Row="3" Classes="primary" HorizontalAlignment="Right" Click="ExportBatch" Content="{Binding WizardText.Export}" />
+          </Grid>
+        </Border>
+
+        <views:CharactersWorkspaceView Classes="fade-surface" Opacity="{Binding IsCharacterStep, Converter={StaticResource BooleanToOpacity}}" IsHitTestVisible="{Binding IsCharacterStep}" />
+
+        <Border Classes="panel fade-surface" Opacity="{Binding IsDetailsStep, Converter={StaticResource BooleanToOpacity}}" IsHitTestVisible="{Binding IsDetailsStep}" Width="720" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel Spacing="14">
+            <TextBlock Classes="page-title" Text="{Binding WizardText.CharacterName}" />
+            <Grid ColumnDefinitions="*,180" ColumnSpacing="12">
+              <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding WizardText.GameLanguage}" />
+              <ComboBox Grid.Column="1" ItemsSource="{Binding LocalizationEditorRows}" SelectedItem="{Binding SelectedLocalizationEditorRow}">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding Label}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+            </Grid>
+            <TextBlock Classes="section-title" Text="{Binding WizardText.WesternName}" />
+            <TextBox Text="{Binding SelectedLocalizationEditorRow.LocalizedName}" />
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+              <StackPanel Spacing="4">
+                <TextBlock Classes="muted" Text="{Binding WizardText.ShortName}" />
+                <TextBox Text="{Binding SelectedLocalizationEditorRow.ShortName}" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Spacing="4">
+                <TextBlock Classes="muted" Text="{Binding WizardText.ShirtName}" />
+                <TextBox Text="{Binding SelectedLocalizationEditorRow.UpperName}" />
+              </StackPanel>
+            </Grid>
+            <TextBlock Classes="section-title" Text="{Binding WizardText.JapaneseName}" />
+            <TextBox Text="{Binding SelectedLocalizationEditorRow.JapaneseName}" />
+            <TextBlock Classes="muted" Text="{Binding WizardText.Description}" />
+            <TextBox MinHeight="92" AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top" Text="{Binding SelectedLocalizationEditorRow.Description}" />
+          </StackPanel>
+          </ScrollViewer>
+        </Border>
+
+        <Border Classes="panel fade-surface" Opacity="{Binding IsAttributesStep, Converter={StaticResource BooleanToOpacity}}" IsHitTestVisible="{Binding IsAttributesStep}" Width="760" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <StackPanel Spacing="12">
+            <TextBlock Classes="page-title" Text="{Binding WizardText.CharacterAttributes}" />
+            <Grid ColumnDefinitions="210,*" ColumnSpacing="12">
+              <TextBlock VerticalAlignment="Center" Text="{Binding WizardText.Gender}" />
+              <ComboBox Grid.Column="1" ItemsSource="{Binding IdentityGenderChoices}" SelectedItem="{Binding ActiveDraftGenderChoice}" />
+            </Grid>
+            <Grid ColumnDefinitions="210,*" ColumnSpacing="12">
+              <TextBlock VerticalAlignment="Center" Text="{Binding WizardText.OriginGame}" />
+              <ComboBox Grid.Column="1" ItemsSource="{Binding IdentityOriginGameChoices}" SelectedItem="{Binding ActiveDraftOriginGameChoice}" />
+            </Grid>
+            <Grid ColumnDefinitions="210,*" ColumnSpacing="12">
+              <TextBlock VerticalAlignment="Center" Text="{Binding WizardText.AcademicYear}" />
+              <ComboBox Grid.Column="1" ItemsSource="{Binding IdentityAcademicYearChoices}" SelectedItem="{Binding ActiveDraftAcademicYearChoice}" />
+            </Grid>
+            <Grid ColumnDefinitions="210,*" ColumnSpacing="12">
+              <TextBlock VerticalAlignment="Center" Text="{Binding WizardText.TeamAssociation}" />
+              <ComboBox Grid.Column="1" ItemsSource="{Binding TeamAssociationOptions}" SelectedItem="{Binding ActiveDraftTeamAssociationChoice}" />
+            </Grid>
+            <Grid ColumnDefinitions="210,*" ColumnSpacing="12">
+              <TextBlock VerticalAlignment="Center" Text="{Binding WizardText.Affinity}" />
+              <ComboBox Grid.Column="1" ItemsSource="{Binding AffinityChoices}" SelectedItem="{Binding ActiveDraftAffinityChoice}" />
+            </Grid>
+            <Grid ColumnDefinitions="210,*" ColumnSpacing="12">
+              <TextBlock VerticalAlignment="Center" Text="{Binding WizardText.MainPosition}" />
+              <ComboBox Grid.Column="1" ItemsSource="{Binding PositionChoices}" SelectedItem="{Binding ActiveDraftMainPositionChoice}" />
+            </Grid>
+            <Grid ColumnDefinitions="210,*" ColumnSpacing="12">
+              <TextBlock VerticalAlignment="Center" Text="{Binding WizardText.SecondaryPosition}" />
+              <ComboBox Grid.Column="1" ItemsSource="{Binding PositionChoices}" SelectedItem="{Binding ActiveDraftSubPositionChoice}" />
+            </Grid>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="panel fade-surface" Opacity="{Binding IsSkillsStep, Converter={StaticResource BooleanToOpacity}}" IsHitTestVisible="{Binding IsSkillsStep}" Width="900" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <Grid RowDefinitions="Auto,*,*" RowSpacing="12">
+            <TextBlock Classes="page-title" Text="{Binding WizardText.CharacterSkills}" />
+            <StackPanel Grid.Row="1" Spacing="6">
+              <Grid ColumnDefinitions="180,*,Auto" ColumnSpacing="14" Margin="0,0,0,8">
+                <TextBlock VerticalAlignment="Center" Classes="muted" Text="{Binding WizardText.TechniqueVariant}" />
+                <ComboBox Grid.Column="1" ItemsSource="{Binding TechniqueVariantChoices}" SelectedItem="{Binding SelectedTechniqueVariantChoice}">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                      <TextBlock Text="{Binding Label}" />
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+                <Button Grid.Column="2" Margin="8,0,0,0" Command="{Binding ApplyTechniqueTemplateCommand}" Content="{Binding WizardText.ApplyTechniqueTemplate}" />
+              </Grid>
+              <TextBlock Classes="section-title" Text="{Binding WizardText.MainSkills}" />
+              <ItemsControl ItemsSource="{Binding MainSkillEditorRows}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:CharacterSkillEditorRow">
+                    <Grid ColumnDefinitions="*,180" ColumnSpacing="14" Margin="0,0,0,6">
+                      <ComboBox ItemsSource="{Binding SkillChoices}" SelectedItem="{Binding SelectedSkill}" />
+                      <NumericUpDown Grid.Column="1" Minimum="1" Maximum="99" Value="{Binding UnlockLevelValue}" PlaceholderText="{Binding UnlockLevelLabel}" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+            <StackPanel Grid.Row="2" Spacing="6">
+              <TextBlock Classes="section-title" Text="{Binding WizardText.AlternateSkills}" />
+              <ItemsControl ItemsSource="{Binding AlternateSkillEditorRows}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:CharacterSkillEditorRow">
+                    <Grid ColumnDefinitions="*,180" ColumnSpacing="14" Margin="0,0,0,6">
+                      <ComboBox ItemsSource="{Binding SkillChoices}" SelectedItem="{Binding SelectedSkill}" />
+                      <NumericUpDown Grid.Column="1" Minimum="1" Maximum="99" Value="{Binding UnlockLevelValue}" PlaceholderText="{Binding UnlockLevelLabel}" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Grid>
+        </Border>
+
+        <Border Classes="panel fade-surface" Opacity="{Binding IsAppearanceStep, Converter={StaticResource BooleanToOpacity}}" IsHitTestVisible="{Binding IsAppearanceStep}" Width="820" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <Grid ColumnDefinitions="*,300" ColumnSpacing="28">
+            <StackPanel Spacing="16">
+              <TextBlock Classes="page-title" Text="{Binding WizardText.CharacterAppearance}" />
+              <StackPanel Spacing="5">
+                <TextBlock Classes="muted" Text="{Binding WizardText.NormalFace}" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                  <TextBox Text="{Binding ActiveDraftStandardPortraitDisplayPath, Mode=OneWay}" IsReadOnly="True" />
+                  <Button Grid.Column="1" Click="SelectStandardPortrait" Content="{Binding WizardText.SelectFile}" />
+                </Grid>
+              </StackPanel>
+              <StackPanel Spacing="5">
+                <TextBlock Classes="muted" Text="{Binding WizardText.FaceWithoutRearHair}" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                  <TextBox Text="{Binding ActiveDraftUniformPortraitDisplayPath, Mode=OneWay}" IsReadOnly="True" />
+                  <Button Grid.Column="1" Click="SelectUniformPortrait" Content="{Binding WizardText.SelectFile}" />
+                </Grid>
+              </StackPanel>
+              <StackPanel Spacing="5">
+                <TextBlock Classes="muted" Text="{Binding WizardText.Model3D}" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                  <TextBox Text="{Binding ActiveDraftHeadModelDisplayPath, Mode=OneWay}" IsReadOnly="True" />
+                  <Button Grid.Column="1" Click="SelectHeadModel" Content="{Binding WizardText.SelectFile}" />
+                </Grid>
+              </StackPanel>
+              <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                <StackPanel Spacing="3">
+                  <TextBlock Classes="muted" Text="{Binding WizardText.Uniform}" />
+                  <ComboBox ItemsSource="{Binding AppearanceUniformOptions}" SelectedItem="{Binding ActiveDraftUniformChoice}">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate><TextBlock Text="{Binding Name}" /></DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="3">
+                  <TextBlock Classes="muted" Text="{Binding WizardText.Shoes}" />
+                  <ComboBox ItemsSource="{Binding AppearanceShoesOptions}" SelectedItem="{Binding ActiveDraftShoesChoice}">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate><TextBlock Text="{Binding Name}" /></DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Spacing="3">
+                  <TextBlock Classes="muted" Text="{Binding WizardText.Gloves}" />
+                  <ComboBox ItemsSource="{Binding AppearanceGloveOptions}" SelectedItem="{Binding ActiveDraftGloveChoice}">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate><TextBlock Text="{Binding Name}" /></DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                </StackPanel>
+              </Grid>
+              <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                <StackPanel Spacing="3">
+                  <TextBlock Classes="muted" Text="{Binding WizardText.ForceUniform}" />
+                  <CheckBox IsChecked="{Binding ActiveDraftForceKit}" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="3">
+                  <TextBlock Classes="muted" Text="{Binding WizardText.ChestSize}" />
+                  <ComboBox ItemsSource="{Binding ChestSizeOptions}" SelectedItem="{Binding ActiveDraftChestSize}" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Spacing="3">
+                  <TextBlock Classes="muted" Text="{Binding WizardText.OpenCollar}" />
+                  <CheckBox IsChecked="{Binding ActiveDraftUniformCollarOpen}" />
+                </StackPanel>
+              </Grid>
+              <StackPanel Spacing="3">
+                <TextBlock Classes="muted" Text="{Binding WizardText.BodyType}" />
+                <ComboBox ItemsSource="{Binding BodyTypeChoices}" SelectedItem="{Binding ActiveDraftBodyTypeChoice}">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate><TextBlock Text="{Binding Label}" /></DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+              </StackPanel>
+              <StackPanel Spacing="5">
+                <TextBlock Classes="muted" Text="{Binding WizardText.SkinColor}" />
+                <Grid ColumnDefinitions="180,Auto" ColumnSpacing="8">
+                  <TextBox Text="{Binding ActiveDraftSkinColor}" PlaceholderText="#RRGGBB" />
+                  <Button Grid.Column="1" ToolTip.Tip="{Binding WizardText.SkinColor}" Click="BeginScreenColorPick">
+                    <Image Width="20" Height="20" Source="avares://VictoryTool.Desktop/Assets/Ui/dropper_eye.png" />
+                    <Button.Flyout>
+                      <Flyout Placement="Bottom" Opened="SkinColorPickerOpened">
+                        <cp:ColorView x:Name="SkinColorPicker"
+                                      Width="360"
+                                      Margin="4"
+                                      IsAlphaEnabled="False"
+                                      IsAlphaVisible="False"
+                                      IsAccentColorsVisible="False"
+                                      IsColorPaletteVisible="False"
+                                      IsColorComponentsVisible="False"
+                                      IsColorModelVisible="False"
+                                      ColorChanged="SkinColorChanged" />
+                      </Flyout>
+                    </Button.Flyout>
+                  </Button>
+                </Grid>
+              </StackPanel>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Spacing="8">
+              <Border Height="260" Background="{DynamicResource RaisedBlueBrush}" CornerRadius="8" ClipToBounds="True">
+                <Grid>
+                  <Grid IsVisible="{Binding HasLayeredAppearance}">
+                    <Image Source="{Binding PlayerCardBackPortrait}" Stretch="Uniform" />
+                    <Image Source="{Binding PlayerCardUniform}"
+                           Stretch="Uniform"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Bottom"
+                           Width="220"
+                           Height="220" />
+                    <Image Source="{Binding PlayerCardFrontPortrait}" Stretch="Uniform" />
+                  </Grid>
+                  <Image IsVisible="{Binding ShowAppearancePortrait}" Source="{Binding AppearancePortrait}" Stretch="Uniform" />
+                </Grid>
+              </Border>
+              <TextBlock FontWeight="SemiBold" Text="{Binding ReviewDisplayName}" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border Classes="panel fade-surface" Opacity="{Binding IsAcquisitionStep, Converter={StaticResource BooleanToOpacity}}" IsHitTestVisible="{Binding IsAcquisitionStep}" Width="620" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <StackPanel Spacing="16">
+            <TextBlock Classes="page-title" Text="{Binding WizardText.Acquisition}" />
+            <TextBlock Classes="muted" Text="{Binding WizardText.DeliveryDefault}" TextWrapping="Wrap" />
+            <ComboBox ItemsSource="{Binding AcquisitionModes}" SelectedItem="{Binding AcquisitionMode}" />
+            <TextBlock Classes="muted" Text="{Binding WizardText.DeliveryIdsAutomatic}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+
+        <Border Classes="panel fade-surface" Opacity="{Binding IsReviewStep, Converter={StaticResource BooleanToOpacity}}" IsHitTestVisible="{Binding IsReviewStep}" Width="820" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <Grid RowDefinitions="Auto,*,Auto,Auto" RowSpacing="14">
+            <TextBlock Classes="page-title" Text="{Binding WizardText.ConfirmCharacter}" />
+            <Grid Grid.Row="1" ColumnDefinitions="260,*" ColumnSpacing="28">
+              <Border Background="#050D1C" BorderBrush="{DynamicResource LowBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="16">
+                <Grid RowDefinitions="Auto,*" RowSpacing="12">
+                  <TextBlock Classes="section-title" Text="{Binding WizardText.TechniqueList}" />
+                  <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding MainSkillEditorRows}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:CharacterSkillEditorRow">
+                          <TextBlock Margin="0,0,0,9" Text="{Binding SelectedSkill.Name}" TextTrimming="CharacterEllipsis" />
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </ScrollViewer>
+                </Grid>
+              </Border>
+              <StackPanel Grid.Column="1" Spacing="8">
+                <Border Height="270" Background="{DynamicResource RaisedBlueBrush}" CornerRadius="8" ClipToBounds="True">
+                  <Grid>
+                    <Grid IsVisible="{Binding HasLayeredAppearance}">
+                      <Image Source="{Binding PlayerCardBackPortrait}" Stretch="Uniform" />
+                      <Image Source="{Binding PlayerCardUniform}"
+                             Stretch="Uniform"
+                             HorizontalAlignment="Center"
+                             VerticalAlignment="Bottom"
+                             Width="220"
+                             Height="220" />
+                      <Image Source="{Binding PlayerCardFrontPortrait}" Stretch="Uniform" />
+                    </Grid>
+                    <Image IsVisible="{Binding ShowAppearancePortrait}" Source="{Binding AppearancePortrait}" Stretch="Uniform" />
+                  </Grid>
+                </Border>
+                <TextBlock FontSize="20" FontWeight="SemiBold" Text="{Binding ReviewDisplayName}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Classes="muted" Text="{Binding ReviewSeries}" TextTrimming="CharacterEllipsis" />
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+                  <StackPanel Spacing="2">
+                    <TextBlock Classes="muted" Text="{Binding WizardText.Affinity}" />
+                    <TextBlock FontWeight="SemiBold" Text="{Binding ReviewAffinity}" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="1" Spacing="2">
+                    <TextBlock Classes="muted" Text="{Binding WizardText.Position}" />
+                    <TextBlock FontWeight="SemiBold" Text="{Binding ReviewMainPosition}" />
+                  </StackPanel>
+                </Grid>
+              </StackPanel>
+            </Grid>
+            <Border Grid.Row="2" IsVisible="{Binding HasDiagnostics}" Background="#2B1820" BorderBrush="#9E4B5C" BorderThickness="1" CornerRadius="6" Padding="10">
+              <ScrollViewer MaxHeight="120" VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="4">
+                  <TextBlock FontWeight="SemiBold" Text="{Binding Text.Diagnostics}" />
+                  <TextBlock FontSize="11" TextWrapping="Wrap" Text="{Binding DiagnosticReport}" />
+                </StackPanel>
+              </ScrollViewer>
+            </Border>
+            <Button Grid.Row="3" Classes="primary" HorizontalAlignment="Right" Click="SaveCharacterPackage" Content="{Binding WizardText.SaveCharacter}" />
+          </Grid>
+        </Border>
+
+        <Border IsVisible="{Binding IsPostSavePromptVisible}" Background="#E60A1428" Padding="28" HorizontalAlignment="Center" VerticalAlignment="Center" CornerRadius="10">
+          <StackPanel Spacing="16" Width="520">
+            <TextBlock Classes="page-title" Text="{Binding WizardText.SaveToBatchQuestion}" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+              <Button Command="{Binding ReturnToMainMenuCommand}" Content="{Binding WizardText.SaveToBatchNo}" />
+              <Button Command="{Binding ConfirmAddSavedPackageCommand}" Classes="primary" Content="{Binding WizardText.SaveToBatchYes}" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+      </Grid>
+    </Grid>
+
+    <Border Grid.Row="2" Background="{DynamicResource DockNavyBrush}" BorderBrush="{DynamicResource LowBorderBrush}" BorderThickness="0,1,0,0" Padding="20,0">
+      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8"><TextBlock VerticalAlignment="Center" Text="{Binding StatusMessage}" /><Button Grid.Column="1" Command="{Binding PreviousWizardStepCommand}" Content="{Binding WizardText.Back}" IsEnabled="{Binding CanGoBack}" /><Button Grid.Column="2" Classes="primary" Command="{Binding NextWizardStepCommand}" Content="{Binding WizardText.Next}" IsEnabled="{Binding CanGoNext}" /></Grid>
+    </Border>
+  </Grid>
+</Window>

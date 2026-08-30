@@ -1,0 +1,102 @@
+<UserControl
+    x:Class="VictoryTool.Desktop.Views.CharactersWorkspaceView"
+    x:DataType="vm:MainWindowViewModel"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:VictoryTool.Desktop.ViewModels"
+    Width="1040"
+    Height="620">
+  <Grid RowDefinitions="76,544" RowSpacing="14">
+    <StackPanel Spacing="4">
+      <TextBlock Classes="page-title" Text="{Binding WizardText.SelectCharacter}" />
+      <TextBlock Classes="muted" Text="{Binding WizardText.SelectCharacterHint}" />
+    </StackPanel>
+
+    <Grid Grid.Row="1" ColumnDefinitions="570,456" ColumnSpacing="14">
+      <Border Classes="panel" Padding="14">
+          <Grid RowDefinitions="44,*" RowSpacing="10">
+          <Grid ColumnDefinitions="*,42,42" ColumnSpacing="8" VerticalAlignment="Center">
+            <Grid ColumnDefinitions="*,34" VerticalAlignment="Center">
+              <TextBox Text="{Binding SearchText}" PlaceholderText="{Binding WizardText.Search}" />
+              <TextBlock Grid.Column="1" Text="⌕" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" />
+            </Grid>
+            <Button Grid.Column="1" Width="42" Height="36" Padding="6" HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+              <Image Width="20" Height="20" Source="avares://VictoryTool.Desktop/Assets/Ui/sort.png" />
+              <Button.Flyout>
+                <Flyout Placement="BottomEdgeAlignedLeft">
+                  <Border Padding="4" Background="{DynamicResource DockNavyBrush}">
+                    <ListBox ItemsSource="{Binding CharacterSorts}" SelectedItem="{Binding SelectedCharacterSort}" />
+                  </Border>
+                </Flyout>
+              </Button.Flyout>
+            </Button>
+            <Button Grid.Column="2" Width="42" Height="36" Padding="6" HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+              <Image Width="20" Height="20" Source="avares://VictoryTool.Desktop/Assets/Ui/filter.png" />
+              <Button.Flyout>
+                <Flyout Placement="BottomEdgeAlignedRight">
+                  <Border Padding="4" Background="{DynamicResource DockNavyBrush}">
+                    <ListBox ItemsSource="{Binding CharacterAffinities}" SelectedItem="{Binding SelectedAffinity}" />
+                  </Border>
+                </Flyout>
+              </Button.Flyout>
+            </Button>
+          </Grid>
+          <ListBox Grid.Row="1" Classes="roster" ItemsSource="{Binding RosterRows}" SelectedItem="{Binding SelectedRosterRow}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:CharacterRosterRow">
+                <Grid ColumnDefinitions="54,*,98" ColumnSpacing="10" Height="54" VerticalAlignment="Center">
+                  <Border Width="46" Height="46" Background="{DynamicResource RaisedBlueBrush}" CornerRadius="6" ClipToBounds="True">
+                    <Grid>
+                      <Image Source="{Binding UniformPortrait}" Stretch="UniformToFill" IsVisible="{Binding HasUniformPortrait}" />
+                      <TextBlock Text="…" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsPortraitLoading}" />
+                    </Grid>
+                  </Border>
+                  <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                    <TextBlock FontWeight="SemiBold" Text="{Binding Character.DisplayName}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Classes="muted" FontSize="11" Text="{Binding Character.Id}" />
+                  </StackPanel>
+                  <TextBlock Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Classes="muted" Text="{Binding Character.Position}" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Grid>
+      </Border>
+
+      <Border Grid.Column="1" Classes="panel" Padding="16">
+        <Grid RowDefinitions="44,260,Auto,*" RowSpacing="10">
+          <StackPanel Spacing="0">
+            <TextBlock Classes="section-title" Text="{Binding WizardText.Preview}" />
+            <TextBlock Classes="muted" FontSize="11" Text="{Binding WizardText.SelectedCharacterData}" />
+          </StackPanel>
+
+          <Border Grid.Row="1" Background="{DynamicResource RaisedBlueBrush}" CornerRadius="8" ClipToBounds="True">
+            <Grid>
+              <Image Source="{Binding PlayerCardBackPortrait}" Stretch="Uniform" />
+              <Image Source="{Binding PlayerCardUniform}"
+                     Stretch="Uniform"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Bottom"
+                     Width="220"
+                     Height="220" />
+              <Image Source="{Binding PlayerCardFrontPortrait}" Stretch="Uniform" />
+            </Grid>
+          </Border>
+
+          <StackPanel Grid.Row="2" Spacing="3" IsVisible="{Binding HasSelectedCharacter}">
+            <TextBlock FontSize="23" FontWeight="SemiBold" Text="{Binding PlayerCardDisplayName}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Classes="muted" Text="{Binding PlayerCardSeries}" TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+
+          <Grid Grid.Row="3" RowDefinitions="Auto,Auto" ColumnDefinitions="*,*" ColumnSpacing="18" RowSpacing="10" IsVisible="{Binding HasSelectedCharacter}">
+            <StackPanel><TextBlock Classes="muted" FontSize="11" Text="{Binding WizardText.Affinity}" /><TextBlock FontWeight="SemiBold" Text="{Binding PlayerCardAffinityName}" /></StackPanel>
+            <StackPanel Grid.Column="1"><TextBlock Classes="muted" FontSize="11" Text="{Binding WizardText.Position}" /><TextBlock FontWeight="SemiBold" Text="{Binding PlayerCardPosition}" /></StackPanel>
+            <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Classes="muted" Text="{Binding PlayerCardDescriptionDocument.AccessibleText}" TextWrapping="Wrap" MaxLines="3" />
+          </Grid>
+
+          <TextBlock Grid.Row="3" HorizontalAlignment="Center" VerticalAlignment="Center" Classes="muted" Text="{Binding WizardText.SelectCharacterFromList}" IsVisible="{Binding !HasSelectedCharacter}" TextWrapping="Wrap" />
+        </Grid>
+      </Border>
+    </Grid>
+  </Grid>
+</UserControl>

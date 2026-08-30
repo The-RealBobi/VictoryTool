@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>VictoryTool.Application</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="BCnEncoder.Net" />
+    <PackageReference Include="SkiaSharp" />
+    <ProjectReference Include="../VictoryTool.CfgBin/VictoryTool.CfgBin.csproj" />
+    <ProjectReference Include="../VictoryTool.G4/VictoryTool.G4.csproj" />
+  </ItemGroup>
+</Project>
