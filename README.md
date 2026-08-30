@@ -11,12 +11,7 @@ dotnet run --project ./src/VictoryTool.Desktop/VictoryTool.Desktop.csproj
 ```
 
 To create a distributable build, use `scripts/build.sh` on macOS/Linux or
-`./scripts/build.ps1` on Windows. Both scripts read the version from
-`Directory.Build.props`, publish a self-contained single-file executable, and
-place the ZIP in `dist/`. On Windows the result is a single `.exe`; on macOS
-it is a single `VictoryTool.app` bundle containing one native executable.
-
-The application stores its global dump setting and recovery files under the platform application-data directory. All source dump files remain read-only.
+`./scripts/build.ps1` on Windows.
 
 ## Projects
 
