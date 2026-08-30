@@ -3,6 +3,7 @@
     <OutputType>WinExe</OutputType>
     <RootNamespace>VictoryTool.Desktop</RootNamespace>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationIcon>Assets/AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" />
@@ -15,5 +16,6 @@
   </ItemGroup>
   <ItemGroup>
     <AvaloniaResource Include="Assets/Ui/*.png" />
+    <AvaloniaResource Include="Assets/AppIcon.png;Assets/AppIcon.icns" />
   </ItemGroup>
 </Project>

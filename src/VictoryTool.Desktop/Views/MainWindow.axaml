@@ -7,6 +7,7 @@
     xmlns:vm="using:VictoryTool.Desktop.ViewModels"
     xmlns:views="using:VictoryTool.Desktop.Views"
     Title="VictoryTool"
+    Icon="avares://VictoryTool.Desktop/Assets/AppIcon.png"
     Width="1280"
     Height="800"
     MinWidth="900"
