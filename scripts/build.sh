@@ -62,14 +62,56 @@ dotnet publish "$project" \
 # Native dependency packages can add symbol files after the single-file publish.
 # They are not required by the application and would break the one-file output.
 find "$publish_root" -type f \( -name '*.pdb' -o -name '*.dbg' \) -delete
-published_file_count="$(find "$publish_root" -type f -print | wc -l | tr -d ' ')"
-if [[ "$published_file_count" != "1" ]]; then
-    echo "Single-file publish produced $published_file_count files in $publish_root:" >&2
-    find "$publish_root" -type f -print >&2
-    exit 1
-fi
-published_file="$(find "$publish_root" -type f -print -quit)"
-
 rm -f "$archive"
-(cd "$publish_root" && zip -q "$archive" "$(basename "$published_file")")
+
+if [[ "$rid" == osx-* ]]; then
+    published_file_count="$(find "$publish_root" -type f -print | wc -l | tr -d ' ')"
+    if [[ "$published_file_count" != "1" ]]; then
+        echo "macOS single-file publish produced $published_file_count files in $publish_root:" >&2
+        find "$publish_root" -type f -print >&2
+        exit 1
+    fi
+
+    published_file="$(find "$publish_root" -type f -print -quit)"
+    app_root="$publish_root/VictoryTool.app"
+    mkdir -p "$app_root/Contents/MacOS" "$app_root/Contents/Resources"
+    mv "$published_file" "$app_root/Contents/MacOS/VictoryTool"
+    cp "$script_root/src/VictoryTool.Desktop/Assets/AppIcon.icns" \
+        "$app_root/Contents/Resources/AppIcon.icns"
+    cat > "$app_root/Contents/Info.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>VictoryTool</string>
+    <key>CFBundleExecutable</key>
+    <string>VictoryTool</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon.icns</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.victorytool.desktop</string>
+    <key>CFBundleName</key>
+    <string>VictoryTool</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$version</string>
+    <key>CFBundleVersion</key>
+    <string>$version</string>
+</dict>
+</plist>
+EOF
+    chmod +x "$app_root/Contents/MacOS/VictoryTool"
+    (cd "$publish_root" && zip -q -r "$archive" "VictoryTool.app")
+else
+    published_file_count="$(find "$publish_root" -type f -print | wc -l | tr -d ' ')"
+    if [[ "$published_file_count" != "1" ]]; then
+        echo "Single-file publish produced $published_file_count files in $publish_root:" >&2
+        find "$publish_root" -type f -print >&2
+        exit 1
+    fi
+    published_file="$(find "$publish_root" -type f -print -quit)"
+    (cd "$publish_root" && zip -q "$archive" "$(basename "$published_file")")
+fi
 echo "Created $archive"

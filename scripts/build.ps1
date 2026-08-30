@@ -46,11 +46,55 @@ dotnet publish @publishArgs
 Get-ChildItem -Path $publishRoot -File -Recurse |
     Where-Object { $_.Extension -in @(".pdb", ".dbg") } |
     Remove-Item -Force
-$publishedFiles = @(Get-ChildItem -Path $publishRoot -File -Recurse)
-if ($publishedFiles.Count -ne 1) {
-    $paths = $publishedFiles | ForEach-Object { $_.FullName }
-    throw "Single-file publish produced $($publishedFiles.Count) files in $publishRoot.`n$($paths -join "`n")"
-}
 if (Test-Path $archive) { Remove-Item -Force $archive }
-Compress-Archive -Path $publishedFiles[0].FullName -DestinationPath $archive
+
+if ($RuntimeIdentifier -like "osx-*") {
+    $publishedFiles = @(Get-ChildItem -Path $publishRoot -File -Recurse)
+    if ($publishedFiles.Count -ne 1) {
+        $paths = $publishedFiles | ForEach-Object { $_.FullName }
+        throw "macOS single-file publish produced $($publishedFiles.Count) files in $publishRoot.`n$($paths -join "`n")"
+    }
+
+    $appRoot = Join-Path $publishRoot "VictoryTool.app"
+    $macOsRoot = Join-Path $appRoot "Contents\MacOS"
+    $resourcesRoot = Join-Path $appRoot "Contents\Resources"
+    New-Item -ItemType Directory -Force -Path $macOsRoot, $resourcesRoot | Out-Null
+    Move-Item -Force $publishedFiles[0].FullName (Join-Path $macOsRoot "VictoryTool")
+    Copy-Item (Join-Path $repositoryRoot "src\VictoryTool.Desktop\Assets\AppIcon.icns") (Join-Path $resourcesRoot "AppIcon.icns")
+    $plist = @"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>VictoryTool</string>
+    <key>CFBundleExecutable</key>
+    <string>VictoryTool</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon.icns</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.victorytool.desktop</string>
+    <key>CFBundleName</key>
+    <string>VictoryTool</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$version</string>
+    <key>CFBundleVersion</key>
+    <string>$version</string>
+</dict>
+</plist>
+"@
+    Set-Content -Path (Join-Path $appRoot "Contents\Info.plist") -Value $plist -Encoding UTF8
+    if ($IsMacOS) { & chmod +x (Join-Path $macOsRoot "VictoryTool") }
+    Compress-Archive -Path $appRoot -DestinationPath $archive
+}
+else {
+    $publishedFiles = @(Get-ChildItem -Path $publishRoot -File -Recurse)
+    if ($publishedFiles.Count -ne 1) {
+        $paths = $publishedFiles | ForEach-Object { $_.FullName }
+        throw "Single-file publish produced $($publishedFiles.Count) files in $publishRoot.`n$($paths -join "`n")"
+    }
+    Compress-Archive -Path $publishedFiles[0].FullName -DestinationPath $archive
+}
 Write-Output "Created $archive"
