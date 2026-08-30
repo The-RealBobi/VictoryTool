@@ -7,13 +7,11 @@ The application validates a compatible game-data directory without modifying it,
 ## Build and run
 
 ```sh
-dotnet restore VictoryTool.slnx
-dotnet build VictoryTool.slnx --no-restore
-dotnet run --project src/VictoryTool.Desktop/VictoryTool.Desktop.csproj --no-build
+dotnet run --project ./src/VictoryTool.Desktop/VictoryTool.Desktop.csproj
 ```
 
 To create a distributable build, use `scripts/build.sh` on macOS/Linux or
-`scripts/build.ps1` on Windows. Both scripts read the version from
+`./scripts/build.ps1` on Windows. Both scripts read the version from
 `Directory.Build.props` and place the ZIP in `dist/`.
 
 The application stores its global dump setting and recovery files under the platform application-data directory. All source dump files remain read-only.
