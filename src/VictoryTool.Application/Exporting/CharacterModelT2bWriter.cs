@@ -1,4 +1,5 @@
 using VictoryTool.CfgBin;
+using VictoryTool.Application.Diagnostics;
 
 namespace VictoryTool.Application.Exporting;
 
@@ -27,6 +28,13 @@ public sealed class CharacterModelT2bWriter : ICharacterModelT2bWriter
     public byte[] Append(ReadOnlySpan<byte> modelTable, CharacterModelWriteRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        using var operation = GlobalLog.BeginOperation("character_model_write", new Dictionary<string, object?>
+        {
+            ["sourceModelId"] = request.SourceModelId,
+            ["hasBodyModel"] = request.BodyModelId is not null,
+            ["hasUniformModel"] = request.UniformModel is not null,
+            ["hasChestSize"] = request.ChestSize is not null,
+        });
         ArgumentException.ThrowIfNullOrWhiteSpace(request.FaceModelPath);
         if (request.ChestSize is < 0 or > 2)
             throw new InvalidDataException("Chest size must be between 0 and 2.");
@@ -102,6 +110,10 @@ public sealed class CharacterModelT2bWriter : ICharacterModelT2bWriter
             if (!Equals(source.Values[index].Value, written.Values[index].Value))
                 throw new InvalidDataException($"Opaque character model field {index} changed unexpectedly.");
         }
+        GlobalLog.Debug("character_model_written", new Dictionary<string, object?>
+        {
+            ["tableBytes"] = result.Length,
+        });
         return result;
     }
 

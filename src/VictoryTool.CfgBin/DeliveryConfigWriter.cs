@@ -24,6 +24,8 @@ public sealed class DeliveryConfigWriter
         CharacterPromotionCloneRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        global::System.Diagnostics.Trace.WriteLine(
+            $"delivery_promotion_clone_started bytes={source.Length} sourceIndex={request.SourceDeliveryIndex} contentOffset={request.CharacterContentOffset}");
         var document = RdbnpDocument.Read(source);
         var contents = document.Lists.Single(list => list.Name == "m_DeliveryContentsDataList");
         var info = document.Lists.Single(list => list.Name == "m_DeliveryInfoList");
@@ -56,7 +58,10 @@ public sealed class DeliveryConfigWriter
         infoBytes[12] = 42;
         BinaryPrimitives.WriteInt16LittleEndian(infoBytes.AsSpan(14), checked((short)layout.ContentsRoot.RowCount));
         BinaryPrimitives.WriteInt16LittleEndian(infoBytes.AsSpan(16), sourceRange.Count);
-        return AppendRawRows(source, layout, contentBytes, infoBytes, request.DeliveryId, request.CharacterParameterId, sourceRange.Count);
+        var result = AppendRawRows(source, layout, contentBytes, infoBytes, request.DeliveryId, request.CharacterParameterId, sourceRange.Count);
+        global::System.Diagnostics.Trace.WriteLine(
+            $"delivery_promotion_clone_completed bytes={result.Length} contentRowsAdded={sourceRange.Count}");
+        return result;
     }
 
     public byte[] AppendCharacterDelivery(
@@ -64,6 +69,8 @@ public sealed class DeliveryConfigWriter
         CharacterDeliveryWriteRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        global::System.Diagnostics.Trace.WriteLine(
+            $"delivery_append_started bytes={source.Length} characterParameterId={request.CharacterParameterId}");
         var document = RdbnpDocument.Read(source);
         var contents = document.Lists.Single(list => list.Name == "m_DeliveryContentsDataList");
         var info = document.Lists.Single(list => list.Name == "m_DeliveryInfoList");
@@ -126,6 +133,8 @@ public sealed class DeliveryConfigWriter
             });
         }
         ValidateResult(result, request, contents.Rows.Count, info.Rows.Count);
+        global::System.Diagnostics.Trace.WriteLine(
+            $"delivery_append_completed bytes={result.Length} oldContents={contents.Rows.Count} oldInfo={info.Rows.Count}");
         return result;
     }
 

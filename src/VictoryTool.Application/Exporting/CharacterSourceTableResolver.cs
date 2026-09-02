@@ -1,4 +1,5 @@
 using VictoryTool.CfgBin;
+using VictoryTool.Application.Diagnostics;
 
 namespace VictoryTool.Application.Exporting;
 
@@ -18,6 +19,11 @@ public sealed class CharacterSourceTableResolver : ICharacterSourceTableResolver
     public CharacterSourceTables Resolve(string dumpRoot, int sourceBaseId, int sourceParameterId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dumpRoot);
+        using var operation = GlobalLog.BeginOperation("source_tables_resolve", new Dictionary<string, object?>
+        {
+            ["sourceBaseId"] = sourceBaseId,
+            ["sourceParameterId"] = sourceParameterId,
+        });
         var normalizedRoot = Path.GetFullPath(dumpRoot);
         var characterRoot = Path.Combine(normalizedRoot, "common", "gamedata", "character");
         var basePath = FindSingleTable(
@@ -31,11 +37,13 @@ public sealed class CharacterSourceTableResolver : ICharacterSourceTableResolver
             "CHARA_PARAM_INFO",
             entry => ReadInteger(entry, 0) == sourceParameterId
                      && ReadInteger(entry, 1) == sourceBaseId);
-        return new CharacterSourceTables(
+        var result = new CharacterSourceTables(
             ToVirtualPath(normalizedRoot, basePath),
             basePath,
             ToVirtualPath(normalizedRoot, parameterPath),
             parameterPath);
+        GlobalLog.Debug("source_tables_resolved");
+        return result;
     }
 
     private static string FindSingleTable(
@@ -56,15 +64,23 @@ public sealed class CharacterSourceTableResolver : ICharacterSourceTableResolver
             }
             catch (Exception exception) when (exception is InvalidDataException or NotSupportedException)
             {
+                GlobalLog.Warn("source_table_candidate_rejected", exception: exception);
                 continue;
             }
             if (document.Entries.Any(entry => entry.Name == entryName && predicate(entry)))
                 matches.Add(path);
         }
-        return matches.Count == 1
-            ? matches[0]
-            : throw new InvalidDataException(
+        if (matches.Count != 1)
+        {
+            GlobalLog.Warn("source_table_match_count_invalid", new Dictionary<string, object?>
+            {
+                ["entryName"] = entryName,
+                ["matchCount"] = matches.Count,
+            });
+            throw new InvalidDataException(
                 $"Expected exactly one {entryName} source table, found {matches.Count}.");
+        }
+        return matches[0];
     }
 
     private static int ReadInteger(CfgBinEntry entry, int index) => entry.Values[index].Value switch

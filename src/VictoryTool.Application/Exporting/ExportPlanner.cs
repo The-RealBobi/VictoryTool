@@ -209,6 +209,12 @@ public sealed class ExportPlanner : IExportPlanner
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
+        using var operation = GlobalLog.BeginOperation("export_plan_create", new Dictionary<string, object?>
+        {
+            ["platform"] = platform,
+            ["acquisition"] = acquisition,
+            ["batchCount"] = project.Batch.Count,
+        });
 
         var enabledCount = project.Batch.Count(entry => entry.IsEnabled);
         var affectedFiles = GetAffectedFiles(platform, acquisition);
@@ -238,7 +244,7 @@ public sealed class ExportPlanner : IExportPlanner
             }
         }
 
-        return new ExportPlan(
+        var result = new ExportPlan(
             platform,
             acquisition,
             Path.GetFullPath(outputPath),
@@ -246,6 +252,13 @@ public sealed class ExportPlanner : IExportPlanner
             affectedFiles,
             diagnostics,
             []);
+        GlobalLog.Debug("export_plan_created", new Dictionary<string, object?>
+        {
+            ["enabledPackageCount"] = enabledCount,
+            ["diagnosticCount"] = diagnostics.Count,
+            ["affectedFileCount"] = affectedFiles.Count,
+        });
+        return result;
     }
 
     public async Task<ExportPlan> CreatePlanAsync(
@@ -257,8 +270,18 @@ public sealed class ExportPlanner : IExportPlanner
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(profile);
+        using var operation = GlobalLog.BeginOperation("export_plan_build", new Dictionary<string, object?>
+        {
+            ["platform"] = platform,
+            ["acquisition"] = acquisition,
+            ["profileId"] = profile.Id,
+        });
         var plan = CreatePlan(project, platform, acquisition, outputPath);
-        if (plan.EnabledPackageCount == 0) return plan;
+        if (plan.EnabledPackageCount == 0)
+        {
+            GlobalLog.Warn("export_plan_empty");
+            return plan;
+        }
 
         // The synchronous overload deliberately reports that no dump is available.
         // This overload has already received a validated profile, so carrying that
@@ -278,6 +301,7 @@ public sealed class ExportPlanner : IExportPlanner
         catch (Exception exception) when (
             exception is InvalidDataException or IOException or UnauthorizedAccessException)
         {
+            GlobalLog.Error("export_id_inventory_failed", exception);
             return AddFailure(
                 plan,
                 "export.id_assignment_failed",
@@ -320,6 +344,15 @@ public sealed class ExportPlanner : IExportPlanner
                 var variants = CharacterRarityCatalog.OrderForRuntime(
                         CharacterRarityCatalog.EnsureDraftVariants(storedVariants))
                     ?? storedVariants;
+                var symbolicId = ResolvePackageSymbolicId(manifest.Character, entry.Id);
+                GlobalLog.Debug("export_package_planned", new Dictionary<string, object?>
+                {
+                    ["variantCount"] = variants.Count,
+                    ["resourceCount"] = manifest.Resources.Count,
+                    ["gameReferenceCount"] = manifest.GameResources.Count,
+                    ["patchSetCount"] = manifest.Patches.Count,
+                    ["hasLocalizations"] = manifest.Localizations is not null,
+                });
                 expectedVariantCount += variants.Count;
                 var rarityGroups = variants
                     .GroupBy(variant => variant.Gameplay.SpecialRarity ?? 0)
@@ -330,7 +363,7 @@ public sealed class ExportPlanner : IExportPlanner
                     variantDiagnostics.Add(new Diagnostic(
                         "export.variant_rarity_duplicate",
                         DiagnosticSeverity.Warning,
-                        $"Character '{manifest.Character.SymbolicId}' has {group.Count()} parameter rows with rarity {group.Key}.",
+                        $"Character '{symbolicId}' has {group.Count()} parameter rows with rarity {group.Key}.",
                         group.Key == 0
                             ? "All rows will be exported, but Delivery uses the first rarity-0 row because the game may apply another hidden variant key."
                             : "All rows will be exported; use the rarity selector to edit each row independently."));
@@ -341,10 +374,10 @@ public sealed class ExportPlanner : IExportPlanner
                     variantDiagnostics.Add(new Diagnostic(
                         "export.delivery_primary_rarity_missing",
                         DiagnosticSeverity.Error,
-                        $"Character '{manifest.Character.SymbolicId}' has no rarity-0 parameter row.",
+                        $"Character '{symbolicId}' has no rarity-0 parameter row.",
                         "Delivery rewards the first rarity. Add or preserve a rarity-0 variant before exporting."));
                 }
-                packages.Add(new ExportPackagePlan(entry.Id, entry.PackagePath, manifest.Character.SymbolicId));
+                packages.Add(new ExportPackagePlan(entry.Id, entry.PackagePath, symbolicId));
                 requests.Add(new ExportIdRequest(
                     entry.Id,
                     "character",
@@ -354,23 +387,23 @@ public sealed class ExportPlanner : IExportPlanner
                 {
                     var domain = variantIndex == 0 ? "parameter" : "parameterVariant";
                     requests.Add(new ExportIdRequest(entry.Id, domain,
-                        $"{manifest.Character.SymbolicId}.variant.{variantIndex}"));
+                        $"{symbolicId}.variant.{variantIndex}"));
                     if (acquisition is AcquisitionMode.Delivery && variantIndex == 0)
                     {
                         requests.Add(new ExportIdRequest(entry.Id, "delivery",
-                            $"{manifest.Character.SymbolicId}.delivery.variant.0"));
+                            $"{symbolicId}.delivery.variant.0"));
                         requests.Add(new ExportIdRequest(entry.Id, "deliveryReceived",
-                            $"{manifest.Character.SymbolicId}.delivery.received.variant.0"));
+                            $"{symbolicId}.delivery.received.variant.0"));
                     }
                 }
                 requests.Add(new ExportIdRequest(
-                    entry.Id, "nameText", $"{manifest.Character.SymbolicId}.name.full"));
+                    entry.Id, "nameText", $"{symbolicId}.name.full"));
                 requests.Add(new ExportIdRequest(
-                    entry.Id, "nameText", $"{manifest.Character.SymbolicId}.name.short"));
+                    entry.Id, "nameText", $"{symbolicId}.name.short"));
                 requests.Add(new ExportIdRequest(
-                    entry.Id, "nameText", $"{manifest.Character.SymbolicId}.name.upper"));
+                    entry.Id, "nameText", $"{symbolicId}.name.upper"));
                 requests.Add(new ExportIdRequest(
-                    entry.Id, "descriptionText", $"{manifest.Character.SymbolicId}.description"));
+                    entry.Id, "descriptionText", $"{symbolicId}.description"));
                 if (acquisition is AcquisitionMode.Delivery)
                 {
                     if (TryCreateCharacterDeliveryOperation(profile, entry.Id, 0, out var deliveryOperation, out var deliveryDiagnostic))
@@ -385,7 +418,7 @@ public sealed class ExportPlanner : IExportPlanner
                 {
                     characterModelOperations.Add(modelOperation);
                     requests.Add(new ExportIdRequest(
-                        entry.Id, "model", $"{manifest.Character.SymbolicId}.model"));
+                        entry.Id, "model", $"{symbolicId}.model"));
                 }
                 if (customModelDiagnostic is not null) modelDiagnostics.Add(customModelDiagnostic);
 
@@ -396,7 +429,7 @@ public sealed class ExportPlanner : IExportPlanner
                     {
                         shopCharacterOperations.Add(shopOperation!);
                         requests.Add(new ExportIdRequest(
-                            entry.Id, "shopItem", $"{manifest.Character.SymbolicId}.shop.item"));
+                            entry.Id, "shopItem", $"{symbolicId}.shop.item"));
                     }
                     else
                     {
@@ -538,7 +571,7 @@ public sealed class ExportPlanner : IExportPlanner
                     FindPortraitTemplate(profile, platform),
                     $"{(platform == ExportPlatform.Pc ? "dx11" : "nx")}/menu/200_icon/10_icon_chr/face/{internalName}_l.g4tx");
             }).ToArray();
-            return plan with
+            var completedPlan = plan with
             {
                 AssignedIds = assignedIds,
                 Packages = packages,
@@ -568,10 +601,22 @@ public sealed class ExportPlanner : IExportPlanner
                     .ToArray(),
                 Diagnostics = diagnostics,
             };
+            GlobalLog.Info("export_plan_built", new Dictionary<string, object?>
+            {
+                ["enabledPackageCount"] = completedPlan.EnabledPackageCount,
+                ["assignedIdCount"] = completedPlan.AssignedIds.Count,
+                ["resourceOperationCount"] = completedPlan.ResourceOperations.Count,
+                ["fileOperationCount"] = completedPlan.FileOperations.Count,
+                ["modelDependencyCount"] = completedPlan.ModelDependencyOperations.Count,
+                ["diagnosticCount"] = completedPlan.Diagnostics.Count,
+                ["canExport"] = completedPlan.CanExport,
+            });
+            return completedPlan;
         }
         catch (Exception exception) when (
             exception is InvalidDataException or IOException or UnauthorizedAccessException)
         {
+            GlobalLog.Error("export_plan_build_failed", exception);
             return AddFailure(
                 plan,
                 "export.package_invalid",
@@ -1313,6 +1358,17 @@ public sealed class ExportPlanner : IExportPlanner
         // numeric ID remains the CRC32 of this exact generated name.
         var suffix = ExportIdAllocator.ComputeCrc32(batchEntryId.ToString("N")) % 1_000_000u;
         return $"c99{suffix:D6}";
+    }
+
+    private static string ResolvePackageSymbolicId(CharacterDraft character, Guid batchEntryId)
+    {
+        // Older packages created every clone as character.main. Keep them
+        // importable in one batch by deriving a stable package key from the
+        // persisted batch entry instead of rejecting the whole batch.
+        if (!string.Equals(character.SymbolicId, "character.main", StringComparison.OrdinalIgnoreCase))
+            return character.SymbolicId;
+
+        return $"character.{batchEntryId:N}";
     }
 
     private static bool IsCustomCharacterName(string? value) =>

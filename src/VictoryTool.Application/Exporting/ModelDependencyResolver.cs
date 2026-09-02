@@ -38,6 +38,10 @@ public sealed class ModelDependencyResolver : IModelDependencyResolver
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentException.ThrowIfNullOrWhiteSpace(modelPath);
+        using var operation = GlobalLog.BeginOperation("model_dependencies_resolve", new Dictionary<string, object?>
+        {
+            ["platform"] = platform,
+        });
 
         var diagnostics = new List<Diagnostic>();
         if (modelPath.Contains("..", StringComparison.Ordinal))
@@ -46,6 +50,10 @@ public sealed class ModelDependencyResolver : IModelDependencyResolver
                 "export.model_path_not_portable",
                 $"Model path '{modelPath}' is not a portable dump-relative reference.",
                 "Embed the selected model and its companions in the .vrchara package."));
+            GlobalLog.Warn("model_dependency_path_rejected", new Dictionary<string, object?>
+            {
+                ["reason"] = "parent_segment",
+            });
             return new ModelDependencyResult([], diagnostics);
         }
 
@@ -60,6 +68,10 @@ public sealed class ModelDependencyResolver : IModelDependencyResolver
                     "export.model_path_not_portable",
                     $"Model path '{modelPath}' is not a portable dump-relative reference.",
                     "Embed the selected model and its companions in the .vrchara package."));
+                GlobalLog.Warn("model_dependency_path_rejected", new Dictionary<string, object?>
+                {
+                    ["reason"] = "absolute_path_outside_common_chr",
+                });
                 return new ModelDependencyResult([], diagnostics);
             }
 
@@ -75,6 +87,7 @@ public sealed class ModelDependencyResolver : IModelDependencyResolver
                 "export.model_format_unsupported",
                 $"Model dependency '{modelPath}' is not G4MD or G4PKM.",
                 "Select a supported character model."));
+            GlobalLog.Warn("model_dependency_format_unsupported");
             return new ModelDependencyResult([], diagnostics);
         }
 
@@ -104,6 +117,11 @@ public sealed class ModelDependencyResolver : IModelDependencyResolver
             dependencies,
             diagnostics);
 
+        GlobalLog.Debug("model_dependencies_resolved", new Dictionary<string, object?>
+        {
+            ["dependencyCount"] = dependencies.Count,
+            ["diagnosticCount"] = diagnostics.Count,
+        });
         return new ModelDependencyResult(dependencies, diagnostics);
     }
 

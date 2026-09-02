@@ -1,5 +1,6 @@
 using System.Text;
 using System.Security.Cryptography;
+using VictoryTool.Application.Diagnostics;
 using VictoryTool.Application.Profiles;
 using VictoryTool.CfgBin;
 
@@ -125,6 +126,10 @@ public sealed class FileSystemCharacterIdInventoryService : ICharacterIdInventor
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(profile);
+        using var operation = GlobalLog.BeginOperation("export_id_inventory_load", new Dictionary<string, object?>
+        {
+            ["profileId"] = profile.Id,
+        });
         var directory = Path.Combine(profile.GameDataPath, "character");
         var baseEntries = await ReadEntriesAsync(directory, "chara_base_*.cfg.bin", cancellationToken);
         var parameterEntries = await ReadEntriesAsync(directory, "chara_param_*.cfg.bin", cancellationToken);
@@ -132,8 +137,19 @@ public sealed class FileSystemCharacterIdInventoryService : ICharacterIdInventor
             Path.Combine(profile.GameDataPath, "shop"), "shop_config_*.cfg.bin", cancellationToken);
         var modelEntries = await ReadOptionalEntriesAsync(directory, "chara_model_*.cfg.bin", cancellationToken);
         var (deliveryIds, deliveryReceivedFlags) = await ReadDeliveryIdsAsync(profile, cancellationToken);
-        return CharacterIdInventoryBuilder.Build(
+        var inventory = CharacterIdInventoryBuilder.Build(
             baseEntries, parameterEntries, shopEntries, modelEntries, deliveryIds, deliveryReceivedFlags);
+        GlobalLog.Info("export_id_inventory_loaded", new Dictionary<string, object?>
+        {
+            ["characterCount"] = inventory.Count("character"),
+            ["parameterCount"] = inventory.Count("parameter"),
+            ["nameTextCount"] = inventory.Count("nameText"),
+            ["descriptionTextCount"] = inventory.Count("descriptionText"),
+            ["shopItemCount"] = inventory.Count("shopItem"),
+            ["modelCount"] = inventory.Count("model"),
+            ["deliveryCount"] = inventory.Count("delivery"),
+        });
+        return inventory;
     }
 
     private static async Task<IReadOnlyList<CfgBinEntry>> ReadEntriesAsync(
@@ -212,6 +228,7 @@ public sealed class ExportIdAllocator : IExportIdAllocator
     {
         ArgumentNullException.ThrowIfNull(requests);
         ArgumentNullException.ThrowIfNull(inventory);
+        using var operation = GlobalLog.BeginOperation("export_id_allocate");
         var occupiedByDomain = new Dictionary<string, HashSet<uint>>(StringComparer.Ordinal);
         var assignments = new List<ExportIdAssignment>();
 
@@ -302,6 +319,11 @@ public sealed class ExportIdAllocator : IExportIdAllocator
                 candidate));
         }
 
+        GlobalLog.Info("export_ids_allocated", new Dictionary<string, object?>
+        {
+            ["requestCount"] = assignments.Count,
+            ["domainCount"] = assignments.Select(assignment => assignment.Domain).Distinct(StringComparer.Ordinal).Count(),
+        });
         return assignments;
     }
 

@@ -1,4 +1,5 @@
 using VictoryTool.Application.Packages;
+using VictoryTool.Application.Diagnostics;
 using VictoryTool.CfgBin;
 
 namespace VictoryTool.Application.Exporting;
@@ -34,6 +35,12 @@ public sealed class CharacterLocalizationT2bWriter : ICharacterLocalizationT2bWr
         CharacterPackageLocalization text)
     {
         ArgumentNullException.ThrowIfNull(text);
+        using var operation = GlobalLog.BeginOperation("character_localization_write", new Dictionary<string, object?>
+        {
+            ["nameTableBytes"] = nameTable.Length,
+            ["descriptionTableBytes"] = descriptionTable.Length,
+            ["hasRomanizedName"] = !string.IsNullOrWhiteSpace(text.RomanizedName),
+        });
         if (string.IsNullOrWhiteSpace(text.LocalizedName))
             throw new ArgumentException("A localized character name is required.", nameof(text));
 
@@ -87,10 +94,17 @@ public sealed class CharacterLocalizationT2bWriter : ICharacterLocalizationT2bWr
                 "NOUN_INFO_END");
         }
 
-        return new CharacterLocalizationWriteResult(
+        var result = new CharacterLocalizationWriteResult(
             writtenNames,
             writtenDescriptions,
             writtenRomanized);
+        GlobalLog.Debug("character_localization_written", new Dictionary<string, object?>
+        {
+            ["nameTableBytes"] = result.NameTable.Length,
+            ["descriptionTableBytes"] = result.DescriptionTable.Length,
+            ["hasRomanizedTable"] = result.RomanizedNameTable is not null,
+        });
+        return result;
     }
 
     private static CfgBinEntry FindTemplate(

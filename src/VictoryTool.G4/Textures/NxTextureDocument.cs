@@ -51,6 +51,7 @@ public sealed class NxTextureDocument
 
     public static NxTextureDocument Read(ReadOnlySpan<byte> source)
     {
+        global::System.Diagnostics.Trace.WriteLine($"nxtch_read_started bytes={source.Length}");
         if (source.Length < DataOffset || !source[..8].SequenceEqual("NXTCH000"u8))
             throw new InvalidDataException("The input is not a valid NXTCH texture.");
 
@@ -96,7 +97,7 @@ public sealed class NxTextureDocument
                 bytes.AsMemory(absoluteOffset, size));
         }
 
-        return new NxTextureDocument(
+        var document = new NxTextureDocument(
             bytes,
             width,
             height,
@@ -111,6 +112,9 @@ public sealed class NxTextureDocument
             },
             BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(0x74, sizeof(int))),
             mipLevels);
+        global::System.Diagnostics.Trace.WriteLine(
+            $"nxtch_read_completed width={document.Width} height={document.Height} format={document.Format}");
+        return document;
     }
 
     public byte[] WriteUnmodified() => (byte[])_source.Clone();

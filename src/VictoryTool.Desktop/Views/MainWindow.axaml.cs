@@ -47,8 +47,7 @@ public sealed partial class MainWindow : Window
         });
 
         if (folders.Count != 1 || DataContext is not ViewModels.MainWindowViewModel viewModel) return;
-        var folderName = $"VictoryTool Export {DateTime.Now:yyyyMMdd-HHmmss}";
-        viewModel.ExportOutputPath = Path.Combine(folders[0].Path.LocalPath, folderName);
+        viewModel.SetGeneratedExportOutputPath(GetAvailableExportPath(folders[0].Path.LocalPath));
     }
 
     private async void SelectBatchPackage(object? sender, RoutedEventArgs eventArgs)
@@ -102,11 +101,20 @@ public sealed partial class MainWindow : Window
                 AllowMultiple = false,
             });
             if (folders.Count != 1) return;
-            viewModel.ExportOutputPath = Path.Combine(folders[0].Path.LocalPath, $"VictoryTool Export {DateTime.Now:yyyyMMdd-HHmmss}");
+            viewModel.SetGeneratedExportOutputPath(GetAvailableExportPath(folders[0].Path.LocalPath));
         }
         await viewModel.PreviewExportAsync();
         if (viewModel.CurrentExportPlan?.CanExport == true)
             await viewModel.ExecuteExportAsync();
+    }
+
+    private static string GetAvailableExportPath(string parentPath)
+    {
+        var stem = $"VictoryTool Export {DateTime.Now:yyyyMMdd-HHmmss-fff}";
+        var candidate = Path.Combine(parentPath, stem);
+        for (var suffix = 2; Directory.Exists(candidate) || File.Exists(candidate); suffix++)
+            candidate = Path.Combine(parentPath, $"{stem} ({suffix})");
+        return candidate;
     }
 
     private void BatchDragOver(object? sender, DragEventArgs eventArgs)

@@ -51,12 +51,18 @@ public sealed class RdbnpDocument
 
     public static RdbnpDocument Read(ReadOnlySpan<byte> source)
     {
+        global::System.Diagnostics.Trace.WriteLine($"rdbnp_read_started bytes={source.Length}");
         try
         {
-            return ReadCore(source);
+            var document = ReadCore(source);
+            global::System.Diagnostics.Trace.WriteLine(
+                $"rdbnp_read_completed types={document.Types.Count} lists={document.Lists.Count}");
+            return document;
         }
         catch (Exception exception) when (exception is ArgumentOutOfRangeException or OverflowException or DecoderFallbackException)
         {
+            global::System.Diagnostics.Trace.WriteLine(
+                $"rdbnp_read_failed error={exception.GetType().Name}");
             throw new InvalidDataException("The RDBNP structure contains an invalid range or encoded string.", exception);
         }
     }

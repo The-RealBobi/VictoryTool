@@ -1,3 +1,4 @@
+using VictoryTool.Application.Diagnostics;
 using VictoryTool.CfgBin;
 
 namespace VictoryTool.Application.Statistics;
@@ -76,6 +77,7 @@ public sealed class RdbnpGrowthTableIndex
     public static RdbnpGrowthTableIndex FromDocument(RdbnpDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);
+        using var operation = GlobalLog.BeginOperation("growth_tables_index");
         var level1 = GetSingleList(document, "m_growthTableLv1List").Rows.Select(row =>
             new GrowthLevel1Row(
                 ReadInteger(row, "mainPosition"),
@@ -103,7 +105,15 @@ public sealed class RdbnpGrowthTableIndex
                 ReadInteger(row, "charaRank"),
                 ReadStats(row, "_50"),
                 ReadStats(row, "_99"))).ToArray();
-        return new RdbnpGrowthTableIndex(main, sub, level1, level30);
+        var result = new RdbnpGrowthTableIndex(main, sub, level1, level30);
+        GlobalLog.Info("growth_tables_indexed", new Dictionary<string, object?>
+        {
+            ["level1Count"] = level1.Length,
+            ["level30Count"] = level30.Length,
+            ["mainCount"] = main.Length,
+            ["subCount"] = sub.Length,
+        });
+        return result;
     }
 
     private static RdbnpList GetSingleList(RdbnpDocument document, string name)

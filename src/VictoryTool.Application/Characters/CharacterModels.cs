@@ -359,6 +359,7 @@ public static class CharacterSemanticMapper
         ArgumentNullException.ThrowIfNull(baseEntries);
         ArgumentNullException.ThrowIfNull(parameterEntries);
         ArgumentNullException.ThrowIfNull(modelEntries);
+        using var operation = GlobalLog.BeginOperation("character_semantic_map");
         var models = modelEntries
             .Where(entry => entry.Name == "CHARA_MODEL_INFO" && entry.Values.Count >= 32)
             .GroupBy(entry => GetInteger(entry, 0))
@@ -460,13 +461,22 @@ public static class CharacterSemanticMapper
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        return bases.Values
+        var result = bases.Values
             .Where(characterBase => variantsByBase.ContainsKey(characterBase.BaseId))
             .Select(characterBase => new CharacterSemanticRecord(
                 characterBase,
                 variantsByBase[characterBase.BaseId].OrderBy(variant => variant.ParameterId).ToArray()))
             .OrderBy(record => record.Base.InternalName, StringComparer.Ordinal)
             .ToArray();
+        GlobalLog.Debug("character_semantic_map_completed", new Dictionary<string, object?>
+        {
+            ["baseCount"] = bases.Count,
+            ["variantGroupCount"] = variantsByBase.Count,
+            ["recordCount"] = result.Length,
+            ["modelCount"] = models.Count,
+            ["bodyCount"] = bodies.Count,
+        });
+        return result;
     }
 
     private static int GetInteger(CfgBinEntry entry, int index) => entry.Values[index].Value switch

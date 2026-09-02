@@ -85,6 +85,7 @@ public sealed class G4TxDocument
 
     public static G4TxDocument Read(ReadOnlySpan<byte> source)
     {
+        global::System.Diagnostics.Trace.WriteLine($"g4tx_read_started bytes={source.Length}");
         if (source.Length < MinimumHeaderSize || !source[..4].SequenceEqual("G4TX"u8))
             throw new InvalidDataException("The input is not a valid G4TX container.");
 
@@ -189,7 +190,7 @@ public sealed class G4TxDocument
                 payload);
         }
 
-        return new G4TxDocument(
+        var document = new G4TxDocument(
             bytes,
             headerSize,
             tableSize,
@@ -199,13 +200,21 @@ public sealed class G4TxDocument
             payloadBase,
             textures,
             subTextures);
+        global::System.Diagnostics.Trace.WriteLine(
+            $"g4tx_read_completed textures={document.TextureCount} subTextures={document.SubTextureCount}");
+        return document;
     }
 
-    public byte[] WriteUnmodified() => (byte[])_source.Clone();
+    public byte[] WriteUnmodified()
+    {
+        global::System.Diagnostics.Trace.WriteLine($"g4tx_write_unmodified bytes={_source.Length}");
+        return (byte[])_source.Clone();
+    }
 
     public byte[] ReplaceTextures(IReadOnlyDictionary<string, G4TextureReplacement> replacements)
     {
         ArgumentNullException.ThrowIfNull(replacements);
+        global::System.Diagnostics.Trace.WriteLine($"g4tx_replace_textures count={replacements.Count}");
         if (replacements.Count == 0) return WriteUnmodified();
 
         var entriesByName = new Dictionary<string, G4TextureEntry>(StringComparer.Ordinal);
@@ -249,6 +258,7 @@ public sealed class G4TxDocument
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(oldIdentifier);
         ArgumentException.ThrowIfNullOrWhiteSpace(newIdentifier);
+        global::System.Diagnostics.Trace.WriteLine("g4tx_rename_identifier_started");
         var oldBytes = Encoding.ASCII.GetBytes(oldIdentifier);
         var newBytes = Encoding.ASCII.GetBytes(newIdentifier);
         if (oldBytes.Length != oldIdentifier.Length

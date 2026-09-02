@@ -1,6 +1,7 @@
 using BCnEncoder.Encoder;
 using BCnEncoder.Shared;
 using BCnEncoder.Shared.ImageFiles;
+using VictoryTool.Application.Diagnostics;
 using VictoryTool.G4.Textures;
 
 namespace VictoryTool.Application.Assets;
@@ -16,6 +17,11 @@ public sealed class PortraitG4TxBuilder
         string sourceStem,
         string destinationStem)
     {
+        using var operation = GlobalLog.BeginOperation("portrait_g4tx_build", new Dictionary<string, object?>
+        {
+            ["width"] = width,
+            ["height"] = height,
+        });
         if (width <= 0 || height <= 0) throw new ArgumentOutOfRangeException(nameof(width));
         var expectedBytes = checked(width * height * 4);
         if (portrait1Bgra.Length != expectedBytes || portrait2Bgra.Length != expectedBytes)
@@ -43,6 +49,10 @@ public sealed class PortraitG4TxBuilder
         var restored = G4TxDocument.Read(renamed);
         if (restored.Textures.Any(texture => !texture.Name.Contains(destinationStem, StringComparison.Ordinal)))
             throw new InvalidDataException("The rebuilt portrait retained an unexpected texture identifier.");
+        GlobalLog.Debug("portrait_g4tx_built", new Dictionary<string, object?>
+        {
+            ["bytes"] = renamed.Length,
+        });
         return renamed;
     }
 

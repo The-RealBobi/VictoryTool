@@ -1,4 +1,5 @@
 using VictoryTool.Application.Profiles;
+using VictoryTool.Application.Diagnostics;
 using VictoryTool.G4.Textures;
 
 namespace VictoryTool.Application.Assets;
@@ -68,9 +69,20 @@ public sealed class GameAssetPreviewService : IGameAssetPreviewService
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+        using var operation = GlobalLog.BeginOperation("asset_preview_load", new Dictionary<string, object?>
+        {
+            ["hasTextureEntry"] = !string.IsNullOrWhiteSpace(textureEntryName),
+            ["hasSubTexture"] = !string.IsNullOrWhiteSpace(subTextureName),
+        });
         var path = Path.GetFullPath(sourcePath);
         if (!File.Exists(path))
+        {
+            GlobalLog.Warn("asset_preview_source_missing", new Dictionary<string, object?>
+            {
+                ["path"] = path,
+            });
             return new GameAssetPreviewResult(path, null, "assets.source_missing");
+        }
 
         var sourceInfo = new FileInfo(path);
         var key = new CacheKey(
@@ -83,7 +95,14 @@ public sealed class GameAssetPreviewService : IGameAssetPreviewService
         try
         {
             if (_cache.TryGetValue(key, out var cached))
+            {
+                GlobalLog.Debug("asset_preview_cache_hit", new Dictionary<string, object?>
+                {
+                    ["width"] = cached.Width,
+                    ["height"] = cached.Height,
+                });
                 return new GameAssetPreviewResult(path, cached);
+            }
         }
         finally
         {
@@ -96,8 +115,9 @@ public sealed class GameAssetPreviewService : IGameAssetPreviewService
         {
             document = G4TxDocument.Read(source);
         }
-        catch (InvalidDataException)
+        catch (InvalidDataException exception)
         {
+            GlobalLog.Warn("asset_preview_container_invalid", exception: exception);
             return new GameAssetPreviewResult(path, null, "assets.container_invalid");
         }
         G4SubTextureEntry? subTexture = null;
@@ -107,11 +127,17 @@ public sealed class GameAssetPreviewService : IGameAssetPreviewService
             subTexture = document.SubTextures.FirstOrDefault(entry =>
                 string.Equals(entry.Name, subTextureName, StringComparison.Ordinal));
             if (subTexture is null)
+            {
+                GlobalLog.Warn("asset_preview_subtexture_missing");
                 return new GameAssetPreviewResult(path, null, "assets.subtexture_missing");
+            }
             texture = document.Textures[subTexture.ParentTextureIndex];
             if (textureEntryName is not null
                 && !string.Equals(texture.Name, textureEntryName, StringComparison.Ordinal))
+            {
+                GlobalLog.Warn("asset_preview_texture_mismatch");
                 return new GameAssetPreviewResult(path, null, "assets.texture_entry_mismatch");
+            }
         }
         else
         {
@@ -121,19 +147,24 @@ public sealed class GameAssetPreviewService : IGameAssetPreviewService
                     string.Equals(entry.Name, textureEntryName, StringComparison.Ordinal));
         }
         if (texture is null)
+        {
+            GlobalLog.Warn("asset_preview_texture_missing");
             return new GameAssetPreviewResult(path, null, "assets.texture_entry_missing");
+        }
         DecodedTexture decoded;
         try
         {
             var decodedParent = await _decoder.DecodeAsync(texture, cancellationToken);
             decoded = subTexture is null ? decodedParent : Crop(decodedParent, subTexture);
         }
-        catch (InvalidDataException)
+        catch (InvalidDataException exception)
         {
+            GlobalLog.Warn("asset_preview_decode_invalid", exception: exception);
             return new GameAssetPreviewResult(path, null, "assets.container_invalid");
         }
-        catch (NotSupportedException)
+        catch (NotSupportedException exception)
         {
+            GlobalLog.Warn("asset_preview_decode_unsupported", exception: exception);
             return new GameAssetPreviewResult(path, null, "assets.format_unsupported");
         }
         await _gate.WaitAsync(cancellationToken);
@@ -150,6 +181,11 @@ public sealed class GameAssetPreviewService : IGameAssetPreviewService
         {
             _gate.Release();
         }
+        GlobalLog.Debug("asset_preview_loaded", new Dictionary<string, object?>
+        {
+            ["width"] = decoded.Width,
+            ["height"] = decoded.Height,
+        });
         return new GameAssetPreviewResult(path, decoded);
     }
 

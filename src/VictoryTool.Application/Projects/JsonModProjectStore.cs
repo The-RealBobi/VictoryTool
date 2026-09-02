@@ -1,5 +1,6 @@
 using System.Text.Json;
 using VictoryTool.Application.Characters;
+using VictoryTool.Application.Diagnostics;
 
 namespace VictoryTool.Application.Projects;
 
@@ -19,6 +20,7 @@ public sealed class JsonModProjectStore : IModProjectStore
 
     public async Task<ModProjectDocument> LoadAsync(string path, CancellationToken cancellationToken)
     {
+        using var operation = GlobalLog.BeginOperation("project_load");
         var fullPath = Path.GetFullPath(path);
         await using var stream = File.OpenRead(fullPath);
         var data = await JsonSerializer.DeserializeAsync<ProjectData>(stream, Options, cancellationToken)
@@ -41,11 +43,18 @@ public sealed class JsonModProjectStore : IModProjectStore
                 ? null
                 : ResolveProjectPath(projectDirectory, entry.SourcePackagePath),
         });
-        return new ModProjectDocument(
+        var project = new ModProjectDocument(
             data.Id, data.Name, data.SchemaVersion, batch, drafts,
             data.FunctionalBankReferenceDataRoot is null
                 ? null
                 : ResolveProjectPath(projectDirectory, data.FunctionalBankReferenceDataRoot));
+        GlobalLog.Info("project_loaded", new Dictionary<string, object?>
+        {
+            ["schemaVersion"] = project.SchemaVersion,
+            ["batchCount"] = project.Batch.Count,
+            ["draftCount"] = project.Drafts.Count,
+        });
+        return project;
     }
 
     public Task SaveAsync(string path, ModProjectDocument project, CancellationToken cancellationToken) =>
@@ -59,6 +68,12 @@ public sealed class JsonModProjectStore : IModProjectStore
         ModProjectDocument project,
         CancellationToken cancellationToken)
     {
+        using var operation = GlobalLog.BeginOperation("project_save", new Dictionary<string, object?>
+        {
+            ["batchCount"] = project.Batch.Count,
+            ["draftCount"] = project.Drafts.Count,
+            ["isRecovery"] = path.EndsWith(".recovery", StringComparison.OrdinalIgnoreCase),
+        });
         var fullPath = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         var temporaryPath = fullPath + $".{Guid.NewGuid():N}.tmp";

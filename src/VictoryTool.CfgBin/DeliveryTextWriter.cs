@@ -5,6 +5,8 @@ public sealed class DeliveryTextWriter
     public byte[] AppendTitle(ReadOnlySpan<byte> source, uint titleId, string title)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
+        global::System.Diagnostics.Trace.WriteLine(
+            $"delivery_title_append_started bytes={source.Length} titleLength={title.Length}");
         var document = CfgBinDocument.Read(source);
         var begin = document.Entries.Single(entry => entry.Name == "TEXT_INFO_BEGIN");
         var end = document.Entries.Single(entry => entry.Name == "TEXT_INFO_END");
@@ -38,6 +40,8 @@ public sealed class DeliveryTextWriter
             && entry.Values.Count >= 3 && GetUnsigned(entry.Values[0]) == titleId
             && Equals(entry.Values[2].Value, title)))
             throw new InvalidDataException("The delivery title failed read-back validation.");
+        global::System.Diagnostics.Trace.WriteLine(
+            $"delivery_title_append_completed bytes={result.Length} titleLength={title.Length}");
         return result;
     }
 

@@ -1,4 +1,5 @@
 using VictoryTool.CfgBin;
+using VictoryTool.Application.Diagnostics;
 
 namespace VictoryTool.Application.Characters;
 
@@ -13,6 +14,10 @@ public static class CharacterRomanizedNameMapper
         ArgumentException.ThrowIfNullOrWhiteSpace(locale);
         ArgumentNullException.ThrowIfNull(characters);
         ArgumentNullException.ThrowIfNull(entries);
+        using var operation = GlobalLog.BeginOperation("character_romanized_name_map", new Dictionary<string, object?>
+        {
+            ["locale"] = locale,
+        });
 
         var names = new Dictionary<(int Key, int Form), string>();
         foreach (var entry in entries.Where(entry => entry.Name == "NOUN_INFO" && entry.Values.Count >= 6))
@@ -41,6 +46,11 @@ public static class CharacterRomanizedNameMapper
                 result.Add(character.BaseId, nameSet);
         }
 
+        GlobalLog.Debug("character_romanized_names_mapped", new Dictionary<string, object?>
+        {
+            ["nameEntryCount"] = names.Count,
+            ["characterCount"] = result.Count,
+        });
         return result;
     }
 

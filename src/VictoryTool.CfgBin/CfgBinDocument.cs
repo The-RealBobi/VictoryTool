@@ -94,13 +94,19 @@ public sealed class CfgBinDocument
 
     public static CfgBinDocument Read(ReadOnlySpan<byte> data)
     {
+        global::System.Diagnostics.Trace.WriteLine($"cfgbin_read_started bytes={data.Length}");
         try
         {
-            return ReadCore(data);
+            var document = ReadCore(data);
+            global::System.Diagnostics.Trace.WriteLine(
+                $"cfgbin_read_completed format={document.Format} entries={document.EntryCount}");
+            return document;
         }
         catch (Exception exception) when (
             exception is OverflowException or ArgumentOutOfRangeException or DecoderFallbackException)
         {
+            global::System.Diagnostics.Trace.WriteLine(
+                $"cfgbin_read_failed error={exception.GetType().Name}");
             throw new InvalidDataException("The T2B structure contains invalid arithmetic or encoded text.", exception);
         }
     }
@@ -206,10 +212,15 @@ public sealed class CfgBinDocument
             selected.Entries.Select(entry => (entry.StartOffset, entry.EndOffset)).ToArray());
     }
 
-    public byte[] WriteUnmodified() => (byte[])_source.Clone();
+    public byte[] WriteUnmodified()
+    {
+        global::System.Diagnostics.Trace.WriteLine($"cfgbin_write_unmodified bytes={_source.Length}");
+        return (byte[])_source.Clone();
+    }
 
     public byte[] WriteCanonical()
     {
+        global::System.Diagnostics.Trace.WriteLine($"cfgbin_write_canonical entries={Entries.Count}");
         if (ValueWidth == CfgBinValueWidth.Unknown)
             throw new NotSupportedException("A T2B document without entries cannot establish a canonical value width.");
         if (Entries.Any(entry => entry.Name is null))
@@ -285,10 +296,12 @@ public sealed class CfgBinDocument
     public byte[] WriteWithValueEdits(IEnumerable<CfgBinValueEdit> edits)
     {
         ArgumentNullException.ThrowIfNull(edits);
+        var operations = edits.ToArray();
+        global::System.Diagnostics.Trace.WriteLine($"cfgbin_write_value_edits count={operations.Length}");
 
         var result = (byte[])_source.Clone();
         var editedLocations = new HashSet<(int EntryIndex, int ValueIndex)>();
-        foreach (var edit in edits)
+        foreach (var edit in operations)
         {
             ArgumentNullException.ThrowIfNull(edit);
             if ((uint)edit.EntryIndex >= (uint)Entries.Count)
@@ -325,6 +338,7 @@ public sealed class CfgBinDocument
         ArgumentNullException.ThrowIfNull(edits);
 
         var operations = edits.ToArray();
+        global::System.Diagnostics.Trace.WriteLine($"cfgbin_write_fixed_string_edits count={operations.Length}");
         if (operations.Length == 0) return WriteUnmodified();
         var encoding = GetEncoding(EncodingCode);
         var result = (byte[])_source.Clone();
@@ -381,6 +395,7 @@ public sealed class CfgBinDocument
             throw new NotSupportedException("Rows cannot be appended to a T2B document without a verified value width.");
 
         var operations = appends.ToArray();
+        global::System.Diagnostics.Trace.WriteLine($"cfgbin_write_appended_entries count={operations.Length}");
         if (operations.Length == 0) return WriteUnmodified();
         var encoding = GetEncoding(EncodingCode);
         var stringData = new List<byte>(_source.AsSpan(StringDataOffset, StringDataLength).ToArray());
@@ -427,6 +442,7 @@ public sealed class CfgBinDocument
             throw new NotSupportedException("Rows cannot be inserted into a T2B document without a verified value width.");
 
         var operations = inserts.ToArray();
+        global::System.Diagnostics.Trace.WriteLine($"cfgbin_write_inserted_entries count={operations.Length}");
         if (operations.Length == 0) return WriteUnmodified();
         foreach (var operation in operations)
         {

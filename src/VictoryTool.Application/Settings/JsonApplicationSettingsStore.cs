@@ -1,4 +1,5 @@
 using System.Text.Json;
+using VictoryTool.Application.Diagnostics;
 
 namespace VictoryTool.Application.Settings;
 
@@ -26,15 +27,31 @@ public sealed class JsonApplicationSettingsStore(string path) : IApplicationSett
 
     public async Task<ApplicationSettings> LoadAsync(CancellationToken cancellationToken)
     {
-        if (!File.Exists(path)) return ApplicationSettings.Default;
+        using var operation = GlobalLog.BeginOperation("settings_load");
+        if (!File.Exists(path))
+        {
+            GlobalLog.Debug("settings_file_missing");
+            return ApplicationSettings.Default;
+        }
         await using var stream = File.OpenRead(path);
-        return await JsonSerializer.DeserializeAsync<ApplicationSettings>(stream, Options, cancellationToken)
+        var settings = await JsonSerializer.DeserializeAsync<ApplicationSettings>(stream, Options, cancellationToken)
             ?? ApplicationSettings.Default;
+        GlobalLog.Debug("settings_loaded", new Dictionary<string, object?>
+        {
+            ["hasDumpRoot"] = !string.IsNullOrWhiteSpace(settings.GameDumpRoot),
+            ["language"] = settings.LanguageCode,
+        });
+        return settings;
     }
 
     public async Task SaveAsync(ApplicationSettings settings, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        using var operation = GlobalLog.BeginOperation("settings_save", new Dictionary<string, object?>
+        {
+            ["hasDumpRoot"] = !string.IsNullOrWhiteSpace(settings.GameDumpRoot),
+            ["language"] = settings.LanguageCode,
+        });
         var fullPath = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         var temporaryPath = fullPath + $".{Guid.NewGuid():N}.tmp";

@@ -1,4 +1,5 @@
 using VictoryTool.Application.Characters;
+using VictoryTool.Application.Diagnostics;
 using VictoryTool.Application.Profiles;
 using VictoryTool.G4.Textures;
 
@@ -63,6 +64,14 @@ public sealed class UniformPreviewResolver : IUniformPreviewResolver
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(request);
+        using var operation = GlobalLog.BeginOperation("uniform_preview_resolve", new Dictionary<string, object?>
+        {
+            ["gender"] = request.Gender,
+            ["bodyType"] = request.BodyType,
+            ["uniformVariant"] = request.UniformVariant,
+            ["uniformModel"] = request.UniformModel,
+            ["hasExactAsset"] = request.ExactAsset is not null,
+        });
         var provenance = UniformPreviewProvenance.Exact;
         var descriptor = request.ExactAsset;
         var uniformVariant = request.UniformVariant
@@ -78,12 +87,18 @@ public sealed class UniformPreviewResolver : IUniformPreviewResolver
                          request.Gender, uniformVariant, out descriptor))
                 provenance = UniformPreviewProvenance.BodyCompatibleDefault;
             else
+            {
+                GlobalLog.Warn("uniform_preview_mapping_unverified");
                 return new UniformPreviewResult(
                     null, UniformPreviewProvenance.Fallback, "uniform.body_mapping_unverified");
+            }
         }
         if (descriptor is null)
+        {
+            GlobalLog.Warn("uniform_preview_mapping_unverified");
             return new UniformPreviewResult(
                 null, UniformPreviewProvenance.Fallback, "uniform.body_mapping_unverified");
+        }
 
         var root = Path.GetFullPath(profile.RootPath);
         var sourcePath = Path.GetFullPath(Path.Combine(root, descriptor.RelativeContainerPath));
@@ -92,7 +107,13 @@ public sealed class UniformPreviewResolver : IUniformPreviewResolver
             || relative.Equals("..", StringComparison.Ordinal)
             || relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
             || relative.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal))
+        {
+            GlobalLog.Error("uniform_preview_path_outside_dump", data: new Dictionary<string, object?>
+            {
+                ["relativePath"] = relative,
+            });
             return new UniformPreviewResult(null, UniformPreviewProvenance.Fallback, "uniform.path_outside_dump");
+        }
 
         var shirt = await _previewService.LoadAsync(
             sourcePath,
@@ -100,7 +121,13 @@ public sealed class UniformPreviewResolver : IUniformPreviewResolver
             null,
             cancellationToken);
         if (shirt.Texture is null)
+        {
+            GlobalLog.Warn("uniform_preview_shirt_missing", new Dictionary<string, object?>
+            {
+                ["diagnostic"] = shirt.DiagnosticCode,
+            });
             return new UniformPreviewResult(null, UniformPreviewProvenance.Fallback, shirt.DiagnosticCode);
+        }
 
         var mask = await _previewService.LoadAsync(
             sourcePath,
@@ -108,11 +135,18 @@ public sealed class UniformPreviewResolver : IUniformPreviewResolver
             null,
             cancellationToken);
         if (mask.Texture is null)
+        {
+            GlobalLog.Warn("uniform_preview_skin_mask_missing");
             return new UniformPreviewResult(
                 shirt.Texture,
                 provenance,
                 "uniform.skin_mask_missing");
+        }
 
+        GlobalLog.Debug("uniform_preview_resolved", new Dictionary<string, object?>
+        {
+            ["provenance"] = provenance,
+        });
         return new UniformPreviewResult(
             TextureCompositor.ApplySkinMask(shirt.Texture, mask.Texture, request.SkinColorArgb),
             provenance);

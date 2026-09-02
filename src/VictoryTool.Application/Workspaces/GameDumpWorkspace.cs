@@ -1,3 +1,5 @@
+using VictoryTool.Application.Diagnostics;
+
 namespace VictoryTool.Application.Workspaces;
 
 public sealed class GameDumpWorkspace
@@ -14,20 +16,37 @@ public sealed class GameDumpWorkspace
 
     public IReadOnlyList<string> EnumerateCfgBinFiles()
     {
-        return Directory
+        var files = Directory
             .EnumerateFiles(GameDataPath, "*.cfg.bin", SearchOption.AllDirectories)
             .Select(path => Path.GetRelativePath(GameDataPath, path).Replace('\\', '/'))
             .Order(StringComparer.Ordinal)
             .ToArray();
+        GlobalLog.Debug("dump_cfgbin_files_enumerated", new Dictionary<string, object?>
+        {
+            ["count"] = files.Length,
+        });
+        return files;
     }
 
     public static GameDumpWorkspace Open(string rootPath)
     {
+        using var operation = GlobalLog.BeginOperation("dump_workspace_open");
         var result = new GameDumpLocator().Locate(rootPath);
         if (!result.IsValid)
+        {
+            GlobalLog.Warn("dump_workspace_rejected", new Dictionary<string, object?>
+            {
+                ["diagnosticCount"] = result.Diagnostics.Count,
+            });
             throw new GameDumpValidationException(result);
+        }
 
         var selection = result.Selection!;
+        GlobalLog.Info("dump_workspace_opened", new Dictionary<string, object?>
+        {
+            ["hasPcResources"] = selection.HasPcResources,
+            ["hasSwitchResources"] = selection.HasSwitchResources,
+        });
         return new GameDumpWorkspace(selection.RootPath, selection.GameDataPath);
     }
 }

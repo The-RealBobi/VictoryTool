@@ -1,3 +1,4 @@
+using VictoryTool.Application.Diagnostics;
 using VictoryTool.Application.Profiles;
 
 namespace VictoryTool.Application.Assets;
@@ -39,6 +40,13 @@ public static class GameUiAssetLocator
                 platform, "menu", "00_soccer", "soccer11", "soccer11_06", locale, "soccer11_06.g4tx"),
             _ => throw new ArgumentOutOfRangeException(nameof(key), key, null),
         };
-        return Path.GetFullPath(Path.Combine(profile.RootPath, relativePath));
+        var resolvedPath = Path.GetFullPath(Path.Combine(profile.RootPath, relativePath));
+        GlobalLog.Debug("ui_asset_resolved", new Dictionary<string, object?>
+        {
+            ["key"] = key,
+            ["locale"] = locale,
+            ["platform"] = platform,
+        });
+        return resolvedPath;
     }
 }

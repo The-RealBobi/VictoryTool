@@ -83,7 +83,8 @@ public sealed record WizardText(
     string OpenCollar,
     string ExtractedFromPackage,
     string BodyType,
-    string Remove)
+    string Remove,
+    string EditLocalesJson)
 {
     public static WizardText English { get; } = new(
         "Browse", "Back", "Next", "Identity & Gameplay", "Appearance", "Acquisition", "Review",
@@ -103,7 +104,7 @@ public sealed record WizardText(
         "What does the character look like?", "Normal face", "Face without rear hair", "3D model", "Browse…",
         "Skin color", "Is everything okay?", "Skill list", "Save",
         "Add characters to the game", "Add package", "Drop a .vrchara here", "Add this character to the incorporation list?", "Yes", "No", "Export",
-        "Uniform", "Shoes", "Gloves", "Force uniform", "Force equipment", "Chest size", "Open collar", "Extracted from package", "Body type", "Remove");
+        "Uniform", "Shoes", "Gloves", "Force uniform", "Force equipment", "Chest size", "Open collar", "Extracted from package", "Body type", "Remove", "Edit locales JSON");
 
     public static WizardText Spanish { get; } = new(
         "Examinar", "Atrás", "Siguiente", "Identidad y gameplay", "Aspecto", "Obtención", "Revisión",
@@ -123,7 +124,7 @@ public sealed record WizardText(
         "¿Y qué aspecto tiene?", "Cara normal", "Cara sin pelo trasero", "Modelo 3D", "Examinar…",
         "Color de piel", "¿Está todo bien?", "Lista de técnicas", "Guardar",
         "Incorpora personajes al juego", "Añadir paquete", "Suelta aquí un .vrchara", "¿Quieres añadir este personaje a la lista de incorporaciones?", "Sí", "No", "Exportar",
-        "Uniforme", "Zapatillas", "Guantes", "Forzar uniforme", "Forzar equipamiento", "Tamaño del pecho", "Cuello abierto", "Extraído del paquete", "Tipo corporal", "Eliminar");
+        "Uniforme", "Zapatillas", "Guantes", "Forzar uniforme", "Forzar equipamiento", "Tamaño del pecho", "Cuello abierto", "Extraído del paquete", "Tipo corporal", "Eliminar", "Editar JSON de locales");
 
     public static WizardText ForLocale(string locale) =>
         string.Equals(locale, "es", StringComparison.OrdinalIgnoreCase) ? Spanish : English;

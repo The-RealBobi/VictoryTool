@@ -1,3 +1,5 @@
+using VictoryTool.Application.Diagnostics;
+
 namespace VictoryTool.Application.Workspaces;
 
 public interface IGameDumpLocator
@@ -9,8 +11,13 @@ public sealed class GameDumpLocator : IGameDumpLocator
 {
     public GameDumpValidationResult Locate(string selectedPath)
     {
+        using var operation = GlobalLog.BeginOperation("dump_locate", new Dictionary<string, object?>
+        {
+            ["hasSelectedPath"] = !string.IsNullOrWhiteSpace(selectedPath),
+        });
         if (string.IsNullOrWhiteSpace(selectedPath))
         {
+            GlobalLog.Warn("dump_locate_path_missing");
             return GameDumpValidationResult.Invalid(new GameDumpValidationDiagnostic(
                 "path",
                 "dump.path_required",
@@ -20,6 +27,7 @@ public sealed class GameDumpLocator : IGameDumpLocator
         var fullPath = Path.GetFullPath(selectedPath);
         if (!Directory.Exists(fullPath))
         {
+            GlobalLog.Warn("dump_locate_directory_missing");
             return GameDumpValidationResult.Invalid(new GameDumpValidationDiagnostic(
                 "path",
                 "dump.path_missing",
@@ -33,6 +41,7 @@ public sealed class GameDumpLocator : IGameDumpLocator
 
         if (roots.Length == 0)
         {
+            GlobalLog.Warn("dump_locate_root_missing");
             return GameDumpValidationResult.Invalid(new GameDumpValidationDiagnostic(
                 "path",
                 "dump.root_not_found",
@@ -41,6 +50,10 @@ public sealed class GameDumpLocator : IGameDumpLocator
 
         if (roots.Length > 1)
         {
+            GlobalLog.Warn("dump_locate_root_ambiguous", new Dictionary<string, object?>
+            {
+                ["candidateCount"] = roots.Length,
+            });
             return GameDumpValidationResult.Invalid(new GameDumpValidationDiagnostic(
                 "path",
                 "dump.root_ambiguous",
@@ -57,6 +70,13 @@ public sealed class GameDumpLocator : IGameDumpLocator
         if (hasSwitchResources) platformEvidence.Add("Switch/NX menu resources");
         if (platformEvidence.Count == 0) platformEvidence.Add("No supported platform menu resources detected");
 
+        GlobalLog.Info("dump_locate_completed", new Dictionary<string, object?>
+        {
+            ["candidateCount"] = roots.Length,
+            ["hasPcResources"] = hasPcResources,
+            ["hasSwitchResources"] = hasSwitchResources,
+            ["compatibleInputCount"] = compatibleInputCount,
+        });
         return GameDumpValidationResult.Valid(new GameDumpSelection(
             fullPath,
             rootPath,
@@ -98,6 +118,7 @@ public sealed class GameDumpLocator : IGameDumpLocator
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
+            GlobalLog.Warn("dump_locate_input_count_failed", exception: exception);
             return 0;
         }
     }

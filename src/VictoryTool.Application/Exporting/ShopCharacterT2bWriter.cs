@@ -1,4 +1,5 @@
 using VictoryTool.CfgBin;
+using VictoryTool.Application.Diagnostics;
 
 namespace VictoryTool.Application.Exporting;
 
@@ -22,6 +23,11 @@ public sealed class ShopCharacterT2bWriter : IShopCharacterT2bWriter
     public byte[] Append(ReadOnlySpan<byte> shopTable, ShopCharacterWriteRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        using var operation = GlobalLog.BeginOperation("shop_character_write", new Dictionary<string, object?>
+        {
+            ["sourceItemId"] = request.SourceItemId,
+            ["isFree"] = request.IsFree,
+        });
         var document = CfgBinDocument.Read(shopTable);
         var source = FindSingleItem(
             document,
@@ -103,6 +109,10 @@ public sealed class ShopCharacterT2bWriter : IShopCharacterT2bWriter
             [new CfgBinValueEdit(listBegin.Index, 0, checked(markerCount + 1))]));
         var result = countEdited.WriteWithInsertedEntries(inserts);
         ValidateResult(result, request, document.EntryCount, listBegin.Index, markerCount);
+        GlobalLog.Debug("shop_character_written", new Dictionary<string, object?>
+        {
+            ["tableBytes"] = result.Length,
+        });
         return result;
     }
 

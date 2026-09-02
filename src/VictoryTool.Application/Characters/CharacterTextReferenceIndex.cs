@@ -1,4 +1,5 @@
 using System.Text;
+using VictoryTool.Application.Diagnostics;
 using VictoryTool.Application.Text;
 using VictoryTool.CfgBin;
 
@@ -55,6 +56,7 @@ public sealed class CharacterTextReferenceIndex
         IReadOnlyDictionary<int, IReadOnlyDictionary<string, CharacterLocalizedText>> localizations,
         CancellationToken cancellationToken)
     {
+        using var operation = GlobalLog.BeginOperation("character_text_reference_load");
         var path = Directory.EnumerateFiles(
                 Path.Combine(rootPath, "common", "gamedata", "character"),
                 "chara_name_tag_*.cfg.bin")
@@ -81,7 +83,13 @@ public sealed class CharacterTextReferenceIndex
                     pair.Value.GivenName),
                 StringComparer.OrdinalIgnoreCase);
         }
-        return Create(references, names);
+        var result = Create(references, names);
+        GlobalLog.Debug("character_text_reference_loaded", new Dictionary<string, object?>
+        {
+            ["referenceCount"] = references.Length,
+            ["localizedCharacterCount"] = names.Count,
+        });
+        return result;
     }
 
     private static uint ComputeCrc32(ReadOnlySpan<byte> bytes)

@@ -1,4 +1,5 @@
 using VictoryTool.CfgBin;
+using VictoryTool.Application.Diagnostics;
 
 namespace VictoryTool.Application.Characters;
 
@@ -16,6 +17,10 @@ public static class CharacterLocalizationMapper
         ArgumentNullException.ThrowIfNull(nameEntries);
         ArgumentNullException.ThrowIfNull(descriptionEntries);
         cancellationToken.ThrowIfCancellationRequested();
+        using var operation = GlobalLog.BeginOperation("character_localization_map", new Dictionary<string, object?>
+        {
+            ["locale"] = locale,
+        });
 
         var names = new Dictionary<(int Key, int Form), string>();
         foreach (var entry in nameEntries.Where(entry => entry.Name == "NOUN_INFO" && entry.Values.Count >= 6))
@@ -53,6 +58,14 @@ public static class CharacterLocalizationMapper
                     ? null
                     : descriptions.GetValueOrDefault(character.DescriptionTextId));
         }
+        GlobalLog.Debug("character_localization_mapped", new Dictionary<string, object?>
+        {
+            ["nameEntryCount"] = names.Count,
+            ["descriptionEntryCount"] = descriptions.Count,
+            ["characterCount"] = result.Count,
+            ["localizedNameCount"] = result.Values.Count(value => value.FullName is not null),
+            ["localizedDescriptionCount"] = result.Values.Count(value => value.Description is not null),
+        });
         return result;
     }
 

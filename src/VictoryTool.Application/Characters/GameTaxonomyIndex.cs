@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using VictoryTool.Application.Diagnostics;
 using VictoryTool.CfgBin;
 
 namespace VictoryTool.Application.Characters;
@@ -107,6 +108,8 @@ public sealed class GameTaxonomyIndex
 
     public string ResolveAcademicYear(uint id, string locale)
     {
+        if (id == 0)
+            return locale.Equals("es", StringComparison.OrdinalIgnoreCase) ? "Desconocido" : "Unknown";
         if (!_academicYears.TryGetValue(id, out var item))
             return $"Unknown academic year (0x{id:X8})";
         if (ResolveText(item.NameTextId, locale) is { } text)
@@ -253,6 +256,7 @@ public static class GameTaxonomyLoader
     public static GameTaxonomyIndex Load(string rootPath, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
+        using var operation = GlobalLog.BeginOperation("taxonomy_load");
         var characterRoot = Path.Combine(rootPath, "common", "gamedata", "character");
         var seriesDocument = ReadRdbnp(Path.Combine(characterRoot, "chara_series_config.cfg.bin"), cancellationToken);
         var academicDocument = ReadRdbnp(Path.Combine(characterRoot, "academic_year_config.cfg.bin"), cancellationToken);
@@ -270,13 +274,28 @@ public static class GameTaxonomyLoader
         var texts = ReadTexts(Path.Combine(rootPath, "common", "text"), cancellationToken);
         var equipment = ReadEquipment(rootPath, cancellationToken);
         var teams = ReadTeams(rootPath, cancellationToken);
-        return GameTaxonomyIndex.Create(series, academicYears, skills.Values, texts, equipment, teams);
+        var result = GameTaxonomyIndex.Create(series, academicYears, skills.Values, texts, equipment, teams);
+        GlobalLog.Info("taxonomy_loaded", new Dictionary<string, object?>
+        {
+            ["seriesCount"] = series.Count,
+            ["academicYearCount"] = academicYears.Count,
+            ["skillCount"] = skills.Count,
+            ["localeCount"] = texts.Count,
+            ["equipmentCount"] = equipment.Count,
+            ["teamCount"] = teams.Count,
+        });
+        return result;
     }
 
     private static RdbnpDocument ReadRdbnp(string path, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return RdbnpDocument.Read(File.ReadAllBytes(path));
+        var document = RdbnpDocument.Read(File.ReadAllBytes(path));
+        GlobalLog.Debug("rdbnp_table_loaded", new Dictionary<string, object?>
+        {
+            ["listCount"] = document.Lists.Count,
+        });
+        return document;
     }
 
     private static RdbnpDocument ReadLargestSkillDocument(string directory, CancellationToken cancellationToken)

@@ -9,6 +9,8 @@ public sealed class CharaFaceIconConfigWriter
 
     public byte[] CloneSceneSettings(ReadOnlySpan<byte> source, uint sourceCharacterId, uint destinationCharacterId)
     {
+        global::System.Diagnostics.Trace.WriteLine(
+            $"face_icon_scene_clone_started bytes={source.Length} sourceId={sourceCharacterId} destinationId={destinationCharacterId}");
         var document = RdbnpDocument.Read(source);
         var sceneList = document.Lists.Single(list => list.Name == "m_CharaFaceIconSceneDataList");
         var infoList = document.Lists.Single(list => list.Name == "m_CharaFaceIconInfoList");
@@ -59,6 +61,8 @@ public sealed class CharaFaceIconConfigWriter
             RelativeOffset = infoRoot.RelativeOffset + sceneBytes,
             RowCount = infoRoot.RowCount + 1,
         });
+        global::System.Diagnostics.Trace.WriteLine(
+            $"face_icon_scene_clone_completed bytes={result.Length} sceneRowsAdded={sceneReference.Count}");
         return result;
     }
 

@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Media.Imaging;
 using VictoryTool.Application.Assets;
 using VictoryTool.Application.Characters;
+using VictoryTool.Application.Diagnostics;
 
 namespace VictoryTool.Desktop.Assets;
 
@@ -53,31 +54,55 @@ public sealed class CharacterPortraitLoader : ICharacterPortraitLoader
         ArgumentNullException.ThrowIfNull(request);
         var character = request.Character;
         ArgumentNullException.ThrowIfNull(character);
-        var portraitPath = request.Kind is CharacterPortraitKind.UniformCompatible or CharacterPortraitKind.RosterThumbnail
+        using var operation = GlobalLog.BeginOperation("character_portrait_load", new Dictionary<string, object?>
+        {
+            ["kind"] = request.Kind,
+            ["hasStandardPath"] = character.StandardPortraitResourcePath is not null,
+            ["hasUniformPath"] = character.UniformPortraitResourcePath is not null,
+        });
+        var portraitPath = request.Kind == CharacterPortraitKind.UniformCompatible
             ? character.UniformPortraitResourcePath ?? character.PortraitResourcePath
             : character.StandardPortraitResourcePath ?? character.PortraitResourcePath;
         if (string.IsNullOrWhiteSpace(portraitPath))
+        {
+            GlobalLog.Warn("character_portrait_path_missing");
             return new CharacterPortraitLoadResult(null, "assets.source_missing");
+        }
 
         if (portraitPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
             return LoadPng(portraitPath, request.Kind);
 
-        var entryName = request.Kind is CharacterPortraitKind.UniformCompatible or CharacterPortraitKind.RosterThumbnail
+        var entryName = request.Kind == CharacterPortraitKind.UniformCompatible
             ? character.PortraitMetadata?.UniformPortraitEntryName
                 ?? character.PortraitMetadata?.StandardPortraitEntryName
             : character.PortraitMetadata?.StandardPortraitEntryName
                 ?? character.PortraitMetadata?.UniformPortraitEntryName;
         if (character.PortraitMetadata is not null && string.IsNullOrWhiteSpace(entryName))
+        {
+            GlobalLog.Warn("character_portrait_entry_missing");
             return new CharacterPortraitLoadResult(null, "assets.portrait_entry_missing");
+        }
 
         var preview = await _previewService.LoadAsync(
             portraitPath,
             entryName,
             null,
             cancellationToken);
-        return preview.Texture is null
-            ? new CharacterPortraitLoadResult(null, preview.DiagnosticCode)
-            : new CharacterPortraitLoadResult(
+        if (preview.Texture is null)
+        {
+            GlobalLog.Warn("character_portrait_preview_failed", new Dictionary<string, object?>
+            {
+                ["diagnostic"] = preview.DiagnosticCode,
+            });
+            return new CharacterPortraitLoadResult(null, preview.DiagnosticCode);
+        }
+        GlobalLog.Debug("character_portrait_loaded", new Dictionary<string, object?>
+        {
+            ["width"] = preview.Texture.Width,
+            ["height"] = preview.Texture.Height,
+        });
+        return
+            new CharacterPortraitLoadResult(
                 request.Kind == CharacterPortraitKind.RosterThumbnail
                     ? DecodedTextureBitmapFactory.CreateThumbnail(preview.Texture, 48)
                     : DecodedTextureBitmapFactory.Create(preview.Texture),
@@ -87,7 +112,10 @@ public sealed class CharacterPortraitLoader : ICharacterPortraitLoader
     private static CharacterPortraitLoadResult LoadPng(string path, CharacterPortraitKind kind)
     {
         if (!File.Exists(path))
+        {
+            GlobalLog.Warn("character_portrait_png_missing");
             return new CharacterPortraitLoadResult(null, "assets.source_missing");
+        }
 
         try
         {
@@ -107,6 +135,7 @@ public sealed class CharacterPortraitLoader : ICharacterPortraitLoader
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or ArgumentException)
         {
+            GlobalLog.Warn("character_portrait_png_invalid", exception: exception);
             return new CharacterPortraitLoadResult(null, "assets.source_invalid");
         }
     }

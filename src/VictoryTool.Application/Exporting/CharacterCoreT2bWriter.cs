@@ -1,5 +1,6 @@
 using VictoryTool.CfgBin;
 using VictoryTool.Application.Characters;
+using VictoryTool.Application.Diagnostics;
 using System.Text;
 
 namespace VictoryTool.Application.Exporting;
@@ -70,6 +71,13 @@ public sealed class CharacterCoreT2bWriter : ICharacterCoreT2bWriter
         CharacterCoreWriteRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        using var operation = GlobalLog.BeginOperation("character_core_write", new Dictionary<string, object?>
+        {
+            ["sourceBaseId"] = request.SourceBaseId,
+            ["sourceParameterId"] = request.SourceParameterId,
+            ["specialRarity"] = request.SpecialRarity,
+            ["writesBaseRow"] = request.WritesBaseRow,
+        });
         if (string.IsNullOrWhiteSpace(request.InternalName))
             throw new ArgumentException("An internal character name is required.", nameof(request));
         if (request.EnforceIdentityHash && !IsCanonicalInternalName(request.InternalName))
@@ -192,6 +200,11 @@ public sealed class CharacterCoreT2bWriter : ICharacterCoreT2bWriter
         writtenParameterTable = InsertParameterSortIndex(writtenParameterTable, request.ParameterId);
         var result = new CharacterCoreWriteResult(writtenBaseTable, writtenParameterTable);
         if (request.WritesBaseRow) ValidateReadBack(result, request);
+        GlobalLog.Debug("character_core_written", new Dictionary<string, object?>
+        {
+            ["baseTableBytes"] = result.BaseTable.Length,
+            ["parameterTableBytes"] = result.ParameterTable.Length,
+        });
         return result;
     }
 

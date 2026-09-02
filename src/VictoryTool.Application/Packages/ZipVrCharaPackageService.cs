@@ -5,6 +5,7 @@ using System.Text.Json;
 using VictoryTool.Application.Characters;
 using VictoryTool.Application.Profiles;
 using VictoryTool.Application.Assets;
+using VictoryTool.Application.Diagnostics;
 using VictoryTool.G4.Textures;
 
 namespace VictoryTool.Application.Packages;
@@ -64,18 +65,29 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
 
     public async Task<CharacterDraft> LoadAsync(string path, CancellationToken cancellationToken)
     {
+        using var operation = GlobalLog.BeginOperation("vrchara_load");
         var package = await LoadPackageAsync(path, cancellationToken);
-        return await HydrateAuthoredResourcesAsync(package, cancellationToken);
+        var draft = await HydrateAuthoredResourcesAsync(package, cancellationToken);
+        GlobalLog.Info("vrchara_loaded", new Dictionary<string, object?>
+        {
+            ["resourceCount"] = package.Resources.Count,
+            ["hasStandardPortrait"] = draft.Assets?.StandardPortraitPath is not null,
+            ["hasUniformPortrait"] = draft.Assets?.UniformPortraitPath is not null,
+            ["hasHeadModel"] = draft.Models?.HeadModelPath is not null,
+        });
+        return draft;
     }
 
     public async Task<VrCharaManifest> LoadManifestAsync(string path, CancellationToken cancellationToken)
     {
+        using var operation = GlobalLog.BeginOperation("vrchara_manifest_load");
         var package = await LoadPackageAsync(path, cancellationToken);
         return package.Manifest;
     }
 
     public async Task<VrCharaPackage> LoadPackageAsync(string path, CancellationToken cancellationToken)
     {
+        using var operation = GlobalLog.BeginOperation("vrchara_package_load");
         using var archive = ZipFile.OpenRead(path);
         var manifests = archive.Entries.Where(entry => entry.FullName == "manifest.json").ToArray();
         if (manifests.Length != 1)
@@ -122,13 +134,26 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             }
             resources.Add(new AuthoredResource(resource.VirtualPath, content));
         }
-        return new VrCharaPackage(manifest, resources);
+        var package = new VrCharaPackage(manifest, resources);
+        GlobalLog.Info("vrchara_package_loaded", new Dictionary<string, object?>
+        {
+            ["formatVersion"] = manifest.FormatVersion,
+            ["resourceCount"] = resources.Count,
+            ["gameReferenceCount"] = manifest.GameResources.Count,
+            ["patchSetCount"] = manifest.Patches.Count,
+            ["localizationCount"] = manifest.Localizations?.Count ?? 0,
+        });
+        return package;
     }
 
     private static async Task<CharacterDraft> HydrateAuthoredResourcesAsync(
         VrCharaPackage package,
         CancellationToken cancellationToken)
     {
+        using var operation = GlobalLog.BeginOperation("vrchara_resources_hydrate", new Dictionary<string, object?>
+        {
+            ["resourceCount"] = package.Resources.Count,
+        });
         var draft = package.Manifest.Character;
         var resourceByPath = package.Resources.ToDictionary(
             resource => resource.VirtualPath,
@@ -146,7 +171,10 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToArray();
         if (!paths.Any(path => !string.IsNullOrWhiteSpace(path) && resourceByPath.ContainsKey(path!)))
+        {
+            GlobalLog.Debug("vrchara_resources_hydrate_skipped");
             return draft;
+        }
 
         var extractionRoot = Path.Combine(
             Path.GetTempPath(), "VictoryTool", "vrchara", Guid.NewGuid().ToString("N"));
@@ -202,6 +230,12 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
                 BodyModelPath = ReplaceHydratedModelPath(models.BodyModelPath, extracted),
             };
         }
+        GlobalLog.Info("vrchara_resources_hydrated", new Dictionary<string, object?>
+        {
+            ["extractedCount"] = extracted.Count,
+            ["hasAssets"] = assets is not null,
+            ["hasModels"] = models is not null,
+        });
         return draft with
         {
             Assets = assets ?? new CharacterDraftAssets(null, null),
@@ -256,6 +290,11 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
     public async Task SaveAsync(string path, CharacterDraft draft, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(draft);
+        using var operation = GlobalLog.BeginOperation("vrchara_draft_save", new Dictionary<string, object?>
+        {
+            ["isDirty"] = draft.IsDirty,
+            ["hasCustomModel"] = draft.Models?.HeadModelPath?.Contains("99_CUSTOM", StringComparison.OrdinalIgnoreCase) == true,
+        });
         var (normalizedDraft, authoredResources) = PrepareAuthoredResources(draft);
         var draftLocalization = normalizedDraft.Localization ?? new CharacterDraftLocalization(
             null, null, GameLocaleCatalog.CreateEmptyLocalizations());
@@ -285,6 +324,11 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
                 localizations,
                 ToolVersion: ApplicationVersion.Current), authoredResources),
             cancellationToken);
+        GlobalLog.Info("vrchara_draft_saved", new Dictionary<string, object?>
+        {
+            ["resourceCount"] = authoredResources.Count,
+            ["localizationCount"] = localizations.Count,
+        });
     }
 
     private static (CharacterDraft Draft, IReadOnlyList<AuthoredResource> Resources) PrepareAuthoredResources(CharacterDraft draft)
@@ -559,9 +603,21 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
     public async Task SaveAsync(string path, VrCharaPackage package, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(package);
+        using var operation = GlobalLog.BeginOperation("vrchara_package_save", new Dictionary<string, object?>
+        {
+            ["resourceCount"] = package.Resources.Count,
+            ["localizationCount"] = package.Manifest.Localizations?.Count ?? 0,
+        });
         var manifest = CreateManifest(package);
         var validation = Validate(manifest);
-        if (!validation.IsValid) throw new InvalidDataException(string.Join(" ", validation.Errors));
+        if (!validation.IsValid)
+        {
+            GlobalLog.Warn("vrchara_package_save_rejected", new Dictionary<string, object?>
+            {
+                ["errorCount"] = validation.Errors.Count,
+            });
+            throw new InvalidDataException(string.Join(" ", validation.Errors));
+        }
         var fullPath = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         var temporaryPath = fullPath + $".{Guid.NewGuid():N}.tmp";
@@ -588,6 +644,12 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             }
 
             File.Move(temporaryPath, fullPath, true);
+            GlobalLog.Info("vrchara_package_saved", new Dictionary<string, object?>
+            {
+                ["resourceCount"] = package.Resources.Count,
+                ["hasLocalesFile"] = !string.IsNullOrWhiteSpace(manifest.LocalesFile)
+                    && manifest.Localizations is not null,
+            });
         }
         finally
         {
@@ -644,6 +706,11 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
                     errors.Add($"Localization '{localization.Key}' requires a localized name.");
             }
         }
+        if (errors.Count > 0)
+            GlobalLog.Debug("vrchara_validation_failed", new Dictionary<string, object?>
+            {
+                ["errorCount"] = errors.Count,
+            });
         return new PackageValidationResult(errors);
     }
 
@@ -659,6 +726,11 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             if (!File.Exists(fullPath))
                 errors.Add($"Missing referenced game resource: {reference.VirtualPath}");
         }
+        if (errors.Count > 0)
+            GlobalLog.Debug("vrchara_dump_validation_failed", new Dictionary<string, object?>
+            {
+                ["errorCount"] = errors.Count,
+            });
         return new PackageValidationResult(errors);
     }
 

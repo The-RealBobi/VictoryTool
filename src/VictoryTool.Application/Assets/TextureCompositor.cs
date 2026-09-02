@@ -1,3 +1,4 @@
+using VictoryTool.Application.Diagnostics;
 using VictoryTool.G4.Textures;
 
 namespace VictoryTool.Application.Assets;
@@ -11,6 +12,11 @@ public static class TextureCompositor
     {
         ArgumentNullException.ThrowIfNull(shirt);
         ArgumentNullException.ThrowIfNull(mask);
+        using var operation = GlobalLog.BeginOperation("texture_skin_mask_apply", new Dictionary<string, object?>
+        {
+            ["width"] = shirt.Width,
+            ["height"] = shirt.Height,
+        });
         if (shirt.Width != mask.Width || shirt.Height != mask.Height)
             throw new ArgumentException("The shirt and skin mask dimensions must match.", nameof(mask));
 
@@ -42,7 +48,12 @@ public static class TextureCompositor
             }
         }
 
-        return new DecodedTexture(shirt.Width, shirt.Height, shirt.Stride, output);
+        var result = new DecodedTexture(shirt.Width, shirt.Height, shirt.Stride, output);
+        GlobalLog.Debug("texture_skin_mask_applied", new Dictionary<string, object?>
+        {
+            ["pixelBytes"] = output.Length,
+        });
+        return result;
     }
 
     private static byte Blend(

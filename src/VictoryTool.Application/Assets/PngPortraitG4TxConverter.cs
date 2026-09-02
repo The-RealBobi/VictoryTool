@@ -1,4 +1,5 @@
 using SkiaSharp;
+using VictoryTool.Application.Diagnostics;
 using VictoryTool.G4.Textures;
 
 namespace VictoryTool.Application.Assets;
@@ -28,6 +29,7 @@ public static class PngPortraitG4TxConverter
         string sourceStem,
         string destinationStem)
     {
+        using var operation = GlobalLog.BeginOperation("portrait_png_convert");
         var template = File.ReadAllBytes(templatePath);
         var document = G4TxDocument.Read(template);
         var texture = document.Textures.FirstOrDefault()
@@ -36,7 +38,14 @@ public static class PngPortraitG4TxConverter
             ?? throw new InvalidDataException("The standard portrait PNG could not be decoded.");
         using var secondSource = SKBitmap.Decode(layerTwoPng.ToArray())
             ?? throw new InvalidDataException("The rear-hair-free portrait PNG could not be decoded.");
-        return ConvertBitmaps(source, secondSource, template, texture, sourceStem, destinationStem);
+        var result = ConvertBitmaps(source, secondSource, template, texture, sourceStem, destinationStem);
+        GlobalLog.Debug("portrait_png_converted", new Dictionary<string, object?>
+        {
+            ["bytes"] = result.Length,
+            ["width"] = texture.Width,
+            ["height"] = texture.Height,
+        });
+        return result;
     }
 
     private static byte[] ConvertLayers(
@@ -46,6 +55,7 @@ public static class PngPortraitG4TxConverter
         string sourceStem,
         string destinationStem)
     {
+        using var operation = GlobalLog.BeginOperation("portrait_png_convert");
         var template = File.ReadAllBytes(templatePath);
         var document = G4TxDocument.Read(template);
         var texture = document.Textures.FirstOrDefault()
@@ -57,7 +67,14 @@ public static class PngPortraitG4TxConverter
             ?? throw new InvalidDataException("The portrait PNG could not be resized.");
         using var secondResized = (secondSource ?? source).Resize(new SKImageInfo(texture.Width, texture.Height, SKColorType.Bgra8888, SKAlphaType.Unpremul), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None))
             ?? throw new InvalidDataException("The companion portrait PNG could not be resized.");
-        return BuildPixels(resized, secondResized, template, texture, sourceStem, destinationStem);
+        var result = BuildPixels(resized, secondResized, template, texture, sourceStem, destinationStem);
+        GlobalLog.Debug("portrait_png_converted", new Dictionary<string, object?>
+        {
+            ["bytes"] = result.Length,
+            ["width"] = texture.Width,
+            ["height"] = texture.Height,
+        });
+        return result;
     }
 
     private static byte[] ConvertBitmaps(

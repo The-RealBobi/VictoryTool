@@ -1,6 +1,7 @@
 using BCnEncoder.Decoder;
 using BCnEncoder.Shared;
 using CommunityToolkit.HighPerformance;
+using VictoryTool.Application.Diagnostics;
 using VictoryTool.G4.Textures;
 
 namespace VictoryTool.Application.Assets;
@@ -19,6 +20,12 @@ public sealed class BcnG4TextureDecoder : IG4TextureDecoder
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(texture);
+        using var operation = GlobalLog.BeginOperation("texture_decode", new Dictionary<string, object?>
+        {
+            ["payloadKind"] = texture.PayloadKind,
+            ["width"] = texture.Width,
+            ["height"] = texture.Height,
+        });
         var decoder = new BcDecoder();
         Memory2D<ColorRgba32> rgba;
         if (texture.PayloadKind == G4TexturePayloadKind.Dds)
@@ -30,7 +37,16 @@ public sealed class BcnG4TextureDecoder : IG4TextureDecoder
         {
             var nx = NxTextureDocument.Read(texture.Payload.Span);
             if (nx.Format == NxTextureFormat.Rgba8888)
-                return DecodeRawRgba(nx);
+            {
+                var rawResult = DecodeRawRgba(nx);
+                GlobalLog.Debug("texture_decoded", new Dictionary<string, object?>
+                {
+                    ["width"] = rawResult.Width,
+                    ["height"] = rawResult.Height,
+                    ["format"] = nx.Format,
+                });
+                return rawResult;
+            }
             var format = nx.Format switch
             {
                 NxTextureFormat.Bc1 => CompressionFormat.Bc1,
@@ -50,7 +66,14 @@ public sealed class BcnG4TextureDecoder : IG4TextureDecoder
             throw new NotSupportedException("The G4TX texture payload kind cannot be decoded.");
         }
 
-        return ConvertToBgra(rgba);
+        var result = ConvertToBgra(rgba);
+        GlobalLog.Debug("texture_decoded", new Dictionary<string, object?>
+        {
+            ["width"] = result.Width,
+            ["height"] = result.Height,
+            ["format"] = texture.PayloadKind,
+        });
+        return result;
     }
 
     private static DecodedTexture ConvertToBgra(Memory2D<ColorRgba32> rgba)

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using VictoryTool.Application.Assets;
+using VictoryTool.Application.Diagnostics;
 using VictoryTool.Application.Packages;
 using VictoryTool.G4.Textures;
 
@@ -45,11 +46,30 @@ public sealed class ExportExecutor : IExportExecutor
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        using var operationScope = GlobalLog.BeginOperation("export_execute", new Dictionary<string, object?>
+        {
+            ["platform"] = plan.Platform,
+            ["acquisition"] = plan.Acquisition,
+            ["packageCount"] = plan.EnabledPackageCount,
+            ["affectedFileCount"] = plan.AffectedFiles.Count,
+        });
         if (!plan.CanExport)
+        {
+            GlobalLog.Error("export_blocked", data: new Dictionary<string, object?>
+            {
+                ["diagnosticCount"] = plan.Diagnostics.Count,
+            });
             throw new InvalidOperationException("A blocked export plan cannot be executed.");
+        }
         if (plan.PatchOperations.Count > 0)
+        {
+            GlobalLog.Error("export_patch_gate_blocked", data: new Dictionary<string, object?>
+            {
+                ["patchCount"] = plan.PatchOperations.Count,
+            });
             throw new NotSupportedException(
                 "The export plan contains CFGBIN patch operations that have not passed the table writer gate.");
+        }
 
         var outputPath = Path.GetFullPath(plan.OutputPath);
         if (Directory.Exists(outputPath) || File.Exists(outputPath))
@@ -65,6 +85,10 @@ public sealed class ExportExecutor : IExportExecutor
         var publishedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         try
         {
+            GlobalLog.Debug("export_file_operations_started", new Dictionary<string, object?>
+            {
+                ["count"] = plan.FileOperations.Count,
+            });
             foreach (var operation in plan.FileOperations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -75,6 +99,10 @@ public sealed class ExportExecutor : IExportExecutor
                     cancellationToken);
             }
 
+            GlobalLog.Debug("export_model_dependencies_started", new Dictionary<string, object?>
+            {
+                ["count"] = plan.ModelDependencyOperations.Count,
+            });
             foreach (var operation in plan.ModelDependencyOperations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -85,6 +113,10 @@ public sealed class ExportExecutor : IExportExecutor
                     cancellationToken);
             }
 
+            GlobalLog.Debug("export_game_references_started", new Dictionary<string, object?>
+            {
+                ["count"] = plan.GameReferenceOperations.Count,
+            });
             foreach (var operation in plan.GameReferenceOperations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -97,6 +129,10 @@ public sealed class ExportExecutor : IExportExecutor
                     cancellationToken);
             }
 
+            GlobalLog.Debug("export_package_resources_started", new Dictionary<string, object?>
+            {
+                ["count"] = plan.ResourceOperations.Count,
+            });
             foreach (var packageGroup in plan.ResourceOperations.GroupBy(operation => operation.PackagePath))
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -125,6 +161,10 @@ public sealed class ExportExecutor : IExportExecutor
                 }
             }
 
+            GlobalLog.Debug("export_portraits_started", new Dictionary<string, object?>
+            {
+                ["count"] = plan.PortraitOperations.Count,
+            });
             foreach (var operation in plan.PortraitOperations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -148,6 +188,10 @@ public sealed class ExportExecutor : IExportExecutor
                 await File.WriteAllBytesAsync(destination, content, cancellationToken);
             }
 
+            GlobalLog.Debug("export_localizations_started", new Dictionary<string, object?>
+            {
+                ["count"] = plan.LocalizationOperations.Count,
+            });
             foreach (var operation in plan.LocalizationOperations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -174,6 +218,10 @@ public sealed class ExportExecutor : IExportExecutor
                     await File.WriteAllBytesAsync(romanizedPath, result.RomanizedNameTable, cancellationToken);
             }
 
+            GlobalLog.Debug("export_models_started", new Dictionary<string, object?>
+            {
+                ["count"] = plan.CharacterModelOperations.Count,
+            });
             foreach (var operation in plan.CharacterModelOperations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -198,6 +246,10 @@ public sealed class ExportExecutor : IExportExecutor
                 await File.WriteAllBytesAsync(modelPath, result, cancellationToken);
             }
 
+            GlobalLog.Debug("export_character_core_started", new Dictionary<string, object?>
+            {
+                ["count"] = plan.CharacterCoreOperations.Count,
+            });
             foreach (var operation in plan.CharacterCoreOperations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -255,6 +307,10 @@ public sealed class ExportExecutor : IExportExecutor
                 await File.WriteAllBytesAsync(parameterPath, result.ParameterTable, cancellationToken);
             }
 
+            GlobalLog.Debug("export_shop_started", new Dictionary<string, object?>
+            {
+                ["count"] = plan.ShopCharacterOperations.Count,
+            });
             foreach (var operation in plan.ShopCharacterOperations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -274,6 +330,10 @@ public sealed class ExportExecutor : IExportExecutor
                 await File.WriteAllBytesAsync(shopPath, result, cancellationToken);
             }
 
+            GlobalLog.Debug("export_delivery_started", new Dictionary<string, object?>
+            {
+                ["count"] = plan.CharacterDeliveryOperations.Count,
+            });
             foreach (var operation in plan.CharacterDeliveryOperations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -312,13 +372,22 @@ public sealed class ExportExecutor : IExportExecutor
                 cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             Directory.Move(stagingPath, outputPath);
+            GlobalLog.Info("export_published", new Dictionary<string, object?>
+            {
+                ["outputPath"] = outputPath,
+                ["publishedFileCount"] = publishedPaths.Count,
+            });
             return new ExportExecutionResult(
                 outputPath,
                 Path.Combine(outputPath, Path.GetFileName(reportPath)),
                 publishedPaths.Count);
         }
-        catch
+        catch (Exception exception)
         {
+            GlobalLog.Error("export_publish_failed", exception, new Dictionary<string, object?>
+            {
+                ["publishedFileCount"] = publishedPaths.Count,
+            });
             if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true);
             throw;
         }

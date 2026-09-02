@@ -1,4 +1,5 @@
 using VictoryTool.Application.Profiles;
+using VictoryTool.Application.Diagnostics;
 using VictoryTool.CfgBin;
 using VictoryTool.G4.Textures;
 
@@ -26,6 +27,10 @@ public sealed class DefaultUniformCatalog
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(profile);
+        using var operation = GlobalLog.BeginOperation("uniform_catalog_load", new Dictionary<string, object?>
+        {
+            ["profileId"] = profile.Id,
+        });
         cancellationToken.ThrowIfCancellationRequested();
         var platform = profile.HasPcResources ? "dx11" : "nx";
         var assets = new Dictionary<(int Gender, int UniformVariant), UniformAssetDescriptor>();
@@ -40,10 +45,16 @@ public sealed class DefaultUniformCatalog
             if (TryReadAsset(profile, platform, FamilyName, member.Suffix, cancellationToken, out var asset))
                 assets[(member.Gender, member.Variant)] = asset;
         }
-        return new DefaultUniformCatalog(
+        var catalog = new DefaultUniformCatalog(
             assets,
             LoadModelAssets(profile, platform, cancellationToken),
             LoadUniformKitModels(profile, cancellationToken));
+        GlobalLog.Info("uniform_catalog_loaded", new Dictionary<string, object?>
+        {
+            ["assetCount"] = assets.Count,
+            ["platform"] = platform,
+        });
+        return catalog;
     }
 
     public bool TryResolve(
@@ -110,6 +121,10 @@ public sealed class DefaultUniformCatalog
             catch (Exception exception) when (
                 exception is InvalidDataException or NotSupportedException or IOException or UnauthorizedAccessException)
             {
+                GlobalLog.Debug("uniform_model_table_rejected", new Dictionary<string, object?>
+                {
+                    ["path"] = path,
+                });
             }
         }
 
@@ -181,6 +196,7 @@ public sealed class DefaultUniformCatalog
         catch (Exception exception) when (
             exception is InvalidDataException or NotSupportedException or IOException or UnauthorizedAccessException)
         {
+            GlobalLog.Warn("uniform_config_load_failed", exception: exception);
             return new Dictionary<(uint, bool), IReadOnlyList<int>>();
         }
 
@@ -217,6 +233,7 @@ public sealed class DefaultUniformCatalog
         catch (Exception exception) when (
             exception is InvalidDataException or IOException or UnauthorizedAccessException)
         {
+            GlobalLog.Warn("uniform_asset_rejected", exception: exception);
             return false;
         }
     }

@@ -15,6 +15,13 @@ The application asks the user to select a compatible game-data directory and
 does not modify that source directory. Project data is stored in the platform
 application-data directory.
 
+Diagnostic logs are written to the same platform data location. On macOS the
+file is `~/Library/Application Support/VictoryTool/VictoryTool.log`; on
+Windows it is `%LOCALAPPDATA%\\VictoryTool\\VictoryTool.log`. The file is
+reset when the application starts and can be opened from the application.
+Detailed parser and asset tracing is opt-in with
+`VICTORYTOOL_LOG_LEVEL=debug`.
+
 The version is shared by `Directory.Build.props`. To update two checkouts to
 the same version:
 
@@ -24,6 +31,9 @@ the same version:
 
 On Windows, use `scripts/sync-version.ps1` from PowerShell with the same three
 arguments.
+
+For a self-contained single-file build, run `scripts/build.sh` on macOS/Linux
+or `scripts/build.ps1` on Windows. The output is written under `dist/`.
 
 ## Projects
 

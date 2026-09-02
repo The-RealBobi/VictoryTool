@@ -57,6 +57,12 @@ public sealed partial class FileSystemCharacterCatalogService : ICharacterCatalo
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        using var operation = GlobalLog.BeginOperation("character_catalog_index", new Dictionary<string, object?>
+        {
+            ["profileId"] = profile.Id,
+            ["hasPcResources"] = profile.HasPcResources,
+            ["hasSwitchResources"] = profile.HasSwitchResources,
+        });
         var characters = new Dictionary<string, CharacterCatalogItem>(StringComparer.OrdinalIgnoreCase);
 
         IReadOnlyList<CharacterSemanticRecord> semanticRecords = [];
@@ -104,6 +110,7 @@ public sealed partial class FileSystemCharacterCatalogService : ICharacterCatalo
                     exception is InvalidDataException or NotSupportedException or IOException or UnauthorizedAccessException)
                 {
                     taxonomyError = exception.Message;
+                    GlobalLog.Warn("taxonomy_index_failed", exception: exception);
                 }
                 var localizations = localizationResult.Localizations;
                 try
@@ -118,6 +125,7 @@ public sealed partial class FileSystemCharacterCatalogService : ICharacterCatalo
                     exception is InvalidDataException or NotSupportedException or IOException or UnauthorizedAccessException)
                 {
                     textReferenceError = exception.Message;
+                    GlobalLog.Warn("character_text_reference_index_failed", exception: exception);
                 }
                 rejectedLocalizationFiles = localizationResult.RejectedFileCount + romanizationResult.RejectedFileCount;
                 localizedCharacterCount = localizations.Count(pair =>
@@ -219,6 +227,7 @@ public sealed partial class FileSystemCharacterCatalogService : ICharacterCatalo
                 catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException)
                 {
                     invalidPortraitCount++;
+                    GlobalLog.Warn("character_portrait_index_failed", exception: exception);
                 }
 
                 characters.TryGetValue(id, out var existingCharacter);
@@ -317,6 +326,17 @@ public sealed partial class FileSystemCharacterCatalogService : ICharacterCatalo
             DiagnosticSeverity.Information,
             $"Indexed {characters.Count} character records, {semanticRecords.Count} semantic records, " +
             $"{localizedCharacterCount} localized records and {validPortraitCount} portrait containers."));
+
+        GlobalLog.Info("character_catalog_indexed", new Dictionary<string, object?>
+        {
+            ["characterCount"] = characters.Count,
+            ["semanticCount"] = semanticRecords.Count,
+            ["localizedCount"] = localizedCharacterCount,
+            ["validPortraitCount"] = validPortraitCount,
+            ["invalidPortraitCount"] = invalidPortraitCount,
+            ["rejectedCharacterTables"] = rejectedCharacterTables,
+            ["rejectedLocalizationFiles"] = rejectedLocalizationFiles,
+        });
 
         progress?.Report(new IndexProgress(IndexStage.Completed, 1, 1, "Character indexing completed."));
         return new CharacterCatalogResult(
@@ -696,9 +716,14 @@ public sealed class CharacterCloneService : ICharacterCloneService
     public CharacterDraft Clone(CharacterSnapshot source)
     {
         ArgumentNullException.ThrowIfNull(source);
+        GlobalLog.Debug("character_snapshot_clone_started", new Dictionary<string, object?>
+        {
+            ["hasSourceVariants"] = source.Variants is { Count: > 0 },
+            ["fieldCount"] = source.Fields.Count,
+        });
         var fields = new Dictionary<string, string?>(source.Fields, StringComparer.Ordinal);
         return new CharacterDraft(
-            "character.main",
+            CreateSymbolicId(),
             source.Id,
             source.DisplayName,
             fields,
@@ -742,9 +767,14 @@ public sealed class CharacterCloneService : ICharacterCloneService
     public CharacterDraft Clone(CharacterDraft source)
     {
         ArgumentNullException.ThrowIfNull(source);
+        GlobalLog.Debug("character_draft_clone_started", new Dictionary<string, object?>
+        {
+            ["fieldCount"] = source.Fields.Count,
+            ["hasVariants"] = source.Variants is { Count: > 0 },
+        });
         return source with
         {
-            SymbolicId = $"custom.{Guid.NewGuid():N}",
+            SymbolicId = CreateSymbolicId(),
             DisplayName = $"{source.DisplayName} Copy",
             Fields = new Dictionary<string, string?>(source.Fields, StringComparer.Ordinal),
             Assets = source.Assets is { } assets
@@ -763,6 +793,8 @@ public sealed class CharacterCloneService : ICharacterCloneService
                 : source.Variants.Select(CloneVariant).ToArray(),
         };
     }
+
+    private static string CreateSymbolicId() => $"custom.{Guid.NewGuid():N}";
 
     private static CharacterDraftLocalization CloneLocalization(CharacterDraftLocalization? source)
     {
@@ -876,6 +908,12 @@ public sealed class CharacterDraftService : ICharacterDraftService
     {
         ArgumentNullException.ThrowIfNull(draft);
         ArgumentException.ThrowIfNullOrWhiteSpace(field);
+        GlobalLog.Debug("character_draft_field_update", new Dictionary<string, object?>
+        {
+            ["field"] = field,
+            ["hasValue"] = value is not null,
+            ["valueLength"] = value?.Length ?? 0,
+        });
         var fields = new Dictionary<string, string?>(draft.Fields, StringComparer.Ordinal)
         {
             [field] = value,
@@ -1027,7 +1065,13 @@ public sealed class CharacterDraftService : ICharacterDraftService
                 $"{FormatNullableInt(updatedSlot.SkillId)}:{FormatNullableInt(updatedSlot.UnlockLevel)}";
             updated = updated with { Fields = fields, Skills = new CharacterDraftSkills(slots) };
         }
-        return updated with { Diagnostics = Validate(updated) };
+        var result = updated with { Diagnostics = Validate(updated) };
+        if (result.Diagnostics.Count > 0)
+            GlobalLog.Debug("character_draft_validation_diagnostics", new Dictionary<string, object?>
+            {
+                ["diagnosticCount"] = result.Diagnostics.Count,
+            });
+        return result;
     }
 
     public IReadOnlyList<CharacterDraftDiagnostic> Validate(CharacterDraft draft)
@@ -1059,6 +1103,11 @@ public sealed class CharacterDraftService : ICharacterDraftService
             AddIntegerDiagnostic(draft, diagnostics, $"Skills.Slot{slot}.UnlockLevel");
         }
 
+        if (diagnostics.Count > 0)
+            GlobalLog.Debug("character_draft_validation_failed", new Dictionary<string, object?>
+            {
+                ["diagnosticCount"] = diagnostics.Count,
+            });
         return diagnostics;
     }
 
@@ -1141,6 +1190,10 @@ public sealed class CharacterDraftService : ICharacterDraftService
     public void RemoveFromProject(ModProjectDocument project, Guid draftId)
     {
         ArgumentNullException.ThrowIfNull(project);
+        GlobalLog.Info("character_draft_removed", new Dictionary<string, object?>
+        {
+            ["draftId"] = draftId,
+        });
         project.RemoveDraft(draftId);
     }
 }

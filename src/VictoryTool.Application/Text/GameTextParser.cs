@@ -36,6 +36,16 @@ public static class GameTextParser
 
         for (var index = 0; index < source.Length;)
         {
+            if (source[index] == '\\'
+                && index + 2 < source.Length
+                && source[index + 1] == '\\'
+                && source[index + 2] == 'n')
+            {
+                FlushLiteral();
+                nodes.Add(new GameTextLineBreak());
+                index += 3;
+                continue;
+            }
             if (source[index] == '\\' && index + 1 < source.Length && source[index + 1] == 'n')
             {
                 FlushLiteral();
