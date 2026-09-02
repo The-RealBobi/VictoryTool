@@ -52,6 +52,10 @@ public sealed record LocalizedEquipment(
     public override string ToString() => Name;
 }
 
+internal sealed record TaxonomyTextLoadResult(
+    IReadOnlyDictionary<string, IReadOnlyDictionary<uint, string>> Texts,
+    int RejectedFileCount);
+
 public sealed class GameTaxonomyIndex
 {
     private static readonly Regex EquipmentTagPattern = new(
@@ -271,7 +275,8 @@ public static class GameTaxonomyLoader
         foreach (var skill in ReadAuraCommands(
                      Path.Combine(rootPath, "common", "gamedata", "skill"), cancellationToken))
             skills.TryAdd(skill.SkillId, skill);
-        var texts = ReadTexts(Path.Combine(rootPath, "common", "text"), cancellationToken);
+        var textLoad = ReadTexts(Path.Combine(rootPath, "common", "text"), cancellationToken);
+        var texts = textLoad.Texts;
         var equipment = ReadEquipment(rootPath, cancellationToken);
         var teams = ReadTeams(rootPath, cancellationToken);
         var result = GameTaxonomyIndex.Create(series, academicYears, skills.Values, texts, equipment, teams);
@@ -281,6 +286,7 @@ public static class GameTaxonomyLoader
             ["academicYearCount"] = academicYears.Count,
             ["skillCount"] = skills.Count,
             ["localeCount"] = texts.Count,
+            ["rejectedTextFileCount"] = textLoad.RejectedFileCount,
             ["equipmentCount"] = equipment.Count,
             ["teamCount"] = teams.Count,
         });
@@ -373,11 +379,12 @@ public static class GameTaxonomyLoader
         return result;
     }
 
-    private static IReadOnlyDictionary<string, IReadOnlyDictionary<uint, string>> ReadTexts(
+    internal static TaxonomyTextLoadResult ReadTexts(
         string textRoot,
         CancellationToken cancellationToken)
     {
         var result = new Dictionary<string, IReadOnlyDictionary<uint, string>>(StringComparer.OrdinalIgnoreCase);
+        var rejectedFileCount = 0;
         foreach (var localeDirectory in Directory.EnumerateDirectories(textRoot))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -386,19 +393,38 @@ public static class GameTaxonomyLoader
             {
                 var path = Path.Combine(localeDirectory, fileName);
                 if (!File.Exists(path)) continue;
-                foreach (var entry in CfgBinDocument.Read(File.ReadAllBytes(path)).Entries)
+                try
                 {
-                    if (entry.Name != "NOUN_INFO" || entry.Values.Count < 6
-                        || !TryGetUInt32(entry.Values[0].Value, out var id)
-                        || !TryGetInt32(entry.Values[1].Value, out var form) || form != 0
-                        || entry.Values[5].Value is not string text)
-                        continue;
-                    texts.TryAdd(id, text);
+                    foreach (var entry in CfgBinDocument.Read(File.ReadAllBytes(path)).Entries)
+                    {
+                        if (entry.Name != "NOUN_INFO" || entry.Values.Count < 6
+                            || !TryGetUInt32(entry.Values[0].Value, out var id)
+                            || !TryGetInt32(entry.Values[1].Value, out var form) || form != 0
+                            || entry.Values[5].Value is not string text)
+                            continue;
+                        texts.TryAdd(id, text);
+                    }
+                }
+                catch (Exception exception) when (
+                    exception is InvalidDataException or NotSupportedException or IOException or UnauthorizedAccessException)
+                {
+                    rejectedFileCount++;
+                    GlobalLog.Warn("taxonomy_text_file_rejected", new Dictionary<string, object?>
+                    {
+                        ["locale"] = Path.GetFileName(localeDirectory),
+                        ["fileName"] = fileName,
+                    }, exception);
                 }
             }
             result[Path.GetFileName(localeDirectory)] = texts;
         }
-        return result;
+        GlobalLog.Info("taxonomy_texts_loaded", new Dictionary<string, object?>
+        {
+            ["localeCount"] = result.Count,
+            ["textCount"] = result.Values.Sum(texts => texts.Count),
+            ["rejectedFileCount"] = rejectedFileCount,
+        });
+        return new TaxonomyTextLoadResult(result, rejectedFileCount);
     }
 
     private static IReadOnlyList<TeamTextReference> ReadTeams(

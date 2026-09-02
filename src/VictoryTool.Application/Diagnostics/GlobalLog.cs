@@ -17,6 +17,9 @@ public static class GlobalLog
     private static readonly Regex AbsolutePathPattern = new(
         @"(?<![A-Za-z0-9>])(?:(?:[A-Za-z]:[\\/])|/)(?:[^\\/\r\n\s]+[\\/])+[^\\/\r\n\s]*",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex WindowsAbsolutePathWithSpacesPattern = new(
+        @"(?<![A-Za-z0-9>])[A-Za-z]:[\\/](?:[^\\/\r\n]+[\\/])+[^\\/\r\n]*",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static StreamWriter? _writer;
     private static TraceListener? _traceListener;
@@ -335,6 +338,7 @@ public static class GlobalLog
                 sanitized = sanitized.Replace(path, replacement, StringComparison.OrdinalIgnoreCase);
         }
 
+        sanitized = WindowsAbsolutePathWithSpacesPattern.Replace(sanitized, "<path>");
         return AbsolutePathPattern.Replace(sanitized, "<path>");
     }
 
