@@ -2,20 +2,48 @@
 param(
     [string]$RuntimeIdentifier = $env:RID,
     [string]$Configuration = $(if ($env:CONFIGURATION) { $env:CONFIGURATION } else { "Release" }),
-    [string]$OutputRoot = $(if ($env:OUTPUT_ROOT) { $env:OUTPUT_ROOT } else { Join-Path $PSScriptRoot "..\dist" })
+    [string]$OutputRoot = $env:OUTPUT_ROOT
 )
 
 $ErrorActionPreference = "Stop"
-$repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$scriptRoot = if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+    Split-Path -Parent $MyInvocation.MyCommand.Path
+} else {
+    $PSScriptRoot
+}
+if ([string]::IsNullOrWhiteSpace($scriptRoot)) {
+    throw "Could not determine the script directory. Run build.ps1 as a script file."
+}
+$repositoryRoot = (Resolve-Path (Join-Path $scriptRoot "..")).Path
+if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
+    $OutputRoot = Join-Path $repositoryRoot "dist"
+}
 $project = Join-Path $repositoryRoot "src\VictoryTool.Desktop\VictoryTool.Desktop.csproj"
 $props = Get-Content (Join-Path $repositoryRoot "Directory.Build.props") -Raw
 $versionMatch = [regex]::Match($props, '<VersionPrefix>(?<version>[0-9]+\.[0-9]+\.[0-9]+)</VersionPrefix>')
 if (-not $versionMatch.Success) { throw "Invalid VersionPrefix in Directory.Build.props." }
 $version = $versionMatch.Groups["version"].Value
-$architecture = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()) {
-    "Arm64" { "arm64"; break }
-    "X64" { "x64"; break }
-    default { throw "Could not infer the CPU architecture; pass a runtime identifier explicitly." }
+$architectureValue = if ($env:PROCESSOR_ARCHITEW6432) {
+    $env:PROCESSOR_ARCHITEW6432
+} else {
+    $env:PROCESSOR_ARCHITECTURE
+}
+$architectureValue = [string]$architectureValue
+$architecture = switch ($architectureValue.ToUpperInvariant()) {
+    "ARM64" { "arm64"; break }
+    "AMD64" { "x64"; break }
+    "X86" { "x86"; break }
+    default {
+        try {
+            switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()) {
+                "Arm64" { "arm64"; break }
+                "X64" { "x64"; break }
+                default { throw "unsupported" }
+            }
+        } catch {
+            throw "Could not infer the CPU architecture; pass a runtime identifier explicitly."
+        }
+    }
 }
 if ([string]::IsNullOrWhiteSpace($RuntimeIdentifier)) {
     $platform = if ($env:OS -eq "Windows_NT" -or $IsWindows) { "win" }
@@ -25,6 +53,13 @@ if ([string]::IsNullOrWhiteSpace($RuntimeIdentifier)) {
     $RuntimeIdentifier = "$platform-$architecture"
 }
 $flavor = $RuntimeIdentifier
+if (-not [System.IO.Path]::IsPathRooted($OutputRoot)) {
+    $OutputRoot = Join-Path $repositoryRoot $OutputRoot
+}
+if (-not (Test-Path -LiteralPath $OutputRoot)) {
+    New-Item -ItemType Directory -Force -Path $OutputRoot | Out-Null
+}
+$OutputRoot = (Resolve-Path -LiteralPath $OutputRoot).Path
 $publishRoot = Join-Path $OutputRoot "v$version\$flavor"
 $archive = Join-Path $OutputRoot "VictoryTool-$version-$flavor.zip"
 
