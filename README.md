@@ -41,11 +41,17 @@ reset when the application starts and can be opened from the application.
 Detailed parser and asset tracing is opt-in with
 `VICTORYTOOL_LOG_LEVEL=debug`.
 
+> [!WARNING]
+> VictoryTool may cause irreversible damage to save data. Make a backup before
+> using it. Do not use generated characters in online features or matches;
+> custom characters may cause unexpected issues or account penalties. You are
+> responsible for any damage, data loss or other consequences.
+
 The version is shared by `Directory.Build.props`. To update two checkouts to
 the same version:
 
 ```sh
-./scripts/sync-version.sh 1.0.0 /path/to/private /path/to/public
+./scripts/sync-version.sh 1.0.1 /path/to/private /path/to/public
 ```
 
 On Windows, use `scripts/sync-version.ps1` from PowerShell with the same three
