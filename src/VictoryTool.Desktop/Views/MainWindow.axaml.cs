@@ -191,6 +191,15 @@ public sealed partial class MainWindow : Window
             viewModel.ActiveDraftHeadModelPath = path;
     }
 
+    private async void SelectUniformModel(object? sender, RoutedEventArgs eventArgs)
+    {
+        if (DataContext is ViewModels.MainWindowViewModel viewModel
+            && await SelectAppearanceFileAsync("Select the custom uniform model", "Victory Road uniform model", "*.g4md") is { } path)
+        {
+            viewModel.ActiveDraftUniformModelPath = path;
+        }
+    }
+
     private void SkinColorPickerOpened(object? sender, EventArgs eventArgs)
     {
         if (DataContext is ViewModels.MainWindowViewModel viewModel

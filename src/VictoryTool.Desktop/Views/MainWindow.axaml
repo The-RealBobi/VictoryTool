@@ -221,6 +221,13 @@
                       <DataTemplate><TextBlock Text="{Binding Name}" /></DataTemplate>
                     </ComboBox.ItemTemplate>
                   </ComboBox>
+                  <Button Content="{Binding WizardText.SelectFile}"
+                          IsVisible="{Binding CanSelectCustomUniform}"
+                          Click="SelectUniformModel" />
+                  <TextBlock Classes="muted"
+                             Text="{Binding ActiveDraftUniformModelDisplayPath}"
+                             IsVisible="{Binding CanSelectCustomUniform}"
+                             TextTrimming="CharacterEllipsis" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Spacing="3">
                   <TextBlock Classes="muted" Text="{Binding WizardText.Shoes}" />

@@ -94,6 +94,15 @@ public sealed class CharacterModelT2bWriter : ICharacterModelT2bWriter
         if (request.BodyModelId is { } requestedBodyModelId
             && GetInteger(written.Values[4]) != requestedBodyModelId)
             throw new InvalidDataException("The written character body model reference failed read-back validation.");
+        if (request.UniformModel is { } requestedUniformModel
+            && GetInteger(written.Values[5]) != requestedUniformModel)
+            throw new InvalidDataException("The written character uniform model reference failed read-back validation.");
+        if (request.ShoesModel is { } requestedShoesModel
+            && GetInteger(written.Values[6]) != requestedShoesModel)
+            throw new InvalidDataException("The written character shoes model reference failed read-back validation.");
+        if (request.GloveModel is { } requestedGloveModel
+            && GetInteger(written.Values[7]) != requestedGloveModel)
+            throw new InvalidDataException("The written character glove model reference failed read-back validation.");
         for (var index = 1; index < source.Values.Count; index++)
         {
             if (index == 10

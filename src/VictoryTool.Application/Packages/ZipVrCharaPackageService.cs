@@ -166,10 +166,22 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             draft.Fields.GetValueOrDefault("Assets.UniformPortraitSourcePath"),
             draft.Models?.HeadModelPath,
             draft.Models?.BodyModelPath,
+            draft.Models?.UniformModelPath,
         }
         .Concat(ExpandModelResourcePaths(draft.Models))
+        .Select(path => path ?? string.Empty)
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToArray();
+        var modelDirectories = paths
+            .Where(path => path.StartsWith("common/chr/", StringComparison.OrdinalIgnoreCase))
+            .Select(GetVirtualDirectory)
+            .Where(path => path.Length > 0)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        paths = paths
+            .Concat(resourceByPath.Keys.Where(path =>
+                modelDirectories.Contains(GetVirtualDirectory(path))))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         if (!paths.Any(path => !string.IsNullOrWhiteSpace(path) && resourceByPath.ContainsKey(path!)))
         {
             GlobalLog.Debug("vrchara_resources_hydrate_skipped");
@@ -228,6 +240,7 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             {
                 HeadModelPath = ReplaceHydratedModelPath(models.HeadModelPath, extracted),
                 BodyModelPath = ReplaceHydratedModelPath(models.BodyModelPath, extracted),
+                UniformModelPath = ReplaceHydratedModelPath(models.UniformModelPath, extracted),
             };
         }
         GlobalLog.Info("vrchara_resources_hydrated", new Dictionary<string, object?>
@@ -249,6 +262,13 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
         IReadOnlyDictionary<string, string> extracted) =>
         path is not null && extracted.TryGetValue(path, out var localPath) ? localPath : path;
 
+    private static string GetVirtualDirectory(string path)
+    {
+        var normalized = path.Replace('\\', '/');
+        var separator = normalized.LastIndexOf('/');
+        return separator < 0 ? string.Empty : normalized[..separator];
+    }
+
     private static string? ReplaceHydratedModelPath(
         string? path,
         IReadOnlyDictionary<string, string> extracted)
@@ -264,7 +284,7 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
     private static IReadOnlyList<string> ExpandModelResourcePaths(CharacterDraftModels? models)
     {
         var paths = new List<string>();
-        foreach (var modelPath in new[] { models?.HeadModelPath, models?.BodyModelPath })
+        foreach (var modelPath in new[] { models?.HeadModelPath, models?.BodyModelPath, models?.UniformModelPath })
         {
             var packagePath = ToModelPackagePath(modelPath);
             if (packagePath is null) continue;
@@ -385,45 +405,96 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             Fields = sourceFields,
         };
 
-        var sourcePath = normalized.Models?.HeadModelPath;
-        if (string.IsNullOrWhiteSpace(sourcePath) || !Path.IsPathRooted(sourcePath))
-            return (normalized, resources);
+        normalized = PackCustomModelFamily(
+            normalized,
+            resources,
+            normalized.Models?.HeadModelPath,
+            "Models.HeadModelPath",
+            "_face",
+            "custom head model");
+        normalized = PackCustomModelFamily(
+            normalized,
+            resources,
+            normalized.Models?.UniformModelPath,
+            "Models.UniformModelPath",
+            "_uniform",
+            "custom uniform model");
+        return (normalized, resources);
+    }
+
+    private static CharacterDraft PackCustomModelFamily(
+        CharacterDraft draft,
+        ICollection<AuthoredResource> resources,
+        string? sourcePath,
+        string fieldName,
+        string resourceCategory,
+        string description)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath) || !Path.IsPathRooted(sourcePath)) return draft;
         if (!sourcePath.EndsWith(".g4md", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("A custom head model must be a G4MD file.");
+            throw new InvalidDataException($"A {description} must be a G4MD file.");
 
         var fullModelPath = Path.GetFullPath(sourcePath);
         var stem = Path.GetFileNameWithoutExtension(fullModelPath);
         if (string.IsNullOrWhiteSpace(stem) || stem.Contains('/') || stem.Contains('\\'))
-            throw new InvalidDataException("The custom head model filename is invalid.");
-        var meshPath = Path.ChangeExtension(fullModelPath, ".g4mg");
+            throw new InvalidDataException($"The {description} filename is invalid.");
         var marker = fullModelPath.Replace('\\', '/').IndexOf("/common/chr/", StringComparison.OrdinalIgnoreCase);
         if (marker < 0)
-            throw new InvalidDataException("The custom head model must be inside a data/common/chr folder so its platform texture can be found.");
+            throw new InvalidDataException($"The {description} must be inside a data/common/chr folder so its platform texture can be found.");
+
+        var meshPath = Path.ChangeExtension(fullModelPath, ".g4mg");
         var texturePath = fullModelPath[..marker] + "/dx11/chr/" + fullModelPath[(marker + "/common/chr/".Length)..];
         texturePath = Path.ChangeExtension(texturePath, ".g4tx");
-        var virtualStem = $"common/chr/_face/99_CUSTOM/{stem}/{stem}";
+        var virtualStem = $"common/chr/{resourceCategory}/99_CUSTOM/{stem}/{stem}";
         var files = new[]
         {
             (fullModelPath, virtualStem + ".g4md"),
             (meshPath, virtualStem + ".g4mg"),
-            (texturePath, $"dx11/chr/_face/99_CUSTOM/{stem}/{stem}.g4tx"),
+            (texturePath, $"dx11/chr/{resourceCategory}/99_CUSTOM/{stem}/{stem}.g4tx"),
         };
-        resources.AddRange(files.Select(file =>
+        foreach (var file in files)
         {
             if (!File.Exists(file.Item1))
-                throw new FileNotFoundException($"The custom model family is missing: {file.Item1}");
-            return new AuthoredResource(file.Item2, File.ReadAllBytes(file.Item1));
-        }));
-        var relativeModelPath = $"_face/99_CUSTOM/{stem}/{stem}.g4md";
-        var modelFields = normalized.Fields.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
-        modelFields["Models.HeadModelPath"] = relativeModelPath;
-        normalized = normalized with
+                throw new FileNotFoundException($"The {description} family is missing: {file.Item1}");
+            resources.Add(new AuthoredResource(file.Item2, File.ReadAllBytes(file.Item1)));
+        }
+
+        foreach (var extension in new[] { ".g4sk", ".objbin", ".clobin" })
         {
-            Models = (normalized.Models ?? new CharacterDraftModels(null, null)) with { HeadModelPath = relativeModelPath },
+            var companionPath = Path.ChangeExtension(fullModelPath, extension);
+            if (File.Exists(companionPath))
+                resources.Add(new AuthoredResource(virtualStem + extension, File.ReadAllBytes(companionPath)));
+        }
+
+        foreach (var companionPath in Directory.EnumerateFiles(
+                     Path.GetDirectoryName(fullModelPath)!,
+                     $"{stem}_*",
+                     SearchOption.TopDirectoryOnly)
+                 .Where(IsModelCompanion)
+                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            var companionName = Path.GetFileName(companionPath);
+            resources.Add(new AuthoredResource(
+                virtualStem[..(virtualStem.LastIndexOf('/') + 1)] + companionName,
+                File.ReadAllBytes(companionPath)));
+        }
+
+        var relativeModelPath = $"{resourceCategory}/99_CUSTOM/{stem}/{stem}.g4md";
+        var modelFields = draft.Fields.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+        modelFields[fieldName] = relativeModelPath;
+        return draft with
+        {
+            Models = (draft.Models ?? new CharacterDraftModels(null, null)) with
+            {
+                HeadModelPath = fieldName == "Models.HeadModelPath" ? relativeModelPath : draft.Models?.HeadModelPath,
+                UniformModelPath = fieldName == "Models.UniformModelPath" ? relativeModelPath : draft.Models?.UniformModelPath,
+            },
             Fields = modelFields,
         };
-        return (normalized, resources);
     }
+
+    private static bool IsModelCompanion(string path) =>
+        Path.GetExtension(path).ToLowerInvariant() is ".g4pk" or ".mevbin" or ".objbin";
 
     private static void AddSourcePortraitResource(
         ICollection<AuthoredResource> resources,
@@ -676,8 +747,9 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             if (resource.VirtualPath.EndsWith(".cfg.bin", StringComparison.OrdinalIgnoreCase))
                 errors.Add("Complete CFGBIN files cannot be embedded in a .vrchara package.");
             if (resource.VirtualPath.EndsWith(".g4md", StringComparison.OrdinalIgnoreCase)
-                && !resource.VirtualPath.StartsWith("common/chr/_face/99_CUSTOM/", StringComparison.Ordinal))
-                errors.Add("Custom head models must use common/chr/_face/99_CUSTOM/.");
+                && !resource.VirtualPath.StartsWith("common/chr/_face/99_CUSTOM/", StringComparison.Ordinal)
+                && !resource.VirtualPath.StartsWith("common/chr/_uniform/99_CUSTOM/", StringComparison.Ordinal))
+                errors.Add("Custom model resources must use a supported 99_CUSTOM face or uniform path.");
         }
         foreach (var reference in manifest.GameResources)
         {
@@ -805,6 +877,7 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
         {
             HeadModelPath = models.HeadModelPath ?? GetModelField(fields, "Models.HeadModelPath"),
             BodyModelPath = models.BodyModelPath ?? GetModelField(fields, "Models.BodyModelPath"),
+            UniformModelPath = models.UniformModelPath ?? GetModelField(fields, "Models.UniformModelPath"),
             SkinColorRgba = models.SkinColorRgba ?? GetModelField(fields, "Models.SkinColorRgba"),
             UniformModel = models.UniformModel
                 ?? ParseNullableInt(GetModelField(fields, "Models.UniformModel")),
@@ -828,6 +901,7 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
 
         SetModelField(fields, "Models.HeadModelPath", models.HeadModelPath);
         SetModelField(fields, "Models.BodyModelPath", models.BodyModelPath);
+        SetModelField(fields, "Models.UniformModelPath", models.UniformModelPath);
         SetModelField(fields, "Models.SkinColorRgba", models.SkinColorRgba);
         SetModelField(fields, "Models.UniformModel", models.UniformModel);
         SetModelField(fields, "Models.ShoesModel", models.ShoesModel);

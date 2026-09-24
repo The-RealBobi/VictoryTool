@@ -1,5 +1,4 @@
 using System.Text;
-using System.Security.Cryptography;
 using VictoryTool.Application.Diagnostics;
 using VictoryTool.Application.Profiles;
 using VictoryTool.CfgBin;
@@ -56,8 +55,10 @@ public static class CharacterIdInventoryBuilder
         IEnumerable<CfgBinEntry> parameterEntries,
         IEnumerable<CfgBinEntry>? shopEntries = null,
         IEnumerable<CfgBinEntry>? modelEntries = null,
+        IEnumerable<CfgBinEntry>? clothesEntries = null,
         IEnumerable<uint>? deliveryIds = null,
-        IEnumerable<uint>? deliveryReceivedFlags = null)
+        IEnumerable<uint>? deliveryReceivedFlags = null,
+        IEnumerable<uint>? deliveryTitleIds = null)
     {
         ArgumentNullException.ThrowIfNull(baseEntries);
         ArgumentNullException.ThrowIfNull(parameterEntries);
@@ -67,8 +68,10 @@ public static class CharacterIdInventoryBuilder
         var descriptionTextIds = new HashSet<uint>();
         var shopItemIds = new HashSet<uint>();
         var modelIds = new HashSet<uint>();
+        var uniformModelIds = new HashSet<uint>();
         var deliveryIdSet = (deliveryIds ?? []).ToHashSet();
         var deliveryReceivedSet = (deliveryReceivedFlags ?? []).ToHashSet();
+        var deliveryTitleSet = (deliveryTitleIds ?? []).ToHashSet();
         foreach (var entry in baseEntries.Where(entry => entry.Name == "CHARA_BASE_INFO"))
         {
             AddInteger(entry, 0, characterIds);
@@ -86,6 +89,8 @@ public static class CharacterIdInventoryBuilder
             AddInteger(entry, 0, shopItemIds);
         foreach (var entry in (modelEntries ?? []).Where(entry => entry.Name == "CHARA_MODEL_INFO"))
             AddInteger(entry, 0, modelIds);
+        foreach (var entry in (clothesEntries ?? []).Where(entry => entry.Name == "CHARA_PARTS_CLOTHES_MODEL"))
+            AddInteger(entry, 0, uniformModelIds);
         return ExportIdInventory.Create(new Dictionary<string, IEnumerable<uint>>
         {
             ["character"] = characterIds,
@@ -94,8 +99,10 @@ public static class CharacterIdInventoryBuilder
             ["descriptionText"] = descriptionTextIds,
             ["shopItem"] = shopItemIds,
             ["model"] = modelIds,
+            ["uniformModel"] = uniformModelIds,
             ["delivery"] = deliveryIdSet,
             ["deliveryReceived"] = deliveryReceivedSet,
+            ["deliveryTitleText"] = deliveryTitleSet,
         });
     }
 
@@ -136,9 +143,12 @@ public sealed class FileSystemCharacterIdInventoryService : ICharacterIdInventor
         var shopEntries = await ReadOptionalEntriesAsync(
             Path.Combine(profile.GameDataPath, "shop"), "shop_config_*.cfg.bin", cancellationToken);
         var modelEntries = await ReadOptionalEntriesAsync(directory, "chara_model_*.cfg.bin", cancellationToken);
+        var clothesEntries = await ReadOptionalEntriesAsync(directory, "chara_parts_*.cfg.bin", cancellationToken);
         var (deliveryIds, deliveryReceivedFlags) = await ReadDeliveryIdsAsync(profile, cancellationToken);
+        var deliveryTitleIds = await ReadDeliveryTitleIdsAsync(profile, cancellationToken);
         var inventory = CharacterIdInventoryBuilder.Build(
-            baseEntries, parameterEntries, shopEntries, modelEntries, deliveryIds, deliveryReceivedFlags);
+            baseEntries, parameterEntries, shopEntries, modelEntries, clothesEntries,
+            deliveryIds, deliveryReceivedFlags, deliveryTitleIds);
         GlobalLog.Info("export_id_inventory_loaded", new Dictionary<string, object?>
         {
             ["characterCount"] = inventory.Count("character"),
@@ -147,7 +157,9 @@ public sealed class FileSystemCharacterIdInventoryService : ICharacterIdInventor
             ["descriptionTextCount"] = inventory.Count("descriptionText"),
             ["shopItemCount"] = inventory.Count("shopItem"),
             ["modelCount"] = inventory.Count("model"),
+            ["uniformModelCount"] = inventory.Count("uniformModel"),
             ["deliveryCount"] = inventory.Count("delivery"),
+            ["deliveryTitleCount"] = inventory.Count("deliveryTitleText"),
         });
         return inventory;
     }
@@ -211,6 +223,37 @@ public sealed class FileSystemCharacterIdInventoryService : ICharacterIdInventor
         }
         return (ids.ToArray(), flags.ToArray());
     }
+
+    private static async Task<IReadOnlyList<uint>> ReadDeliveryTitleIdsAsync(
+        GameDumpProfile profile,
+        CancellationToken cancellationToken)
+    {
+        var directory = Path.GetFullPath(Path.Combine(profile.RootPath, "common", "text"));
+        if (!Directory.Exists(directory)) return [];
+        var ids = new HashSet<uint>();
+        foreach (var path in Directory.EnumerateFiles(directory, "post_text.cfg.bin", SearchOption.AllDirectories)
+                     .Order(StringComparer.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var bytes = await File.ReadAllBytesAsync(path, cancellationToken);
+            if (bytes.AsSpan().StartsWith("RDBNP"u8)) continue;
+            var document = CfgBinDocument.Read(bytes);
+            foreach (var entry in document.Entries.Where(entry => entry.Name == "TEXT_INFO"))
+            {
+                if (entry.Values.Count == 0) continue;
+                switch (entry.Values[0].Value)
+                {
+                    case int value:
+                        ids.Add(unchecked((uint)value));
+                        break;
+                    case long value when value is >= int.MinValue and <= uint.MaxValue:
+                        ids.Add(unchecked((uint)value));
+                        break;
+                }
+            }
+        }
+        return ids.ToArray();
+    }
 }
 
 public interface IExportIdAllocator
@@ -272,31 +315,6 @@ public sealed class ExportIdAllocator : IExportIdAllocator
                     request.SymbolicKey,
                     exactResolvedKey,
                     exactCandidate));
-                continue;
-            }
-
-            // Delivery claims are consumable by the game. A new random key on
-            // every export prevents a previously redeemed claim from being
-            // silently reused, while the occupied inventory still protects
-            // against collisions with the active dump and current batch.
-            if (request.Domain is "delivery" or "deliveryReceived")
-            {
-                uint randomCandidate;
-                var randomBytes = new byte[sizeof(uint)];
-                do
-                {
-                    RandomNumberGenerator.Fill(randomBytes);
-                    randomCandidate = BitConverter.ToUInt32(randomBytes);
-                }
-                while (randomCandidate == 0 || !occupied.Add(randomCandidate));
-
-                var randomKey = $"{request.SymbolicKey}#{randomCandidate:X8}";
-                assignments.Add(new ExportIdAssignment(
-                    request.BatchEntryId,
-                    request.Domain,
-                    request.SymbolicKey,
-                    randomKey,
-                    randomCandidate));
                 continue;
             }
 

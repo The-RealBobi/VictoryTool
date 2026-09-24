@@ -84,7 +84,8 @@ public sealed record WizardText(
     string ExtractedFromPackage,
     string BodyType,
     string Remove,
-    string EditLocalesJson)
+    string EditLocalesJson,
+    string CustomUniform)
 {
     public static WizardText English { get; } = new(
         "Browse", "Back", "Next", "Identity & Gameplay", "Appearance", "Acquisition", "Review",
@@ -92,7 +93,7 @@ public sealed record WizardText(
         "Use the Characters step to select or duplicate a player, then continue here.",
         "Icon with rear hair", "Icon without rear hair", "Portrait variant 1", "Portrait variant 2",
         "Delivery is selected by default. Shop is optional.", "Save mod", "Preview the export to review the mod.",
-        "Internal identifiers stay hidden.", "Delivery IDs are generated automatically and are never reused within the project export.",
+        "Internal identifiers stay hidden.", "Delivery IDs are generated automatically and stay stable when the same character is exported again.",
         "What would you like to do?", "Create a new character", "Modify a new character", "Import a character into Victory Road",
         "How would you like to create it?", "From scratch", "Duplicate an existing character",
         "Select a character", "Choose the base for your new character. You can edit it afterwards.",
@@ -104,7 +105,7 @@ public sealed record WizardText(
         "What does the character look like?", "Normal face", "Face without rear hair", "3D model", "Browse…",
         "Skin color", "Is everything okay?", "Skill list", "Save",
         "Add characters to the game", "Add package", "Drop a .vrchara here", "Add this character to the incorporation list?", "Yes", "No", "Export",
-        "Uniform", "Shoes", "Gloves", "Force uniform", "Force equipment", "Chest size", "Open collar", "Extracted from package", "Body type", "Remove", "Edit locales JSON");
+        "Uniform", "Shoes", "Gloves", "Force uniform", "Force equipment", "Chest size", "Open collar", "Extracted from package", "Body type", "Remove", "Edit locales JSON", "--NEW");
 
     public static WizardText Spanish { get; } = new(
         "Examinar", "Atrás", "Siguiente", "Identidad y gameplay", "Aspecto", "Obtención", "Revisión",
@@ -112,7 +113,7 @@ public sealed record WizardText(
         "Usa el paso Personajes para seleccionar o duplicar un jugador y continúa aquí.",
         "Icono con pelo trasero", "Icono sin pelo trasero", "Variante de retrato 1", "Variante de retrato 2",
         "Delivery está seleccionado por defecto. Tienda es opcional.", "Guardar mod", "Previsualiza la exportación para revisar el mod.",
-        "Los identificadores internos quedan ocultos.", "Los IDs de Delivery se generan automáticamente y no se reutilizan en la exportación.",
+        "Los identificadores internos quedan ocultos.", "Los IDs de Delivery se generan automáticamente y se mantienen al volver a exportar el mismo personaje.",
         "¿Qué quieres hacer?", "Crear un personaje", "Modificar un personaje", "Introducir un personaje",
         "¿Cómo quieres crearlo?", "Desde cero", "Duplicando a uno preexistente",
         "Selecciona al personaje", "Elige la base para tu personaje nuevo. Podrás cambiar sus datos después.",
@@ -124,7 +125,7 @@ public sealed record WizardText(
         "¿Y qué aspecto tiene?", "Cara normal", "Cara sin pelo trasero", "Modelo 3D", "Examinar…",
         "Color de piel", "¿Está todo bien?", "Lista de técnicas", "Guardar",
         "Incorpora personajes al juego", "Añadir paquete", "Suelta aquí un .vrchara", "¿Quieres añadir este personaje a la lista de incorporaciones?", "Sí", "No", "Exportar",
-        "Uniforme", "Zapatillas", "Guantes", "Forzar uniforme", "Forzar equipamiento", "Tamaño del pecho", "Cuello abierto", "Extraído del paquete", "Tipo corporal", "Eliminar", "Editar JSON de locales");
+        "Uniforme", "Zapatillas", "Guantes", "Forzar uniforme", "Forzar equipamiento", "Tamaño del pecho", "Cuello abierto", "Extraído del paquete", "Tipo corporal", "Eliminar", "Editar JSON de locales", "--NUEVO");
 
     public static WizardText ForLocale(string locale) =>
         string.Equals(locale, "es", StringComparison.OrdinalIgnoreCase) ? Spanish : English;

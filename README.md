@@ -1,69 +1,34 @@
 # VictoryTool
 
-VictoryTool is a tool for adding your own custom characters to the game as if they were part of the original roster.
+VictoryTool is a cross-platform .NET 10/Avalonia workspace for researching INAZUMA ELEVEN: Victory Road character data, creating single-character `.vrchara` packages, and composing reproducible multi-character mod projects.
 
-You can create a new character based on an existing one and customize parameters such as:
+## Current capabilities
 
-* Name
-* Game of origin
-* Affinity
-* Special Moves
-* Gender
-* Uniform
-* Team
+- Validates an extracted dump containing `common/gamedata` without modifying it.
+- Indexes character identity, variants, skills and localized names/descriptions from CFGBIN, together with PC/DX11 or Switch/NX portrait resources.
+- Browses the complete CFGBIN inventory in read-only mode.
+- Clones an immutable character inventory entry into a symbolic character draft.
+- Reads and writes one-character `.vrchara` ZIP packages with `manifest.json`.
+- Maintains ordered, enabled/disabled batch entries and atomic `.vrproject` persistence.
+- Previews known candidate dependency families and reports unresolved graphs plus separate T2B, RDBNP and localization blockers.
+- Parses structured T2B records, performs byte-identical unmodified roundtrips and safely replaces existing numeric values.
+- Reads G4TX portrait containers and performs fixed-size, fixed-dimension native-template replacement for verified DDS/NXTCH payloads while preserving opaque bytes.
 
-## Installing your character
-
-To install the generated mod, you will need a modding tool such as [Viola](https://github.com/SuperTavor/Viola).
-
-## Obtaining your character in-game
-
-Once the mod has been installed:
-
-1. Go to **Info → Get Promotions**.
-2. Find the promotion containing your character's spirit.
-3. Summon the character.
+Typed localized T2B rows can now be appended inside an atomic export staging directory. Character/gameplay rows, Shop rows, RDBNP writing, image encoding and a fully game-ready export remain intentionally blocked until their independent evidence gates pass.
 
 ## Build and run
-dotnet run --project ./src/VictoryTool.Desktop/VictoryTool.Desktop.csproj
-
-To create a standalone executable, use scripts/build.sh on macOS/Linux or
-./scripts/build.ps1 on Windows.
-
-The application asks the user to select a compatible game-data directory and
-does not modify that source directory. Project data is stored in the platform
-application-data directory.
-
-Diagnostic logs are written to the same platform data location. On macOS the
-file is `~/Library/Application Support/VictoryTool/VictoryTool.log`; on
-Windows it is `%LOCALAPPDATA%\\VictoryTool\\VictoryTool.log`. The file is
-reset when the application starts and can be opened from the application.
-Detailed parser and asset tracing is opt-in with
-`VICTORYTOOL_LOG_LEVEL=debug`.
-
-> [!WARNING]
-> VictoryTool may cause irreversible damage to save data. Make a backup before
-> using it. Do not use generated characters in online features or matches;
-> custom characters may cause unexpected issues or account penalties. You are
-> responsible for any damage, data loss or other consequences.
-
-The version is shared by `Directory.Build.props`. To update two checkouts to
-the same version:
 
 ```sh
-./scripts/sync-version.sh 1.0.1 /path/to/private /path/to/public
+dotnet restore VictoryTool.slnx
+dotnet test VictoryTool.slnx --no-restore
+dotnet run --project src/VictoryTool.Desktop/VictoryTool.Desktop.csproj --no-build
 ```
 
-On Windows, use `scripts/sync-version.ps1` from PowerShell with the same three
-arguments.
-
-For a self-contained single-file build, run `scripts/build.sh` on macOS/Linux
-or `scripts/build.ps1` on Windows. The output is written under `dist/`.
+The application stores its global dump setting and recovery files under the platform application-data directory. All source dump files remain read-only.
 
 ## Projects
 
-- `VictoryTool.CfgBin`: structured game-data readers and conservative writers.
-- `VictoryTool.G4`: G4TX and NXTCH texture support.
-- `VictoryTool.Application`: character models, package persistence and export
-  planning.
-- `VictoryTool.Desktop`: the Avalonia desktop application.
+- `VictoryTool.CfgBin`: clean-room structured T2B reader and conservative value writer.
+- `VictoryTool.G4`: clean-room G4TX/NXTCH metadata and native-template replacement.
+- `VictoryTool.Application`: game-independent models, package/project persistence, indexing, comparison, and export planning.
+- `VictoryTool.Desktop`: Avalonia management-center UI.

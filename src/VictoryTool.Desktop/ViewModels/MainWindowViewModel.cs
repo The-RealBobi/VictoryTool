@@ -295,6 +295,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private int? _selectedRank;
     private int? _selectedSpecialRarity;
     private CharacterSort _selectedCharacterSort = CharacterSort.DisplayName;
+    private bool _customUniformSelected;
     private string _statusMessage = "Select a game dump to begin.";
     private bool _isWorkspaceReady;
     private bool _isIndexing;
@@ -1785,8 +1786,25 @@ public sealed class MainWindowViewModel : ObservableObject
     public IReadOnlyList<LocalizedEquipment> AppearanceGloveOptions => GetAppearanceEquipment(EquipmentCategory.Gloves);
     public LocalizedEquipment? ActiveDraftUniformChoice
     {
-        get => FindAppearanceEquipment(EquipmentCategory.Uniform, ActiveDraft?.Models?.UniformModel);
-        set { if (value is not null) ActiveDraftUniformModel = value.Id; }
+        get => _customUniformSelected || !string.IsNullOrWhiteSpace(ActiveDraft?.Models?.UniformModelPath)
+            ? AppearanceUniformOptions.FirstOrDefault(option => option.IsCustomOption)
+            : FindAppearanceEquipment(EquipmentCategory.Uniform, ActiveDraft?.Models?.UniformModel);
+        set
+        {
+            if (value is null) return;
+            if (value.IsCustomOption)
+            {
+                _customUniformSelected = true;
+                OnPropertyChanged(nameof(ActiveDraftUniformChoice));
+                OnPropertyChanged(nameof(CanSelectCustomUniform));
+                OnPropertyChanged(nameof(ActiveDraftUniformModelDisplayPath));
+                return;
+            }
+            _customUniformSelected = false;
+            OnPropertyChanged(nameof(CanSelectCustomUniform));
+            ActiveDraftUniformModel = value.Id;
+            ActiveDraftUniformModelPath = null;
+        }
     }
     public LocalizedEquipment? ActiveDraftShoesChoice
     {
@@ -1799,9 +1817,29 @@ public sealed class MainWindowViewModel : ObservableObject
         set { if (value is not null) ActiveDraftGloveModel = value.Id; }
     }
     public int? ActiveDraftUniformModel { get => ActiveDraft?.Models?.UniformModel; set { if (value != ActiveDraft?.Models?.UniformModel) UpdateActiveDraftField("Models.UniformModel", value?.ToString(CultureInfo.InvariantCulture)); } }
+    public string? ActiveDraftUniformModelPath
+    {
+        get => ActiveDraft?.Models?.UniformModelPath;
+        set
+        {
+            if (!string.Equals(value, ActiveDraft?.Models?.UniformModelPath, StringComparison.Ordinal))
+                UpdateActiveDraftField("Models.UniformModelPath", value);
+        }
+    }
+    public string ActiveDraftUniformModelDisplayPath => FormatPathForDisplay(ActiveDraftUniformModelPath ?? string.Empty);
+    public bool CanSelectCustomUniform => ActiveDraftForceKit && (_customUniformSelected || !string.IsNullOrWhiteSpace(ActiveDraftUniformModelPath));
     public int? ActiveDraftShoesModel { get => ActiveDraft?.Models?.ShoesModel; set { if (value != ActiveDraft?.Models?.ShoesModel) UpdateActiveDraftField("Models.ShoesModel", value?.ToString(CultureInfo.InvariantCulture)); } }
     public int? ActiveDraftGloveModel { get => ActiveDraft?.Models?.GloveModel; set { if (value != ActiveDraft?.Models?.GloveModel) UpdateActiveDraftField("Models.GloveModel", value?.ToString(CultureInfo.InvariantCulture)); } }
-    public bool ActiveDraftForceKit { get => (ActiveDraft?.Models?.ForceKit ?? 0) != 0; set { if (value != ((ActiveDraft?.Models?.ForceKit ?? 0) != 0)) UpdateActiveDraftField("Models.ForceKit", value ? "1" : "0"); } }
+    public bool ActiveDraftForceKit
+    {
+        get => (ActiveDraft?.Models?.ForceKit ?? 0) != 0;
+        set
+        {
+            if (value == ((ActiveDraft?.Models?.ForceKit ?? 0) != 0)) return;
+            UpdateActiveDraftField("Models.ForceKit", value ? "1" : "0");
+            OnPropertyChanged(nameof(AppearanceUniformOptions));
+        }
+    }
     public bool ActiveDraftUniformCollarOpen
     {
         get => (ActiveDraft?.Models?.UniformCollarOpen ?? 0) != 0;
@@ -1828,13 +1866,22 @@ public sealed class MainWindowViewModel : ObservableObject
             EquipmentCategory.Gloves => ActiveDraft?.Models?.GloveModel,
             _ => null,
         };
-        if (current is null || options.Any(option => option.Id == current.Value)) return options;
-        return options.Append(new LocalizedEquipment(
-                current.Value,
+        var result = options.ToArray();
+        if (current is { } currentValue && !options.Any(option => option.Id == currentValue))
+            result = result.Append(new LocalizedEquipment(
+                    currentValue,
+                    category,
+                    BuildEquipmentFallbackName(category, currentValue),
+                    $"0x{unchecked((uint)currentValue):X8}"))
+                .ToArray();
+        if (category == EquipmentCategory.Uniform && ActiveDraftForceKit)
+            result = result.Append(new LocalizedEquipment(
+                int.MinValue,
                 category,
-                BuildEquipmentFallbackName(category, current.Value),
-                $"0x{unchecked((uint)current.Value):X8}"))
-            .ToArray();
+                WizardText.CustomUniform,
+                "custom",
+                IsCustomOption: true)).ToArray();
+        return result;
     }
 
     private LocalizedEquipment? FindAppearanceEquipment(EquipmentCategory category, int? id) =>
@@ -2426,12 +2473,15 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ActiveDraftBodyTypeDiagnostic));
         OnPropertyChanged(nameof(ActiveDraftSkinColor));
         OnPropertyChanged(nameof(ActiveDraftUniformModel));
+        OnPropertyChanged(nameof(ActiveDraftUniformModelPath));
+        OnPropertyChanged(nameof(ActiveDraftUniformModelDisplayPath));
         OnPropertyChanged(nameof(ActiveDraftShoesModel));
         OnPropertyChanged(nameof(ActiveDraftGloveModel));
         OnPropertyChanged(nameof(ActiveDraftUniformChoice));
         OnPropertyChanged(nameof(ActiveDraftShoesChoice));
         OnPropertyChanged(nameof(ActiveDraftGloveChoice));
         OnPropertyChanged(nameof(ActiveDraftForceKit));
+        OnPropertyChanged(nameof(CanSelectCustomUniform));
         OnPropertyChanged(nameof(ActiveDraftUniformCollarOpen));
         OnPropertyChanged(nameof(ActiveDraftChestSize));
         OnPropertyChanged(nameof(ActiveDraftStandardPortraitPath));

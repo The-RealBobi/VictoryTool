@@ -3,6 +3,7 @@ using VictoryTool.Application.Assets;
 using VictoryTool.Application.Diagnostics;
 using VictoryTool.Application.Packages;
 using VictoryTool.G4.Textures;
+using VictoryTool.CfgBin;
 
 namespace VictoryTool.Application.Exporting;
 
@@ -24,6 +25,8 @@ public sealed class ExportExecutor : IExportExecutor
     private readonly IShopCharacterT2bWriter _shopCharacterWriter;
     private readonly ICharacterDeliveryWriter _characterDeliveryWriter;
     private readonly ICharacterModelT2bWriter _characterModelWriter;
+    private readonly ICharacterBodyT2bWriter _characterBodyWriter;
+    private readonly ICharacterClothesT2bWriter _characterClothesWriter;
 
     public ExportExecutor(
         IVrCharaPackageService? packageService = null,
@@ -31,6 +34,8 @@ public sealed class ExportExecutor : IExportExecutor
         ICharacterCoreT2bWriter? characterCoreWriter = null,
         IShopCharacterT2bWriter? shopCharacterWriter = null,
         ICharacterModelT2bWriter? characterModelWriter = null,
+        ICharacterBodyT2bWriter? characterBodyWriter = null,
+        ICharacterClothesT2bWriter? characterClothesWriter = null,
         ICharacterDeliveryWriter? characterDeliveryWriter = null)
     {
         _packageService = packageService ?? new ZipVrCharaPackageService();
@@ -39,6 +44,8 @@ public sealed class ExportExecutor : IExportExecutor
         _shopCharacterWriter = shopCharacterWriter ?? new ShopCharacterT2bWriter();
         _characterDeliveryWriter = characterDeliveryWriter ?? new CharacterDeliveryWriter();
         _characterModelWriter = characterModelWriter ?? new CharacterModelT2bWriter();
+        _characterBodyWriter = characterBodyWriter ?? new CharacterBodyT2bWriter();
+        _characterClothesWriter = characterClothesWriter ?? new CharacterClothesT2bWriter();
     }
 
     public async Task<ExportExecutionResult> ExecuteAsync(
@@ -150,6 +157,14 @@ public sealed class ExportExecutor : IExportExecutor
                     ReserveDestination(destination, publishedPaths);
                     Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
                     var content = resource.Content.ToArray();
+                    if (operation.DestinationPath.Contains("_face/99_CUSTOM/", StringComparison.OrdinalIgnoreCase)
+                        && Path.GetExtension(packageResourcePath).Equals(".objbin", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var sourceStem = Path.GetFileNameWithoutExtension(packageResourcePath);
+                        var internalName = ResolveInternalName(plan, operation.BatchEntryId);
+                        content = FixedWidthResourceIdRewriter.Replace(content, sourceStem, internalName);
+                        content = RebaseCharacterObjectConfig(content, internalName);
+                    }
                     if (operation.DestinationPath.Contains("/200_icon/", StringComparison.OrdinalIgnoreCase)
                         && operation.DestinationPath.EndsWith(".g4tx", StringComparison.OrdinalIgnoreCase))
                     {
@@ -188,6 +203,8 @@ public sealed class ExportExecutor : IExportExecutor
                 await File.WriteAllBytesAsync(destination, content, cancellationToken);
             }
 
+            ValidateCharacterModelResources(stagingPath, plan);
+
             GlobalLog.Debug("export_localizations_started", new Dictionary<string, object?>
             {
                 ["count"] = plan.LocalizationOperations.Count,
@@ -222,6 +239,36 @@ public sealed class ExportExecutor : IExportExecutor
             {
                 ["count"] = plan.CharacterModelOperations.Count,
             });
+            foreach (var operation in plan.CharacterBodyOperations)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var bodyPath = GetSafeDestination(stagingPath, operation.ModelTablePath);
+                var modelTable = await File.ReadAllBytesAsync(bodyPath, cancellationToken);
+                var result = _characterBodyWriter.Append(
+                    modelTable,
+                    new CharacterBodyWriteRequest(
+                        operation.SourceBodyModelId,
+                        operation.BodyModelId,
+                        operation.BodyModelPath,
+                        operation.SkeletonModelPath));
+                await File.WriteAllBytesAsync(bodyPath, result, cancellationToken);
+            }
+            foreach (var operation in plan.CharacterClothesOperations)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var clothesPath = GetSafeDestination(stagingPath, operation.ClothesTablePath);
+                var clothesTable = await File.ReadAllBytesAsync(clothesPath, cancellationToken);
+                var result = _characterClothesWriter.Append(
+                    clothesTable,
+                    new CharacterClothesWriteRequest(
+                        operation.SourceUniformModelId,
+                        operation.UniformModelId,
+                        operation.ResourceKey,
+                        operation.ModelPath,
+                        operation.TexturePath,
+                        operation.SourceResourceKey));
+                await File.WriteAllBytesAsync(clothesPath, result, cancellationToken);
+            }
             foreach (var operation in plan.CharacterModelOperations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -346,8 +393,26 @@ public sealed class ExportExecutor : IExportExecutor
                             operation.VariantIndex == 0 ? null : $".variant.{operation.VariantIndex}"),
                         FindAssignedId(plan, operation.BatchEntryId, operation.VariantIndex == 0 ? "deliveryReceived" : "deliveryReceivedVariant",
                             operation.VariantIndex == 0 ? null : $".variant.{operation.VariantIndex}"),
-                        FindAssignedParameterId(plan, operation.BatchEntryId, operation.VariantIndex)));
+                        FindAssignedParameterId(plan, operation.BatchEntryId, operation.VariantIndex),
+                        operation.VariantIndex == 0 && plan.DeliveryLocalizationOperations.Count > 0
+                            ? FindAssignedId(plan, operation.BatchEntryId, "deliveryTitleText", ".delivery.title")
+                            : null));
                 await File.WriteAllBytesAsync(deliveryPath, result, cancellationToken);
+            }
+
+            GlobalLog.Debug("export_delivery_localizations_started", new Dictionary<string, object?>
+            {
+                ["count"] = plan.DeliveryLocalizationOperations.Count,
+            });
+            var deliveryTextWriter = new DeliveryTextWriter();
+            foreach (var operation in plan.DeliveryLocalizationOperations)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var tablePath = GetSafeDestination(stagingPath, operation.TablePath);
+                var table = await File.ReadAllBytesAsync(tablePath, cancellationToken);
+                var titleId = FindAssignedId(plan, operation.BatchEntryId, "deliveryTitleText", ".delivery.title");
+                var result = deliveryTextWriter.AppendTitle(table, titleId, operation.Title);
+                await File.WriteAllBytesAsync(tablePath, result, cancellationToken);
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -361,6 +426,19 @@ public sealed class ExportExecutor : IExportExecutor
                 acquisition = plan.Acquisition.ToString(),
                 packageCount = plan.EnabledPackageCount,
                 assignedIds = plan.AssignedIds,
+                deliveryTitles = plan.DeliveryLocalizationOperations
+                    .Select(operation => new
+                    {
+                        operation.BatchEntryId,
+                        operation.Locale,
+                        TitleId = FindAssignedId(
+                            plan,
+                            operation.BatchEntryId,
+                            "deliveryTitleText",
+                            ".delivery.title"),
+                        operation.Title,
+                    })
+                    .ToArray(),
                 files = publishedPaths
                     .Select(path => Path.GetRelativePath(stagingPath, path).Replace(Path.DirectorySeparatorChar, '/'))
                     .OrderBy(path => path, StringComparer.Ordinal)
@@ -467,6 +545,41 @@ public sealed class ExportExecutor : IExportExecutor
             : document.RenameIdentifier(sourceStem, destinationStem);
     }
 
+    private static byte[] RebaseCharacterObjectConfig(byte[] content, string characterName)
+    {
+        var document = CfgBinDocument.Read(content);
+        var edits = new List<CfgBinValueEdit>();
+        foreach (var entry in document.Entries)
+        for (var valueIndex = 0; valueIndex < entry.Values.Count; valueIndex++)
+        {
+            if (entry.Values[valueIndex].Value is not string value
+                || !value.Contains("common/chr/_face/11_VICTORY/", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var extension = Path.GetExtension(value);
+            if (!extension.Equals(".g4sk", StringComparison.OrdinalIgnoreCase)
+                && !extension.Equals(".clobin", StringComparison.OrdinalIgnoreCase))
+                continue;
+            edits.Add(new CfgBinValueEdit(
+                entry.Index,
+                valueIndex,
+                $"common/chr/_face/99_CUSTOM/{characterName}/{characterName}{extension.ToLowerInvariant()}"));
+        }
+        if (edits.Count != 2)
+            throw new InvalidDataException(
+                $"The custom character object config must reference one G4SK and one CLOBIN for '{characterName}'.");
+
+        var rebased = document.WriteWithStringEdits(edits);
+        foreach (var extension in new[] { ".g4sk", ".clobin" })
+        {
+            var expectedPath = System.Text.Encoding.ASCII.GetBytes(
+                $"common/chr/_face/99_CUSTOM/{characterName}/{characterName}{extension}");
+            if (rebased.AsSpan().IndexOf(expectedPath) < 0)
+                throw new InvalidDataException(
+                    $"The custom character object config did not retain its {extension} reference for '{characterName}'.");
+        }
+        return rebased;
+    }
+
     private static void ValidatePortraitContent(ReadOnlySpan<byte> content, string expectedStem)
     {
         var document = G4TxDocument.Read(content);
@@ -480,6 +593,31 @@ public sealed class ExportExecutor : IExportExecutor
         {
             throw new InvalidDataException(
                 $"The exported portrait does not contain the expected two layers for '{expectedStem}'.");
+        }
+    }
+
+    private static void ValidateCharacterModelResources(string stagingPath, ExportPlan plan)
+    {
+        var platformRoot = plan.Platform == ExportPlatform.Pc ? "dx11" : "nx";
+        foreach (var operation in plan.CharacterModelOperations)
+        {
+            var relativeFacePath = operation.FaceModelPath.Replace('\\', '/').TrimStart('/');
+            var commonFacePath = relativeFacePath.StartsWith("common/", StringComparison.OrdinalIgnoreCase)
+                ? relativeFacePath
+                : $"common/chr/{relativeFacePath}";
+            var extension = Path.GetExtension(commonFacePath);
+            if (!extension.Equals(".g4md", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException(
+                    $"The character model '{operation.FaceModelPath}' is not a G4MD resource.");
+
+            var stem = commonFacePath[..^extension.Length];
+            var texturePath = $"{platformRoot}/{stem["common/".Length..]}.g4tx";
+            foreach (var path in new[] { commonFacePath, $"{stem}.g4mg", texturePath })
+            {
+                if (!File.Exists(GetSafeDestination(stagingPath, path)))
+                    throw new InvalidDataException(
+                        $"The exported face model family is incomplete; missing '{path}'.");
+            }
         }
     }
 

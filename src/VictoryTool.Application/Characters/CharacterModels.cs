@@ -553,7 +553,8 @@ public sealed record CharacterDraftModels(
     int? UniformCollarOpen = null,
     int? EquipmentFlag2 = null,
     int? ChestSize = null,
-    int? ForceKit = null);
+    int? ForceKit = null,
+    string? UniformModelPath = null);
 
 public enum CharacterSkillPath
 {

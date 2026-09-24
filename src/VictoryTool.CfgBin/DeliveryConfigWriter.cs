@@ -5,7 +5,8 @@ namespace VictoryTool.CfgBin;
 public sealed record CharacterDeliveryWriteRequest(
     uint DeliveryId,
     uint ReceivedFlag,
-    uint CharacterParameterId);
+    uint CharacterParameterId,
+    uint? TitleId = null);
 
 public sealed record CharacterPromotionCloneRequest(
     int SourceDeliveryIndex,

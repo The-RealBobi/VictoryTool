@@ -388,6 +388,45 @@ public sealed class CfgBinDocument
         return result;
     }
 
+    public byte[] WriteWithStringEdits(IEnumerable<CfgBinValueEdit> edits)
+    {
+        ArgumentNullException.ThrowIfNull(edits);
+        var updatedValues = Entries.Select(entry => entry.Values.ToArray()).ToArray();
+        var editedLocations = new HashSet<(int EntryIndex, int ValueIndex)>();
+        foreach (var edit in edits)
+        {
+            ArgumentNullException.ThrowIfNull(edit);
+            if ((uint)edit.EntryIndex >= (uint)Entries.Count)
+                throw new ArgumentOutOfRangeException(nameof(edits), "The entry index is outside the document.");
+            var entry = Entries[edit.EntryIndex];
+            if ((uint)edit.ValueIndex >= (uint)entry.Values.Count)
+                throw new ArgumentOutOfRangeException(nameof(edits), "The value index is outside the entry.");
+            if (!editedLocations.Add((edit.EntryIndex, edit.ValueIndex)))
+                throw new ArgumentException("A value can only be edited once per write operation.", nameof(edits));
+            if (entry.Values[edit.ValueIndex].Type != CfgBinValueType.String
+                || edit.Value is not string replacement
+                || replacement.IndexOf('\0') >= 0)
+                throw new ArgumentException("A string edit requires a null-free string value.", nameof(edits));
+            updatedValues[edit.EntryIndex][edit.ValueIndex] = entry.Values[edit.ValueIndex] with { Value = edit.Value };
+        }
+
+        var entries = Entries.Select((entry, index) => entry with
+        {
+            Values = Array.AsReadOnly(updatedValues[index]),
+        }).ToArray();
+        return new CfgBinDocument(
+            _source,
+            EntryCount,
+            StringDataOffset,
+            StringDataLength,
+            StringDataCount,
+            EncodingCode,
+            ValueWidth,
+            Array.AsReadOnly(entries),
+            _entryDataEnd,
+            _entryRanges).WriteCanonical();
+    }
+
     public byte[] WriteWithAppendedEntries(IEnumerable<CfgBinEntryAppend> appends)
     {
         ArgumentNullException.ThrowIfNull(appends);

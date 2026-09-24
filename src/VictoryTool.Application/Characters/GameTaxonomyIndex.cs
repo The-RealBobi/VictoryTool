@@ -47,7 +47,8 @@ public sealed record LocalizedEquipment(
     int Id,
     EquipmentCategory Category,
     string Name,
-    string ResourceKey)
+    string ResourceKey,
+    bool IsCustomOption = false)
 {
     public override string ToString() => Name;
 }
