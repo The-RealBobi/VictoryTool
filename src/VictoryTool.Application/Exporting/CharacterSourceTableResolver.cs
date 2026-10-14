@@ -64,7 +64,10 @@ public sealed class CharacterSourceTableResolver : ICharacterSourceTableResolver
             }
             catch (Exception exception) when (exception is InvalidDataException or NotSupportedException)
             {
-                GlobalLog.Warn("source_table_candidate_rejected", exception: exception);
+                GlobalLog.Debug("source_table_candidate_rejected", new Dictionary<string, object?>
+                {
+                    ["file"] = Path.GetFileName(path), ["reason"] = exception.Message,
+                });
                 continue;
             }
             if (document.Entries.Any(entry => entry.Name == entryName && predicate(entry)))

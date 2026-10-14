@@ -16,7 +16,13 @@ public static class G4HumanoidAnimationExporter
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if ((clip.Flags & 1) != 0) continue;
-                yield return SampleClip(bank, clip, rig, cancellationToken);
+                G4mtClipSamples samples;
+                try { samples = SampleClip(bank, clip, rig, cancellationToken); }
+                catch (InvalidDataException exception)
+                {
+                    throw new InvalidDataException($"Animation clip '{clip.Name}' ({clip.Index}) failed: {exception.Message}", exception);
+                }
+                yield return samples;
             }
         }
         return G4mtAnimationFamilyWriter.WritePreservingAdditiveStreaming(bank, Samples(), cancellationToken);
@@ -185,8 +191,26 @@ public static class G4HumanoidAnimationExporter
         ? inverse : throw new InvalidDataException("An animation rig transform is singular.");
     private static G4mtJointRest Decompose(Matrix4x4 matrix)
     {
-        if (!Matrix4x4.Decompose(matrix, out var scale, out var rotation, out var translation)
-            || !float.IsFinite(scale.X + scale.Y + scale.Z + rotation.LengthSquared() + translation.LengthSquared()))
+        if (!Matrix4x4.Decompose(matrix, out var scale, out var rotation, out var translation))
+        {
+            // Blender decomposes finite sheared poses by normalizing their basis axes.
+            var x = new Vector3(matrix.M11, matrix.M12, matrix.M13);
+            var y = new Vector3(matrix.M21, matrix.M22, matrix.M23);
+            var z = new Vector3(matrix.M31, matrix.M32, matrix.M33);
+            scale = new(x.Length(), y.Length(), z.Length());
+            if (scale.X <= 0 || scale.Y <= 0 || scale.Z <= 0)
+                throw new InvalidDataException("An animation pose has a degenerate basis.");
+            x /= scale.X; y /= scale.Y; z /= scale.Z;
+            if (Vector3.Dot(x, Vector3.Cross(y, z)) < 0)
+            {
+                x = -x; y = -y; z = -z; scale = -scale;
+            }
+            rotation = Quaternion.CreateFromRotationMatrix(new Matrix4x4(
+                x.X, x.Y, x.Z, 0, y.X, y.Y, y.Z, 0, z.X, z.Y, z.Z, 0, 0, 0, 0, 1));
+            translation = matrix.Translation;
+        }
+        if (!float.IsFinite(scale.X + scale.Y + scale.Z + rotation.LengthSquared() + translation.LengthSquared())
+            || rotation.LengthSquared() <= 0)
             throw new InvalidDataException("An animation pose cannot be represented as a finite local transform.");
         return new(translation, Quaternion.Normalize(rotation), scale);
     }

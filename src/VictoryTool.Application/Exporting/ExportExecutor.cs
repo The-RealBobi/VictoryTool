@@ -158,6 +158,7 @@ public sealed class ExportExecutor : IExportExecutor
             {
                 var total = plan.AnimationGenerationRequests.Sum(request => request.Banks.Count);
                 var completed = 0;
+                var progressLogTimer = System.Diagnostics.Stopwatch.StartNew();
                 GlobalLog.Info("animation_family_registration_started", new Dictionary<string, object?> { ["count"] = total });
                 foreach (var request in plan.AnimationGenerationRequests)
                 {
@@ -176,8 +177,16 @@ public sealed class ExportExecutor : IExportExecutor
                         var sourcePackageBytes = await File.ReadAllBytesAsync(bankSource.Path, cancellationToken);
                         if (request.Profile.AvatarRecipe is { } recipe)
                         {
-                            var output = await Task.Run(() => AvatarAnimationResources.Export(sourcePackageBytes,
-                                bankSource, recipe, request.GeneratedFamilyName!, cancellationToken), cancellationToken);
+                            byte[] output;
+                            try
+                            {
+                                output = await Task.Run(() => AvatarAnimationResources.Export(sourcePackageBytes,
+                                    bankSource, recipe, request.GeneratedFamilyName!, cancellationToken), cancellationToken);
+                            }
+                            catch (InvalidDataException exception)
+                            {
+                                throw new InvalidDataException($"Animation bank '{bankSource.ResourcePath}' failed: {exception.Message}", exception);
+                            }
                             var outputRoute = bankSource.DestinationResourcePath
                                 ?? throw new InvalidDataException($"Animation bank '{bankSource.ResourcePath}' has no output route.");
                             var animationOutputPath = GetSafeDestination(stagingPath,
@@ -195,10 +204,14 @@ public sealed class ExportExecutor : IExportExecutor
                                 await File.WriteAllBytesAsync(animationOutputPath, output, cancellationToken);
                             }
                             completed++;
-                            GlobalLog.Info("animation_family_registration_progress", new Dictionary<string, object?>
+                            if (completed == total || progressLogTimer.Elapsed >= TimeSpan.FromSeconds(5))
                             {
-                                ["completed"] = completed, ["total"] = total, ["remaining"] = total - completed,
-                            });
+                                GlobalLog.Info("animation_family_registration_progress", new Dictionary<string, object?>
+                                {
+                                    ["completed"] = completed, ["total"] = total, ["remaining"] = total - completed,
+                                });
+                                progressLogTimer.Restart();
+                            }
                             continue;
                         }
                         if (bankSource.GeneratedPackageResourcePath is { } generatedPackagePath)
@@ -250,13 +263,15 @@ public sealed class ExportExecutor : IExportExecutor
                         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
                         await File.WriteAllBytesAsync(destination, generated, cancellationToken);
                         completed++;
-                        GlobalLog.Info("animation_family_registration_progress", new Dictionary<string, object?>
+                        if (completed == total || progressLogTimer.Elapsed >= TimeSpan.FromSeconds(5))
                         {
-                            ["completed"] = completed,
-                            ["remaining"] = total - completed,
-                            ["total"] = total,
-                            ["family"] = request.Family.Name,
-                        });
+                            GlobalLog.Info("animation_family_registration_progress", new Dictionary<string, object?>
+                            {
+                                ["completed"] = completed, ["remaining"] = total - completed,
+                                ["total"] = total, ["family"] = request.Family.Name,
+                            });
+                            progressLogTimer.Restart();
+                        }
                     }
                 }
                 foreach (var request in plan.AnimationGenerationRequests.Where(request => request.Banks.Any(bank => !bank.IsEvent)))

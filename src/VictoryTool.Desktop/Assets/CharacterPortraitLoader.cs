@@ -65,7 +65,7 @@ public sealed class CharacterPortraitLoader : ICharacterPortraitLoader
             : character.StandardPortraitResourcePath ?? character.PortraitResourcePath;
         if (string.IsNullOrWhiteSpace(portraitPath))
         {
-            GlobalLog.Warn("character_portrait_path_missing");
+            GlobalLog.Debug("character_portrait_path_missing");
             return new CharacterPortraitLoadResult(null, "assets.source_missing");
         }
 
