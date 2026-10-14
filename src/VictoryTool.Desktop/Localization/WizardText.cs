@@ -74,6 +74,9 @@ public sealed record WizardText(
     string SaveToBatchYes,
     string SaveToBatchNo,
     string Export,
+    string GenerateAnimations,
+    string ChrAnimations,
+    string EventAnimations,
     string Uniform,
     string Shoes,
     string Gloves,
@@ -105,6 +108,7 @@ public sealed record WizardText(
         "What does the character look like?", "Normal face", "Face without rear hair", "3D model", "Browse…",
         "Skin color", "Is everything okay?", "Skill list", "Save",
         "Add characters to the game", "Add package", "Drop a .vrchara here", "Add this character to the incorporation list?", "Yes", "No", "Export",
+        "Generate animations", "CHR animations", "EVENT animations",
         "Uniform", "Shoes", "Gloves", "Force uniform", "Force equipment", "Chest size", "Open collar", "Extracted from package", "Body type", "Remove", "Edit locales JSON", "--NEW");
 
     public static WizardText Spanish { get; } = new(
@@ -125,6 +129,7 @@ public sealed record WizardText(
         "¿Y qué aspecto tiene?", "Cara normal", "Cara sin pelo trasero", "Modelo 3D", "Examinar…",
         "Color de piel", "¿Está todo bien?", "Lista de técnicas", "Guardar",
         "Incorpora personajes al juego", "Añadir paquete", "Suelta aquí un .vrchara", "¿Quieres añadir este personaje a la lista de incorporaciones?", "Sí", "No", "Exportar",
+        "Generar animaciones", "Animaciones CHR", "Animaciones EVENT",
         "Uniforme", "Zapatillas", "Guantes", "Forzar uniforme", "Forzar equipamiento", "Tamaño del pecho", "Cuello abierto", "Extraído del paquete", "Tipo corporal", "Eliminar", "Editar JSON de locales", "--NUEVO");
 
     public static WizardText ForLocale(string locale) =>

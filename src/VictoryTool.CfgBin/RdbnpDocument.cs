@@ -192,7 +192,7 @@ public sealed class RdbnpDocument
             15 => ReadUInt32(source, offset),
             20 => ReadConditionString(source, offset, stringOffset),
             21 => new RdbnpTuple(ReadInt16(source, offset), ReadInt16(source, offset + 2)),
-            0 or 1 or 2 or 17 => source.Slice(offset, size).ToArray(),
+            0 or 1 or 2 or 17 or 18 or 19 => source.Slice(offset, size).ToArray(),
             _ => throw new NotSupportedException($"RDBNP field type {type} is not supported by the read-only parser."),
         };
     }

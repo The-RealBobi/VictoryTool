@@ -319,6 +319,12 @@ public sealed class MainWindowViewModel : ObservableObject
     private AcquisitionMode _acquisitionMode = AcquisitionMode.Delivery;
     private string _exportOutputPath = string.Empty;
     private bool _exportOutputPathGenerated;
+    private bool _generateAnimationsEnabled;
+    private bool _generateChrAnimations = true;
+    private bool _generateEventAnimations;
+    private bool _isExporting;
+    private string _exportProgressMessage = string.Empty;
+    private CancellationTokenSource? _exportCancellation;
     private ExportPlan? _currentExportPlan;
     private UiText _text = UiText.English;
     private WizardText _wizardText = WizardText.English;
@@ -632,6 +638,26 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         get => _statusMessage;
         private set => SetProperty(ref _statusMessage, value);
+    }
+
+    public bool IsExporting
+    {
+        get => _isExporting;
+        private set => SetProperty(ref _isExporting, value);
+    }
+
+    public string ExportProgressMessage
+    {
+        get => _exportProgressMessage;
+        private set => SetProperty(ref _exportProgressMessage, value);
+    }
+
+    public string CancelExportLabel => SelectedLanguageCode == "es" ? "Cancelar" : "Cancel";
+
+    public void CancelExport()
+    {
+        _exportCancellation?.Cancel();
+        ExportProgressMessage = SelectedLanguageCode == "es" ? "Cancelando…" : "Cancelling…";
     }
 
     public string LogButtonLabel => SelectedLanguageCode == "es" ? "Abrir registro" : "Open log";
@@ -1809,8 +1835,23 @@ public sealed class MainWindowViewModel : ObservableObject
     public LocalizedEquipment? ActiveDraftShoesChoice
     {
         get => FindAppearanceEquipment(EquipmentCategory.Shoes, ActiveDraft?.Models?.ShoesModel);
-        set { if (value is not null) ActiveDraftShoesModel = value.Id; }
+        set
+        {
+            if (value is null) return;
+            ActiveDraftShoesModel = value.Id;
+            ActiveDraftShoesModelPath = null;
+        }
     }
+    public string? ActiveDraftShoesModelPath
+    {
+        get => ActiveDraft?.Models?.ShoesModelPath;
+        set
+        {
+            if (!string.Equals(value, ActiveDraft?.Models?.ShoesModelPath, StringComparison.Ordinal))
+                UpdateActiveDraftField("Models.ShoesModelPath", value);
+        }
+    }
+    public string ActiveDraftShoesModelDisplayPath => FormatPathForDisplay(ActiveDraftShoesModelPath ?? string.Empty);
     public LocalizedEquipment? ActiveDraftGloveChoice
     {
         get => FindAppearanceEquipment(EquipmentCategory.Gloves, ActiveDraft?.Models?.GloveModel);
@@ -1823,7 +1864,9 @@ public sealed class MainWindowViewModel : ObservableObject
         set
         {
             if (!string.Equals(value, ActiveDraft?.Models?.UniformModelPath, StringComparison.Ordinal))
+            {
                 UpdateActiveDraftField("Models.UniformModelPath", value);
+            }
         }
     }
     public string ActiveDraftUniformModelDisplayPath => FormatPathForDisplay(ActiveDraftUniformModelPath ?? string.Empty);
@@ -1838,6 +1881,7 @@ public sealed class MainWindowViewModel : ObservableObject
             if (value == ((ActiveDraft?.Models?.ForceKit ?? 0) != 0)) return;
             UpdateActiveDraftField("Models.ForceKit", value ? "1" : "0");
             OnPropertyChanged(nameof(AppearanceUniformOptions));
+            OnPropertyChanged(nameof(CanSelectCustomUniform));
         }
     }
     public bool ActiveDraftUniformCollarOpen
@@ -2476,6 +2520,8 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ActiveDraftUniformModelPath));
         OnPropertyChanged(nameof(ActiveDraftUniformModelDisplayPath));
         OnPropertyChanged(nameof(ActiveDraftShoesModel));
+        OnPropertyChanged(nameof(ActiveDraftShoesModelPath));
+        OnPropertyChanged(nameof(ActiveDraftShoesModelDisplayPath));
         OnPropertyChanged(nameof(ActiveDraftGloveModel));
         OnPropertyChanged(nameof(ActiveDraftUniformChoice));
         OnPropertyChanged(nameof(ActiveDraftShoesChoice));
@@ -2563,6 +2609,36 @@ public sealed class MainWindowViewModel : ObservableObject
         set
         {
             if (SetProperty(ref _acquisitionMode, value))
+                InvalidateExportPlan();
+        }
+    }
+
+    public bool GenerateAnimationsEnabled
+    {
+        get => _generateAnimationsEnabled;
+        set
+        {
+            if (SetProperty(ref _generateAnimationsEnabled, value))
+                InvalidateExportPlan();
+        }
+    }
+
+    public bool GenerateChrAnimations
+    {
+        get => _generateChrAnimations;
+        set
+        {
+            if (SetProperty(ref _generateChrAnimations, value))
+                InvalidateExportPlan();
+        }
+    }
+
+    public bool GenerateEventAnimations
+    {
+        get => _generateEventAnimations;
+        set
+        {
+            if (SetProperty(ref _generateEventAnimations, value))
                 InvalidateExportPlan();
         }
     }
@@ -2709,6 +2785,7 @@ public sealed class MainWindowViewModel : ObservableObject
             Text = UiText.ForLocale(normalized);
             WizardText = WizardText.ForLocale(normalized);
             OnPropertyChanged(nameof(LogButtonLabel));
+            OnPropertyChanged(nameof(CancelExportLabel));
             foreach (var row in LocalizationEditorRows) row.SetApplicationLanguage(normalized);
             OnPropertyChanged(nameof(SkillChoices));
             if (_techniqueVariantChoices.Count > 0)
@@ -3609,7 +3686,11 @@ public sealed class MainWindowViewModel : ObservableObject
                     ExportPlatform,
                     AcquisitionMode,
                     ExportOutputPath,
-                    CancellationToken.None)
+                    CancellationToken.None,
+                    new AnimationGenerationSelection(
+                        GenerateAnimationsEnabled,
+                        GenerateChrAnimations,
+                        GenerateEventAnimations))
                 : _exportPlanner.CreatePlan(
                     Project,
                     ExportPlatform,
@@ -3627,10 +3708,9 @@ public sealed class MainWindowViewModel : ObservableObject
                 ["diagnosticCount"] = CurrentExportPlan.Diagnostics.Count,
             });
         }
-        catch (ArgumentException exception)
+        catch (Exception exception)
         {
-            GlobalLog.Error("export_preview_failed", exception);
-            StatusMessage = exception.Message;
+            ReportExportFailure(exception, preview: true);
         }
     }
 
@@ -3657,6 +3737,7 @@ public sealed class MainWindowViewModel : ObservableObject
     public async Task ExecuteExportAsync()
     {
         using var operation = GlobalLog.BeginOperation("ui_export_execute");
+        if (IsExporting) return;
         if (CurrentExportPlan?.CanExport != true)
         {
             StatusMessage = "Preview and resolve every blocking diagnostic before exporting.";
@@ -3666,17 +3747,74 @@ public sealed class MainWindowViewModel : ObservableObject
         try
         {
             GlobalLog.Info("export_execution_started");
-            var result = await _exportExecutor.ExecuteAsync(CurrentExportPlan, CancellationToken.None);
+            using var cancellation = new CancellationTokenSource();
+            _exportCancellation = cancellation;
+            IsExporting = true;
+            ExportProgressMessage = SelectedLanguageCode == "es" ? "Preparando la exportación…" : "Preparing export…";
+            var progress = new Progress<ExportProgress>(UpdateExportProgress);
+            var result = await _exportExecutor.ExecuteAsync(CurrentExportPlan, cancellation.Token, progress);
             StatusMessage = $"Export published to {result.OutputPath}.";
             SetGeneratedExportOutputPath(GetNextExportPath(result.OutputPath));
             GlobalLog.Info("export_execution_completed");
         }
-        catch (Exception exception) when (
-            exception is InvalidOperationException or NotSupportedException or IOException or UnauthorizedAccessException)
+        catch (OperationCanceledException) when (_exportCancellation?.IsCancellationRequested == true)
         {
-            GlobalLog.Error("export_execution_failed", exception);
-            StatusMessage = exception.Message;
+            StatusMessage = SelectedLanguageCode == "es" ? "Exportación cancelada." : "Export cancelled.";
         }
+        catch (Exception exception)
+        {
+            ReportExportFailure(exception, preview: false);
+        }
+        finally
+        {
+            _exportCancellation = null;
+            IsExporting = false;
+            ExportProgressMessage = string.Empty;
+        }
+    }
+
+    private void UpdateExportProgress(ExportProgress progress)
+    {
+        var spanish = SelectedLanguageCode == "es";
+        var label = progress.Stage switch
+        {
+            "starting" => spanish ? "Preparando la exportación…" : "Preparing export…",
+            "files" => spanish ? "Copiando archivos" : "Copying files",
+            "model_dependencies" => spanish ? "Copiando dependencias del modelo" : "Copying model dependencies",
+            "animation_package" => spanish ? "Abriendo los recursos de animación" : "Opening animation resources",
+            "animation" => spanish ? "Generando animación" : "Generating animation",
+            "motion_table" => spanish ? "Registrando la familia de animación" : "Registering animation family",
+            "references" => spanish ? "Copiando referencias del juego" : "Copying game references",
+            "loading_package" => spanish ? "Abriendo paquete de personaje" : "Opening character package",
+            "package_resources" => spanish ? "Preparando recursos del personaje" : "Preparing character resources",
+            "portraits" => spanish ? "Convirtiendo retratos" : "Converting portraits",
+            "localization" => spanish ? "Escribiendo textos" : "Writing localizations",
+            "body" => spanish ? "Escribiendo modelos de cuerpo" : "Writing body models",
+            "clothes" => spanish ? "Escribiendo ropa y calzado" : "Writing clothes and shoes",
+            "models" => spanish ? "Escribiendo modelos" : "Writing models",
+            "character_data" => spanish ? "Escribiendo datos del personaje" : "Writing character data",
+            "shop" => spanish ? "Escribiendo datos de tienda" : "Writing shop data",
+            "delivery" => spanish ? "Escribiendo datos de entrega" : "Writing delivery data",
+            "delivery_localization" => spanish ? "Escribiendo textos de entrega" : "Writing delivery text",
+            "integrity" => spanish ? "Verificando archivos" : "Verifying files",
+            "publishing" => spanish ? "Publicando la exportación" : "Publishing export",
+            _ => progress.Stage,
+        };
+        ExportProgressMessage = string.IsNullOrWhiteSpace(progress.Item)
+            ? label
+            : $"{label}\n{progress.Item}";
+    }
+
+    private void ReportExportFailure(Exception exception, bool preview)
+    {
+        GlobalLog.Error(preview ? "export_preview_failed" : "export_execution_failed", exception);
+        StatusMessage = SelectedLanguageCode == "es"
+            ? preview
+                ? "No se pudo preparar la exportación. Consulta el registro para ver el error."
+                : "No se pudo completar la exportación. Consulta el registro para ver el error."
+            : preview
+                ? "Could not prepare the export. Check the log for details."
+                : "Could not complete the export. Check the log for details.";
     }
 
     private static string GetNextExportPath(string previousPath)

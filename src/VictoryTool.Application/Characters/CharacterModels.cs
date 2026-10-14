@@ -1,4 +1,5 @@
 using System.Globalization;
+using VictoryTool.G4.Animations;
 using VictoryTool.Application.Diagnostics;
 using VictoryTool.Application.Statistics;
 using VictoryTool.CfgBin;
@@ -521,7 +522,45 @@ public sealed record CharacterDraft(
     CharacterDraftSkills Skills = default!,
     IReadOnlyList<CharacterDraftDiagnostic> Diagnostics = default!,
     bool IsDirty = true,
-    IReadOnlyList<CharacterDraftVariant>? Variants = null);
+    IReadOnlyList<CharacterDraftVariant>? Variants = null,
+    IReadOnlyList<CharacterAnimationProfile>? AnimationProfiles = null);
+
+public sealed record CharacterAnimationProfile(
+    int SchemaVersion,
+    string Producer,
+    string ModelStem,
+    string? SourceModelStem,
+    string ModelPath,
+    CharacterAnimationRig SourceRig,
+    CharacterAnimationRig TargetRig,
+    IReadOnlyList<CharacterAnimationJoint> Joints)
+{
+    public G4AvatarRecipe? AvatarRecipe { get; init; }
+    public IReadOnlyList<CharacterAnimationBank> GeneratedBanks { get; init; } = [];
+    public IReadOnlyList<CharacterAnimationPackage> GeneratedPackages { get; init; } = [];
+}
+
+public sealed record CharacterAnimationBank(string SourceResourcePath, string Type, string ResourcePath, string Sha256);
+public sealed record CharacterAnimationPackage(string Type, string ResourcePath, string Sha256);
+
+public sealed record CharacterAnimationRig(string Path, string Sha256);
+
+public sealed record CharacterAnimationJoint(
+    string Name,
+    uint NameCrc32,
+    string? Parent,
+    CharacterAnimationTransform SourceRest,
+    CharacterAnimationTransform TargetRest,
+    CharacterAnimationTransform? ModelRest,
+    IReadOnlyList<float>? MotionBasisRotation = null,
+    string? SourceParent = null,
+    string? SourceName = null,
+    uint? SourceNameCrc32 = null);
+
+public sealed record CharacterAnimationTransform(
+    IReadOnlyList<float> Translation,
+    IReadOnlyList<float> Rotation,
+    IReadOnlyList<float> Scale);
 
 public sealed record CharacterDraftIdentity(string? DisplayName, string? LocalizedName);
 
@@ -554,7 +593,8 @@ public sealed record CharacterDraftModels(
     int? EquipmentFlag2 = null,
     int? ChestSize = null,
     int? ForceKit = null,
-    string? UniformModelPath = null);
+    string? UniformModelPath = null,
+    string? ShoesModelPath = null);
 
 public enum CharacterSkillPath
 {

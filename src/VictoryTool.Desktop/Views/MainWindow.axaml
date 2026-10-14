@@ -48,7 +48,7 @@
         </Border>
 
         <Border Classes="panel fade-surface" Opacity="{Binding IsIncorporationVisible, Converter={StaticResource BooleanToOpacity}}" IsHitTestVisible="{Binding IsIncorporationVisible}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Padding="32" DragDrop.AllowDrop="True" DragDrop.DragOver="BatchDragOver" DragDrop.Drop="BatchDrop">
-          <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="16">
+          <Grid RowDefinitions="Auto,Auto,*,Auto,Auto" RowSpacing="16">
             <Grid ColumnDefinitions="*,Auto">
               <TextBlock Classes="page-title" Text="{Binding WizardText.IncorporationTitle}" />
               <Button Grid.Column="1" Command="{Binding PreviousWizardStepCommand}" Content="{Binding WizardText.Back}" IsEnabled="{Binding CanGoBack}" />
@@ -67,7 +67,23 @@
                 </DataTemplate>
               </ListBox.ItemTemplate>
             </ListBox>
-            <Button Grid.Row="3" Classes="primary" HorizontalAlignment="Right" Click="ExportBatch" Content="{Binding WizardText.Export}" />
+            <StackPanel Grid.Row="3" Orientation="Horizontal" VerticalAlignment="Center" Spacing="12">
+              <ToggleButton Classes="primary"
+                            x:Name="GenerateAnimationsToggle"
+                            Content="{Binding WizardText.GenerateAnimations}"
+                            IsChecked="{Binding GenerateAnimationsEnabled}" />
+              <CheckBox Content="{Binding WizardText.ChrAnimations}"
+                        x:Name="GenerateChrAnimationsCheckBox"
+                        IsChecked="{Binding GenerateChrAnimations}"
+                        IsEnabled="{Binding GenerateAnimationsEnabled}"
+                        VerticalAlignment="Center" />
+              <CheckBox Content="{Binding WizardText.EventAnimations}"
+                        x:Name="GenerateEventAnimationsCheckBox"
+                        IsChecked="{Binding GenerateEventAnimations}"
+                        IsEnabled="{Binding GenerateAnimationsEnabled}"
+                        VerticalAlignment="Center" />
+            </StackPanel>
+            <Button Grid.Row="4" Classes="primary" HorizontalAlignment="Right" Click="ExportBatch" Content="{Binding WizardText.Export}" />
           </Grid>
         </Border>
 
@@ -236,6 +252,10 @@
                       <DataTemplate><TextBlock Text="{Binding Name}" /></DataTemplate>
                     </ComboBox.ItemTemplate>
                   </ComboBox>
+                  <Button Content="{Binding WizardText.SelectFile}" Click="SelectShoesModel" />
+                  <TextBlock Classes="muted"
+                             Text="{Binding ActiveDraftShoesModelDisplayPath}"
+                             TextTrimming="CharacterEllipsis" />
                 </StackPanel>
                 <StackPanel Grid.Column="2" Spacing="3">
                   <TextBlock Classes="muted" Text="{Binding WizardText.Gloves}" />
@@ -393,6 +413,17 @@
 
     <Border Grid.Row="2" Background="{DynamicResource DockNavyBrush}" BorderBrush="{DynamicResource LowBorderBrush}" BorderThickness="0,1,0,0" Padding="20,0">
       <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8"><TextBlock VerticalAlignment="Center" Text="{Binding StatusMessage}" /><Button Grid.Column="1" Command="{Binding OpenLogCommand}" Content="{Binding LogButtonLabel}" /><Button Grid.Column="2" Command="{Binding PreviousWizardStepCommand}" Content="{Binding WizardText.Back}" IsEnabled="{Binding CanGoBack}" /><Button Grid.Column="3" Classes="primary" Command="{Binding NextWizardStepCommand}" Content="{Binding WizardText.Next}" IsEnabled="{Binding CanGoNext}" /></Grid>
+    </Border>
+
+    <Border Grid.RowSpan="3" Background="#B807111F" IsVisible="{Binding IsExporting}" IsHitTestVisible="{Binding IsExporting}">
+      <Border Classes="panel" Width="520" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="24">
+        <StackPanel Spacing="16">
+          <TextBlock Classes="section-title" Text="{Binding WizardText.Export}" />
+          <ProgressBar IsIndeterminate="True" Height="8" />
+          <TextBlock Classes="muted" Text="{Binding ExportProgressMessage}" TextWrapping="Wrap" MaxHeight="90" />
+          <Button HorizontalAlignment="Right" Click="CancelExport" Content="{Binding CancelExportLabel}" />
+        </StackPanel>
+      </Border>
     </Border>
   </Grid>
 </Window>

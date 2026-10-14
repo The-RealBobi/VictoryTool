@@ -108,6 +108,12 @@ public sealed partial class MainWindow : Window
             await viewModel.ExecuteExportAsync();
     }
 
+    private void CancelExport(object? sender, RoutedEventArgs eventArgs)
+    {
+        if (DataContext is ViewModels.MainWindowViewModel viewModel)
+            viewModel.CancelExport();
+    }
+
     private static string GetAvailableExportPath(string parentPath)
     {
         var stem = $"VictoryTool Export {DateTime.Now:yyyyMMdd-HHmmss-fff}";
@@ -198,6 +204,13 @@ public sealed partial class MainWindow : Window
         {
             viewModel.ActiveDraftUniformModelPath = path;
         }
+    }
+
+    private async void SelectShoesModel(object? sender, RoutedEventArgs eventArgs)
+    {
+        if (DataContext is ViewModels.MainWindowViewModel viewModel
+            && await SelectAppearanceFileAsync("Select the custom shoes model", "Victory Road 3D model", "*.g4md") is { } path)
+            viewModel.ActiveDraftShoesModelPath = path;
     }
 
     private void SkinColorPickerOpened(object? sender, EventArgs eventArgs)

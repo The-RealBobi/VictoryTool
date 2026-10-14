@@ -1,5 +1,6 @@
 using VictoryTool.Application.Diagnostics;
 using System.Globalization;
+using System.Security.Cryptography;
 using VictoryTool.Application.Characters;
 using VictoryTool.Application.Assets;
 using VictoryTool.Application.Packages;
@@ -7,6 +8,7 @@ using VictoryTool.Application.Profiles;
 using VictoryTool.Application.Projects;
 using VictoryTool.CfgBin;
 using VictoryTool.G4.Textures;
+using VictoryTool.G4.Animations;
 
 namespace VictoryTool.Application.Exporting;
 
@@ -23,6 +25,8 @@ public enum AcquisitionMode
     Constellation,
     Both,
 }
+
+public sealed record AnimationGenerationSelection(bool Enabled, bool Chr, bool Event);
 
 public sealed record ExportPlan(
     ExportPlatform Platform,
@@ -48,10 +52,29 @@ public sealed record ExportPlan(
     public IReadOnlyList<ExportCharacterDeliveryOperation> CharacterDeliveryOperations { get; init; } = [];
     public IReadOnlyList<ExportDeliveryLocalizationOperation> DeliveryLocalizationOperations { get; init; } = [];
     public IReadOnlyList<ExportPortraitOperation> PortraitOperations { get; init; } = [];
+    public IReadOnlyList<AnimationGenerationRequest> AnimationGenerationRequests { get; init; } = [];
     public bool CanExport => Diagnostics.All(diagnostic => diagnostic.Severity != DiagnosticSeverity.Error);
 }
 
 public sealed record ExportPackagePlan(Guid BatchEntryId, string PackagePath, string SymbolicId);
+
+public sealed record AnimationBankSource(string Path, string Type, string ResourcePath, bool IsPrimaryFamily)
+{
+    public bool IsEvent { get; init; }
+    public string? SourceIdentifier { get; init; }
+    public string? DestinationResourcePath { get; init; }
+    public string? GeneratedResourcePath { get; init; }
+    public string? GeneratedChecksum { get; init; }
+    public string? GeneratedPackageResourcePath { get; init; }
+    public string? GeneratedPackageChecksum { get; init; }
+}
+
+public sealed record AnimationGenerationRequest(Guid BatchEntryId, string PackagePath, string DumpRoot, string Category,
+    CharacterAnimationProfile Profile, CharacterMotionFamily Family, IReadOnlyList<AnimationBankSource> Banks,
+    string? GeneratedFamilyName = null, uint? GeneratedFamilyCrc32 = null)
+{
+    public string? GeneratedUniformName { get; init; }
+}
 
 public sealed record ExportResourceOperation(
     Guid BatchEntryId,
@@ -141,7 +164,9 @@ public sealed record ExportCharacterBodyOperation(
     int SourceBodyModelId,
     int BodyModelId,
     string BodyModelPath,
-    string? SkeletonModelPath = null);
+    string? SkeletonModelPath = null,
+    int? MotionFamilyCrc32 = null,
+    string? SkeletonTemplatePath = null);
 
 public sealed record ExportCharacterClothesOperation(
     Guid BatchEntryId,
@@ -151,7 +176,12 @@ public sealed record ExportCharacterClothesOperation(
     string SourceResourceKey,
     string ResourceKey,
     string ModelPath,
-    string TexturePath);
+    string TexturePath,
+    int ClothesInfoType,
+    bool IsShoes = false,
+    string? SourceModelPath = null,
+    string? CustomModelPath = null,
+    int? SourceInfoIndex = null);
 
 public sealed record ExportShopCharacterOperation(
     Guid BatchEntryId,
@@ -194,6 +224,15 @@ public interface IExportPlanner
         AcquisitionMode acquisition,
         string outputPath,
         CancellationToken cancellationToken);
+
+    Task<ExportPlan> CreatePlanAsync(
+        ModProjectDocument project,
+        GameDumpProfile profile,
+        ExportPlatform platform,
+        AcquisitionMode acquisition,
+        string outputPath,
+        CancellationToken cancellationToken,
+        AnimationGenerationSelection? animationSelection);
 }
 
 public sealed class ExportPlanner : IExportPlanner
@@ -296,6 +335,16 @@ public sealed class ExportPlanner : IExportPlanner
         AcquisitionMode acquisition,
         string outputPath,
         CancellationToken cancellationToken)
+        => await CreatePlanAsync(project, profile, platform, acquisition, outputPath, cancellationToken, null);
+
+    public async Task<ExportPlan> CreatePlanAsync(
+        ModProjectDocument project,
+        GameDumpProfile profile,
+        ExportPlatform platform,
+        AcquisitionMode acquisition,
+        string outputPath,
+        CancellationToken cancellationToken,
+        AnimationGenerationSelection? animationSelection)
     {
         ArgumentNullException.ThrowIfNull(profile);
         using var operation = GlobalLog.BeginOperation("export_plan_build", new Dictionary<string, object?>
@@ -358,12 +407,144 @@ public sealed class ExportPlanner : IExportPlanner
             var characterModelOperations = new List<ExportCharacterModelOperation>();
             var characterBodyOperations = new List<ExportCharacterBodyOperation>();
             var portraitRequests = new List<(Guid BatchEntryId, string PackagePath, string StandardPath, string UniformPath)>();
+            var animationRequests = new List<AnimationGenerationRequest>();
             var characterClothesOperations = new List<ExportCharacterClothesOperation>();
             var expectedVariantCount = 0;
             foreach (var entry in project.Batch.Where(entry => entry.IsEnabled))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var manifest = await _packageService.LoadManifestAsync(entry.PackagePath, cancellationToken);
+                var models = manifest.Character.Models;
+                var uniformPath = models?.UniformModelPath;
+                var animationProfiles = manifest.Character.AnimationProfiles ?? [];
+                var customFaceMetadataPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var customHeadPath = models?.HeadModelPath?.Replace('\\', '/').TrimStart('/');
+                if (customHeadPath?.StartsWith("_face/99_CUSTOM/", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    var authoredMetadata = manifest.Resources
+                        .Select(resource => resource.VirtualPath.Replace('\\', '/').TrimStart('/'))
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var metadataStem = Path.ChangeExtension(customHeadPath, null);
+                    if (!authoredMetadata.Contains($"common/chr/{metadataStem}.objbin")
+                        || !authoredMetadata.Contains($"common/chr/{metadataStem}.clobin"))
+                    {
+                        var metadataResult = _modelDependencyResolver.ResolveCustomFaceMetadata(profile, customHeadPath);
+                        modelDependencies.AddRange(metadataResult.Dependencies
+                            .Where(dependency => !authoredMetadata.Contains(dependency.VirtualPath))
+                            .Select(dependency => new ExportModelDependencyOperation(
+                                entry.Id, dependency.Kind, dependency.VirtualPath, dependency.SourcePath)));
+                        customFaceMetadataPaths.UnionWith(metadataResult.Dependencies.Select(dependency => dependency.VirtualPath));
+                        modelDiagnostics.AddRange(metadataResult.Diagnostics);
+                    }
+                }
+                var animationProfile = animationProfiles.FirstOrDefault(profile =>
+                    string.Equals(
+                        NormalizeBodyModelPath(profile.ModelPath),
+                        NormalizeBodyModelPath(uniformPath),
+                        StringComparison.OrdinalIgnoreCase));
+                if (animationProfile is null
+                    && uniformPath?.StartsWith("_uniform/99_CUSTOM/", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    foreach (var modelPath in new[]
+                             {
+                                 models?.BodyModelPath,
+                                 models?.HeadModelPath,
+                                 models?.ShoesModelPath,
+                             })
+                    {
+                        if (modelPath is null) continue;
+                        animationProfile = animationProfiles.FirstOrDefault(profile =>
+                            profile.AvatarRecipe is not null
+                            && string.Equals(
+                                NormalizeBodyModelPath(profile.ModelPath),
+                                NormalizeBodyModelPath(modelPath),
+                                StringComparison.OrdinalIgnoreCase));
+                        if (animationProfile is not null) break;
+                    }
+                }
+                if (uniformPath?.StartsWith("_uniform/99_CUSTOM/", StringComparison.OrdinalIgnoreCase) == true
+                    && animationProfile is { SchemaVersion: >= 2, Joints.Count: > 0 }
+                    && (animationProfile.AvatarRecipe is not null || animationProfile.GeneratedPackages.Count > 0 || animationProfile.GeneratedBanks.Count > 0)
+                    && (animationProfile.AvatarRecipe is null || animationSelection?.Enabled != false))
+                {
+                    try
+                    {
+                        if (animationProfile.AvatarRecipe is not null && animationSelection is { Enabled: true, Chr: false, Event: false })
+                            throw new InvalidDataException("Select CHR animations, EVENT animations, or both.");
+                        var family = new CharacterMotionFamilyResolver().Resolve(
+                            profile.RootPath,
+                            animationProfile.SourceModelStem ?? manifest.Character.SourceCharacterId
+                                ?? throw new InvalidDataException("The character package has no source character ID for motion-family routing."));
+                        ValidateAnimationRigProfile(profile.RootPath, manifest, family, animationProfile);
+                        var resolver = new CharacterMotionFamilyResolver();
+                        var resolvedBanks = animationProfile.AvatarRecipe is { } recipe
+                            ? AvatarAnimationResources.Select(profile.RootPath,
+                                animationSelection is { Enabled: true }
+                                    ? recipe with { ExportChr = animationSelection.Chr, ExportEvent = animationSelection.Event }
+                                    : recipe,
+                                resolver, family, animationProfile, cancellationToken)
+                            : resolver.ResolveBanks(profile.RootPath, family, animationProfile);
+                        var packageByRoute = new Dictionary<string, CharacterAnimationPackage>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var generatedPackage in animationProfile.GeneratedPackages)
+                        {
+                            var routes = resolvedBanks.Where(bank => bank.Type == generatedPackage.Type).ToArray();
+                            var primaryRoutes = routes.Where(bank => bank.IsPrimaryFamily).ToArray();
+                            var route = primaryRoutes.Length == 1 ? primaryRoutes[0]
+                                : primaryRoutes.Length > 1 ? throw new InvalidDataException(
+                                    $"Motion family has multiple primary routes for p{generatedPackage.Type}.")
+                                : routes.Length == 1 ? routes[0]
+                                : routes.Length == 0 ? null
+                                : throw new InvalidDataException(
+                                    $"Motion family has ambiguous routes for p{generatedPackage.Type}.");
+                            if (route is null) continue;
+                            if (!packageByRoute.TryAdd(route.ResourcePath, generatedPackage))
+                                throw new InvalidDataException($"Multiple generated G4PK banks match '{route.ResourcePath}'.");
+                        }
+
+                        var generatedBanks = animationProfile.GeneratedBanks.ToDictionary(
+                            bank => bank.SourceResourcePath,
+                            StringComparer.OrdinalIgnoreCase);
+                        var packageResources = manifest.Resources.ToDictionary(
+                            resource => resource.VirtualPath,
+                            StringComparer.OrdinalIgnoreCase);
+                        var banks = resolvedBanks.Select(bank =>
+                        {
+                            if (animationProfile.AvatarRecipe is not null) return bank;
+                            if (packageByRoute.TryGetValue(bank.ResourcePath, out var generatedPackage))
+                            {
+                                if (!packageResources.TryGetValue(generatedPackage.ResourcePath, out var resource)
+                                    || !resource.Checksum.Equals(generatedPackage.Sha256, StringComparison.OrdinalIgnoreCase))
+                                    throw new InvalidDataException($"Generated G4PK bank '{generatedPackage.ResourcePath}' is missing or has a mismatched checksum.");
+                                return bank with
+                                {
+                                    GeneratedPackageResourcePath = generatedPackage.ResourcePath,
+                                    GeneratedPackageChecksum = generatedPackage.Sha256,
+                                };
+                            }
+                            if (!generatedBanks.TryGetValue(bank.ResourcePath, out var generated)) return null;
+                            if (!packageResources.TryGetValue(generated.ResourcePath, out var generatedResource)
+                                || !generatedResource.Checksum.Equals(generated.Sha256, StringComparison.OrdinalIgnoreCase))
+                                throw new InvalidDataException($"Generated G4MT bank '{generated.ResourcePath}' is missing or has a mismatched checksum.");
+                            return bank with
+                            {
+                                GeneratedResourcePath = generated.ResourcePath,
+                                GeneratedChecksum = generated.Sha256,
+                            };
+                        }).Where(bank => bank is not null).Cast<AnimationBankSource>().ToArray();
+                        if (banks.Length == 0)
+                            throw new InvalidDataException("No generated G4_Blender banks match the character's resolved motion routes.");
+                        animationRequests.Add(new AnimationGenerationRequest(
+                            entry.Id, entry.PackagePath, profile.RootPath, "All", animationProfile, family, banks));
+                    }
+                    catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException or NotSupportedException)
+                    {
+                        modelDiagnostics.Add(new Diagnostic(
+                            "animation.family_unresolved",
+                            DiagnosticSeverity.Error,
+                            $"Animation family for '{animationProfile.SourceModelStem}' could not be resolved: {exception.Message}",
+                            "Verify that the dump contains matching CHARA_BASE_INFO, CHARA_MODEL_INFO, CHARA_BODY_INFO and CHARA_MOTION_INFO records."));
+                    }
+                }
                 var storedVariants = manifest.Character.Variants is { Count: > 0 }
                     ? manifest.Character.Variants
                     : [new CharacterDraftVariant(
@@ -455,6 +636,8 @@ public sealed class ExportPlanner : IExportPlanner
                             entry.Id,
                             manifest,
                             modelOperation,
+                            customFaceMetadataPaths,
+                            animationProfile,
                             out var bodyOperation,
                             out var bodyDiagnostic))
                     {
@@ -491,6 +674,19 @@ public sealed class ExportPlanner : IExportPlanner
                 {
                     modelDiagnostics.Add(clothesDiagnostic);
                 }
+                if (TryCreateCharacterShoesOperation(
+                        profile, entry.Id, manifest, out var shoesOperation, out var shoesDiagnostic))
+                {
+                    if (shoesOperation is not null)
+                    {
+                        characterClothesOperations.Add(shoesOperation);
+                        requests.Add(new ExportIdRequest(entry.Id, "shoesModel", $"{symbolicId}.shoes"));
+                    }
+                }
+                else if (shoesDiagnostic is not null)
+                {
+                    modelDiagnostics.Add(shoesDiagnostic);
+                }
 
                 if (acquisition is AcquisitionMode.Shop or AcquisitionMode.Both)
                 {
@@ -523,9 +719,12 @@ public sealed class ExportPlanner : IExportPlanner
                 resources.AddRange(manifest.Resources.Select(resource => new ExportResourceOperation(
                     entry.Id,
                     entry.PackagePath,
-                    resource.VirtualPath,
+                    resource.VirtualPath.StartsWith("assets/portraits/", StringComparison.OrdinalIgnoreCase)
+                        ? $"assets/portraits/{entry.Id:N}/{Path.GetFileName(resource.VirtualPath)}"
+                        : resource.VirtualPath,
                     resource.Checksum,
-                    resource.ByteLength)));
+                    resource.ByteLength,
+                    resource.VirtualPath)));
                 var standardPortrait = manifest.Resources.FirstOrDefault(resource =>
                     resource.VirtualPath.Equals("assets/portraits/standard.png", StringComparison.OrdinalIgnoreCase));
                 var uniformPortrait = manifest.Resources.FirstOrDefault(resource =>
@@ -568,6 +767,7 @@ public sealed class ExportPlanner : IExportPlanner
                              manifest.Character.Models?.HeadModelPath,
                              manifest.Character.Models?.BodyModelPath,
                              manifest.Character.Models?.UniformModelPath,
+                             manifest.Character.Models?.ShoesModelPath,
                          }.Where(path => !string.IsNullOrWhiteSpace(path))
                          .Distinct(StringComparer.OrdinalIgnoreCase))
                 {
@@ -578,7 +778,9 @@ public sealed class ExportPlanner : IExportPlanner
                         && string.Equals(modelPath, manifest.Character.Models.UniformModelPath, StringComparison.OrdinalIgnoreCase);
                     var isCustomBody = manifest.Character.Models?.BodyModelPath?.StartsWith("_uniform/99_CUSTOM/", StringComparison.OrdinalIgnoreCase) == true
                         && string.Equals(modelPath, manifest.Character.Models.BodyModelPath, StringComparison.OrdinalIgnoreCase);
-                    if (isCustomHead || isCustomUniform || isCustomBody)
+                    var isCustomShoes = manifest.Character.Models?.ShoesModelPath?.StartsWith("_uniform/99_CUSTOM/", StringComparison.OrdinalIgnoreCase) == true
+                        && string.Equals(modelPath, manifest.Character.Models.ShoesModelPath, StringComparison.OrdinalIgnoreCase);
+                    if (isCustomHead || isCustomUniform || isCustomBody || isCustomShoes)
                         continue;
                     var result = _modelDependencyResolver.Resolve(profile, platform, modelPath!);
                     modelDependencies.AddRange(result.Dependencies.Select(dependency =>
@@ -589,7 +791,7 @@ public sealed class ExportPlanner : IExportPlanner
                             dependency.SourcePath)));
                     modelDiagnostics.AddRange(result.Diagnostics);
                 }
-                AddNativeCustomUniformCompanionDependencies(
+                AddNativeCustomUniformObjectMetadata(
                     profile,
                     entry.Id,
                     manifest,
@@ -637,12 +839,52 @@ public sealed class ExportPlanner : IExportPlanner
                 && modelDiagnostics.All(diagnostic => diagnostic.Severity != DiagnosticSeverity.Error))
                 diagnostics.RemoveAll(diagnostic => diagnostic.Code == "export.dependencies_unresolved");
             var assignedIds = AllocateIds(requests, inventory);
-            resources = RewriteCustomResourceNames(resources, assignedIds);
+            (characterBodyOperations, characterModelOperations) = AllocateCustomBodyModelIds(
+                profile.RootPath, characterBodyOperations, characterModelOperations, assignedIds);
+            resources = RewriteCustomResourceNames(resources, assignedIds, characterClothesOperations);
             modelDependencies = RewriteCustomModelDependencyNames(modelDependencies, assignedIds);
             characterModelOperations = RewriteCustomModelNames(characterModelOperations, assignedIds);
             characterBodyOperations = RewriteCustomBodyNames(characterBodyOperations, assignedIds);
             characterClothesOperations = RewriteCustomClothesNames(characterClothesOperations, assignedIds);
             characterModelOperations = RewriteCustomUniformIds(characterModelOperations, characterClothesOperations);
+            var resolvedAnimationRequests = animationRequests.Select(request =>
+            {
+                var familyName = ResolveGeneratedMotionFamilyName(assignedIds.Single(assignment =>
+                    assignment.BatchEntryId == request.BatchEntryId && assignment.Domain == "character").ResolvedKey);
+                var uniformName = characterClothesOperations.FirstOrDefault(operation =>
+                    operation.BatchEntryId == request.BatchEntryId && !operation.IsShoes)?.ResourceKey;
+                var banks = request.Banks.Select(bank => bank with
+                {
+                    DestinationResourcePath = ResolveGeneratedMotionPath(bank, familyName, uniformName),
+                }).ToArray();
+                var destinations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var bank in banks)
+                {
+                    if (!destinations.Add(bank.DestinationResourcePath!))
+                        throw new InvalidDataException($"Multiple source motion banks resolve to '{bank.DestinationResourcePath}'.");
+                }
+                return request with
+                {
+                    Banks = banks,
+                    GeneratedFamilyName = familyName,
+                    GeneratedFamilyCrc32 = CharacterMotionInfoT2bWriter.Crc32(familyName),
+                    GeneratedUniformName = uniformName,
+                };
+            }).ToArray();
+            foreach (var animation in resolvedAnimationRequests.Where(request => request.Banks.Any(bank => !bank.IsEvent)))
+            {
+                var tablePath = Path.Combine(profile.RootPath,
+                    animation.Family.MotionTablePath.Replace('/', Path.DirectorySeparatorChar));
+                var table = CfgBinDocument.Read(File.ReadAllBytes(tablePath));
+                if (table.Entries.Any(entry => entry.Name == "CHARA_MOTION_INFO" && entry.Values.Count >= 1
+                        && unchecked((uint)GetCfgInteger(entry.Values[0])) == animation.GeneratedFamilyCrc32!.Value))
+                    diagnostics.Add(new Diagnostic("animation.family_crc_collision", DiagnosticSeverity.Error,
+                        $"Generated animation family '{animation.GeneratedFamilyName}' collides with an existing motion registration.",
+                        "Use a character ID whose CRC32 is not registered in CHARA_MOTION_INFO."));
+                characterBodyOperations = characterBodyOperations.Select(body => body.BatchEntryId == animation.BatchEntryId
+                    ? body with { MotionFamilyCrc32 = unchecked((int)animation.GeneratedFamilyCrc32!.Value) }
+                    : body).ToList();
+            }
             var portraitOperations = portraitRequests.Select(request =>
             {
                 var internalName = assignedIds.Single(assignment =>
@@ -666,7 +908,7 @@ public sealed class ExportPlanner : IExportPlanner
                 FileOperations = fileOperations,
                 ModelDependencyOperations = modelDependencies
                     .DistinctBy(
-                        operation => $"{operation.BatchEntryId:N}\0{operation.VirtualPath}",
+                        operation => $"{operation.VirtualPath}\0{Path.GetFullPath(operation.SourcePath)}",
                         StringComparer.OrdinalIgnoreCase)
                     .OrderBy(operation => operation.BatchEntryId)
                     .ThenBy(operation => operation.VirtualPath, StringComparer.Ordinal)
@@ -679,6 +921,7 @@ public sealed class ExportPlanner : IExportPlanner
                 CharacterDeliveryOperations = deliveryOperations,
                 DeliveryLocalizationOperations = deliveryLocalizations,
                 PortraitOperations = portraitOperations,
+                AnimationGenerationRequests = resolvedAnimationRequests,
                 AffectedFiles = fileOperations.Select(operation => operation.DestinationPath)
                     .Concat(resources.Select(operation => operation.DestinationPath))
                     .Concat(portraitOperations.Select(operation => operation.DestinationPath))
@@ -919,7 +1162,14 @@ public sealed class ExportPlanner : IExportPlanner
             && !TryFindLaytonModelId(tables[0], out modelTemplateId, out diagnostic))
             return true;
         int? bodyModelId = null;
-        if (!usesLaytonModelTemplate)
+        var bodyPathWasExplicitlyCleared = manifest.Character.Fields.TryGetValue(
+                "Models.BodyModelPath", out var bodyPathField)
+            && string.IsNullOrWhiteSpace(bodyPathField);
+        if (bodyPathWasExplicitlyCleared)
+        {
+            bodyModelId = 0;
+        }
+        else if (!usesLaytonModelTemplate)
         {
             var requestedBodyPath = NormalizeBodyModelPath(manifest.Character.Models?.BodyModelPath);
             var sourceBodyModelId = TryReadInt(manifest.Character.Fields, "Advanced.BodyModelId");
@@ -984,28 +1234,46 @@ public sealed class ExportPlanner : IExportPlanner
         Guid batchEntryId,
         VrCharaManifest manifest,
         ExportCharacterModelOperation modelOperation,
+        IReadOnlySet<string> resolvedModelMetadataPaths,
+        CharacterAnimationProfile? animationProfile,
         out ExportCharacterBodyOperation? operation,
         out Diagnostic? diagnostic)
     {
         operation = null;
         diagnostic = null;
+        if (manifest.Character.Fields.TryGetValue("Models.BodyModelPath", out var bodyPathField)
+            && string.IsNullOrWhiteSpace(bodyPathField))
+            return true;
         var requestedBodyPath = NormalizeBodyModelPath(manifest.Character.Models?.BodyModelPath);
         var isCustomBody = requestedBodyPath?.StartsWith("_uniform/99_CUSTOM/", StringComparison.OrdinalIgnoreCase) == true;
         var uniformPath = manifest.Character.Models?.UniformModelPath?.Replace('\\', '/').TrimStart('/');
         var isCustomUniform = uniformPath?.StartsWith("_uniform/99_CUSTOM/", StringComparison.OrdinalIgnoreCase) == true;
         var headPath = manifest.Character.Models?.HeadModelPath?.Replace('\\', '/').TrimStart('/');
-        var skeletonPath = isCustomUniform && headPath?.StartsWith("_face/99_CUSTOM/", StringComparison.OrdinalIgnoreCase) == true
+        var faceSkeletonPath = isCustomUniform && headPath?.StartsWith("_face/99_CUSTOM/", StringComparison.OrdinalIgnoreCase) == true
             ? Path.ChangeExtension(headPath, ".objbin")
             : null;
+        var uniformSkeletonPath = isCustomUniform ? Path.ChangeExtension(uniformPath, ".objbin") : null;
         var authoredPaths = manifest.Resources
             .Select(resource => resource.VirtualPath.Replace('\\', '/').TrimStart('/'))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var hasCustomG4sk = skeletonPath is not null
+        authoredPaths.UnionWith(resolvedModelMetadataPaths);
+        var hasUniformSkeleton = uniformSkeletonPath is not null
+            && authoredPaths.Contains($"common/chr/{Path.ChangeExtension(uniformPath, ".g4sk")}");
+        var hasUniformObjectConfig = uniformSkeletonPath is not null
+            && authoredPaths.Contains($"common/chr/{uniformSkeletonPath}");
+        var hasFaceG4sk = faceSkeletonPath is not null
             && authoredPaths.Contains($"common/chr/{Path.ChangeExtension(headPath, ".g4sk")}");
-        var hasCustomObjectConfig = skeletonPath is not null
-            && authoredPaths.Contains($"common/chr/{skeletonPath}")
+        var hasFaceObjectConfig = faceSkeletonPath is not null
+            && authoredPaths.Contains($"common/chr/{faceSkeletonPath}")
             && authoredPaths.Contains($"common/chr/{Path.ChangeExtension(headPath, ".clobin")}");
-        if (isCustomUniform && hasCustomG4sk && !hasCustomObjectConfig)
+        var useFaceSkeleton = hasFaceG4sk && hasFaceObjectConfig
+            && animationProfile is not null
+            && string.Equals(NormalizeBodyModelPath(animationProfile.ModelPath),
+                NormalizeBodyModelPath(headPath), StringComparison.OrdinalIgnoreCase);
+        var useUniformSkeleton = hasUniformSkeleton && !useFaceSkeleton;
+        var skeletonPath = useUniformSkeleton ? uniformSkeletonPath : faceSkeletonPath;
+        var hasCustomSkeleton = useUniformSkeleton || (hasFaceG4sk && hasFaceObjectConfig);
+        if (isCustomUniform && !useUniformSkeleton && hasFaceG4sk && !hasFaceObjectConfig)
         {
             diagnostic = new Diagnostic(
                 "export.custom_skeleton_object_config_missing",
@@ -1014,7 +1282,6 @@ public sealed class ExportPlanner : IExportPlanner
                 "Export the character through G4_Blender so its custom skeleton object config is included.");
             return false;
         }
-        var hasCustomSkeleton = hasCustomG4sk && hasCustomObjectConfig;
         if (!isCustomBody && !hasCustomSkeleton)
             return true;
 
@@ -1049,44 +1316,47 @@ public sealed class ExportPlanner : IExportPlanner
                     "Use a unique original body model ID from the source model registry.");
                 return false;
             }
-            if (existing.Length == 1)
+            if (existing.Length == 1 && isCustomBody && !hasCustomSkeleton)
             {
                 var existingPath = NormalizeBodyModelPath(existing[0].Values[2].Value as string);
-                if (isCustomBody && string.Equals(existingPath, requestedBodyPath, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(existingPath, requestedBodyPath, StringComparison.OrdinalIgnoreCase))
                     return true;
-
-                var originalUniformModelId = TryReadInt(manifest.Character.Fields, "Models.UniformModel");
-                if (originalUniformModelId is { } candidate
-                    && candidate != bodyModelId.Value
-                    && !document.Entries.Any(entry => entry.Name == "CHARA_BODY_INFO"
-                        && entry.Values.Count >= 1
-                        && GetCfgInteger(entry.Values[0]) == candidate))
-                {
-                    bodyModelId = candidate;
-                    existing = [];
-                }
             }
-            if (existing.Length == 1)
+
+            var sourceBodyModelId = hasCustomSkeleton && !isCustomBody
+                ? TryReadInt(manifest.Character.Fields, "Advanced.BodyModelId")
+                : null;
+            var sourceBody = sourceBodyModelId is { } originalBodyModelId
+                ? document.Entries.SingleOrDefault(entry =>
+                    entry.Name == "CHARA_BODY_INFO"
+                    && entry.Values.Count >= 7
+                    && GetCfgInteger(entry.Values[0]) == originalBodyModelId)
+                : null;
+            if (sourceBody is null)
             {
-                var existingPath = NormalizeBodyModelPath(existing[0].Values[2].Value as string);
+                var sourceModel = document.Entries.SingleOrDefault(entry =>
+                    entry.Name == "CHARA_MODEL_INFO"
+                    && entry.Values.Count >= 5
+                    && GetCfgInteger(entry.Values[0]) == modelOperation.SourceModelId);
+                sourceBodyModelId = sourceModel is null ? null : checked((int)GetCfgInteger(sourceModel.Values[4]));
+                sourceBody = sourceBodyModelId is { } templateBodyModelId
+                    ? document.Entries.SingleOrDefault(entry =>
+                        entry.Name == "CHARA_BODY_INFO"
+                        && entry.Values.Count >= 7
+                        && GetCfgInteger(entry.Values[0]) == templateBodyModelId)
+                    : null;
+            }
+            if (sourceBody is null || sourceBodyModelId is null)
+            {
                 diagnostic = new Diagnostic(
-                    "export.custom_body_id_collision",
+                    "export.custom_body_template_unresolved",
                     DiagnosticSeverity.Error,
-                    $"Custom body model ID {bodyModelId} is already registered for '{existingPath}'.",
-                    "Use the original ID only when it is not already claimed by a different body path.");
+                    $"The source body row for model {modelOperation.SourceModelId} could not be resolved.",
+                    "Use a dump with a complete CHARA_MODEL_INFO to CHARA_BODY_INFO chain.");
                 return false;
             }
-
-            var sourceModel = document.Entries.SingleOrDefault(entry =>
-                entry.Name == "CHARA_MODEL_INFO"
-                && entry.Values.Count >= 5
-                && GetCfgInteger(entry.Values[0]) == modelOperation.SourceModelId);
-            var sourceBodyModelId = sourceModel is null ? long.MinValue : GetCfgInteger(sourceModel.Values[4]);
-            var sourceBody = document.Entries.SingleOrDefault(entry =>
-                entry.Name == "CHARA_BODY_INFO"
-                && entry.Values.Count >= 7
-                && GetCfgInteger(entry.Values[0]) == sourceBodyModelId);
-            if (sourceBody is null || sourceBodyModelId < int.MinValue || sourceBodyModelId > int.MaxValue)
+            var sourceBodyId = sourceBodyModelId.Value;
+            if (sourceBodyId < int.MinValue || sourceBodyId > int.MaxValue)
             {
                 diagnostic = new Diagnostic(
                     "export.custom_body_template_unresolved",
@@ -1136,13 +1406,44 @@ public sealed class ExportPlanner : IExportPlanner
                 }
             }
 
+            var bodyModelPath = isCustomBody
+                ? requestedBodyPath!
+                : isCustomUniform && hasCustomSkeleton
+                    ? NormalizeBodyModelPath(uniformPath)
+                    : templateBodyPath;
+            if (string.IsNullOrWhiteSpace(bodyModelPath))
+            {
+                diagnostic = new Diagnostic(
+                    "export.custom_body_template_unresolved",
+                    DiagnosticSeverity.Error,
+                    $"The body model path for character '{manifest.Character.SymbolicId}' is invalid.",
+                    "Provide a valid custom uniform G4MD or use a dump with a complete character model chain.");
+                return false;
+            }
+
+            var skeletonTemplatePath = useUniformSkeleton && !hasUniformObjectConfig
+                ? Path.Combine(
+                    profile.RootPath,
+                    "common/chr",
+                    ((string)sourceBody.Values[1].Value!).TrimStart('/').Replace('/', Path.DirectorySeparatorChar))
+                : null;
+            if (useUniformSkeleton && !hasUniformObjectConfig && string.IsNullOrWhiteSpace(skeletonTemplatePath))
+            {
+                diagnostic = new Diagnostic(
+                    "export.custom_uniform_skeleton_template_missing",
+                    DiagnosticSeverity.Error,
+                    $"The source body row for character '{manifest.Character.SymbolicId}' has no skeleton object-config path.",
+                    "Use a dump with a valid source CHARA_BODY_INFO skeleton path.");
+                return false;
+            }
             operation = new ExportCharacterBodyOperation(
                 batchEntryId,
                 modelOperation.ModelTablePath,
-                checked((int)sourceBodyModelId),
+                checked((int)sourceBodyId),
                 bodyModelId.Value,
-                isCustomBody ? requestedBodyPath! : templateBodyPath!,
-                hasCustomSkeleton ? skeletonPath : null);
+                bodyModelPath,
+                hasCustomSkeleton ? skeletonPath : null,
+                SkeletonTemplatePath: skeletonTemplatePath);
             return true;
         }
         catch (Exception exception) when (
@@ -1218,16 +1519,106 @@ public sealed class ExportPlanner : IExportPlanner
             template.Value.ResourceKey,
             template.Value.ResourceKey,
             $"_uniform/{template.Value.ResourceKey}/{template.Value.ResourceKey}.g4md",
-            $"_uniform/{template.Value.ResourceKey}/{template.Value.ResourceKey}.g4tx");
+            $"_uniform/{template.Value.ResourceKey}/{template.Value.ResourceKey}.g4tx",
+            FindUniformInfoType(profile.RootPath, TryReadInt(manifest.Character.Fields, "Models.UniformModel"))
+                ?? template.Value.ClothesInfoType);
         return true;
     }
 
-    private static (string TablePath, int ModelId, string ResourceKey)? FindUniformTemplate(
+    private static bool TryCreateCharacterShoesOperation(
+        GameDumpProfile profile,
+        Guid batchEntryId,
+        VrCharaManifest manifest,
+        out ExportCharacterClothesOperation? operation,
+        out Diagnostic? diagnostic)
+    {
+        operation = null;
+        diagnostic = null;
+        var path = manifest.Character.Models?.ShoesModelPath?.Replace('\\', '/').TrimStart('/');
+        if (string.IsNullOrWhiteSpace(path)
+            || !path.StartsWith("_uniform/99_CUSTOM/", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var model = $"common/chr/{path}";
+        var stem = model[..^Path.GetExtension(model).Length];
+        var authored = manifest.Resources.Select(resource => resource.VirtualPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (new[] { model, $"{stem}.g4mg", $"dx11/{stem["common/".Length..]}.g4tx" }.Any(resource => !authored.Contains(resource)))
+        {
+            diagnostic = new Diagnostic("export.custom_shoes_family_incomplete", DiagnosticSeverity.Error,
+                $"Character '{manifest.Character.SymbolicId}' has an incomplete custom shoes family.",
+                "Embed matching G4MD, G4MG and DX11 G4TX shoes resources.");
+            return false;
+        }
+
+        var sourceId = TryReadInt(manifest.Character.Fields, "Models.ShoesModel");
+        var template = FindShoesTemplate(profile.RootPath, sourceId);
+        if (template is null)
+        {
+            diagnostic = new Diagnostic("export.custom_shoes_template_unresolved", DiagnosticSeverity.Error,
+                "No compatible CHARA_PARTS_SHOES_MODEL template was found in the selected dump.",
+                "Select a dump containing a linked shoes model and info row.");
+            return false;
+        }
+        operation = new ExportCharacterClothesOperation(
+            batchEntryId,
+            Path.GetRelativePath(profile.RootPath, template.Value.TablePath).Replace(Path.DirectorySeparatorChar, '/'),
+            template.Value.ModelId,
+            0,
+            template.Value.ResourceKey,
+            template.Value.ResourceKey,
+            template.Value.ModelPath,
+            template.Value.TexturePath,
+            template.Value.InfoType,
+            IsShoes: true,
+            SourceModelPath: template.Value.ModelPath,
+            CustomModelPath: path,
+            SourceInfoIndex: template.Value.InfoIndex);
+        return true;
+    }
+
+    private static (string TablePath, int ModelId, string ResourceKey, string ModelPath, string TexturePath, int InfoType, int InfoIndex)?
+        FindShoesTemplate(string rootPath, int? preferredId)
+    {
+        foreach (var tablePath in ExpandDumpPattern(rootPath, "common/gamedata/character/chara_parts_*.cfg.bin")
+                     .OrderByDescending(path => new FileInfo(path).Length))
+        {
+            try
+            {
+                var document = CfgBinDocument.Read(File.ReadAllBytes(tablePath));
+                var infos = document.Entries.Where(entry => entry.Name == "CHARA_PARTS_SHOES_INFO").ToArray();
+                var models = document.Entries.Where(entry => entry.Name == "CHARA_PARTS_SHOES_MODEL"
+                    && entry.Values.Count >= 1
+                    && (preferredId is null || GetCfgInteger(entry.Values[0]) == preferredId.Value));
+                foreach (var model in models)
+                {
+                    var reference = document.Entries.SingleOrDefault(entry => entry.Index == model.Index + 1
+                        && entry.Name == "CHARA_PARTS_SHOES_MODEL_REF_INFO" && entry.Values.Count > 0);
+                    if (reference is null) continue;
+                    var index = checked((int)GetCfgInteger(reference.Values[0]));
+                    if ((uint)index >= (uint)infos.Length || infos[index].Values.Count < 3) continue;
+                    var info = infos[index];
+                    if (info.Values[0].Value is not string modelPath || info.Values[1].Value is not string texturePath) continue;
+                    var resourceKey = modelPath.Split('/', StringSplitOptions.RemoveEmptyEntries).ElementAtOrDefault(1)
+                        ?? throw new InvalidDataException("The shoe model path has no resource folder.");
+                    return (tablePath, checked((int)GetCfgInteger(model.Values[0])),
+                        resourceKey,
+                        modelPath, texturePath, checked((int)GetCfgInteger(info.Values[2])), index);
+                }
+            }
+            catch (InvalidDataException)
+            {
+                // Other versioned parts tables may use an unsupported container.
+            }
+        }
+        return preferredId is null ? null : FindShoesTemplate(rootPath, null);
+    }
+
+    private static (string TablePath, int ModelId, string ResourceKey, int ClothesInfoType)? FindUniformTemplate(
         string rootPath,
         string? resourceKey)
     {
         if (string.IsNullOrWhiteSpace(resourceKey)) return null;
-        var matches = new List<(string TablePath, int ModelId, string ResourceKey)>();
+        var matches = new List<(string TablePath, int ModelId, string ResourceKey, int ClothesInfoType)>();
         foreach (var path in ExpandDumpPattern(rootPath, "common/gamedata/character/chara_parts_*.cfg.bin"))
         {
             try
@@ -1239,12 +1630,14 @@ public sealed class ExportPlanner : IExportPlanner
                         && string.Equals(entry.Values[1].Value as string, resourceKey, StringComparison.Ordinal))
                     .ToArray();
                 var infoPath = $"_uniform/{resourceKey}/{resourceKey}.g4md";
-                if (!document.Entries.Any(entry => entry.Name == "CHARA_PARTS_CLOTHES_INFO"
+                var info = document.Entries.SingleOrDefault(entry => entry.Name == "CHARA_PARTS_CLOTHES_INFO"
                         && entry.Values.Count >= 22
-                        && string.Equals(entry.Values[0].Value as string, infoPath, StringComparison.Ordinal)))
+                        && string.Equals(entry.Values[0].Value as string, infoPath, StringComparison.Ordinal));
+                if (info is null)
                     continue;
                 foreach (var modelRow in modelRows)
-                    matches.Add((path, checked((int)GetCfgInteger(modelRow.Values[0])), resourceKey));
+                    matches.Add((path, checked((int)GetCfgInteger(modelRow.Values[0])), resourceKey,
+                        checked((int)GetCfgInteger(info.Values[2]))));
             }
             catch (InvalidDataException)
             {
@@ -1254,6 +1647,37 @@ public sealed class ExportPlanner : IExportPlanner
             }
         }
         return matches.Count == 1 ? matches[0] : null;
+    }
+
+    private static int? FindUniformInfoType(string rootPath, int? uniformModelId)
+    {
+        if (uniformModelId is null) return null;
+        var matches = new HashSet<int>();
+        foreach (var path in ExpandDumpPattern(rootPath, "common/gamedata/character/chara_parts_*.cfg.bin"))
+        {
+            try
+            {
+                var document = CfgBinDocument.Read(File.ReadAllBytes(path));
+                var infoRows = document.Entries.Where(entry => entry.Name == "CHARA_PARTS_CLOTHES_INFO").ToArray();
+                foreach (var model in document.Entries.Where(entry => entry.Name == "CHARA_PARTS_CLOTHES_MODEL"
+                             && entry.Values.Count >= 2
+                             && GetCfgInteger(entry.Values[0]) == uniformModelId.Value))
+                {
+                    var reference = document.Entries.SingleOrDefault(entry => entry.Index == model.Index + 1
+                        && entry.Name == "CHARA_PARTS_CLOTHES_MODEL_REF_INFO"
+                        && entry.Values.Count >= 1);
+                    if (reference is null) continue;
+                    var infoIndex = checked((int)GetCfgInteger(reference.Values[0]));
+                    if ((uint)infoIndex >= (uint)infoRows.Length || infoRows[infoIndex].Values.Count < 3) continue;
+                    matches.Add(checked((int)GetCfgInteger(infoRows[infoIndex].Values[2])));
+                }
+            }
+            catch (InvalidDataException)
+            {
+                // Other versioned clothes tables may be RDBNP or malformed.
+            }
+        }
+        return matches.Count == 1 ? matches.Single() : null;
     }
 
     private static string? GetCustomUniformResourceKey(string path)
@@ -1271,7 +1695,7 @@ public sealed class ExportPlanner : IExportPlanner
             : key;
     }
 
-    private static void AddNativeCustomUniformCompanionDependencies(
+    private static void AddNativeCustomUniformObjectMetadata(
         GameDumpProfile profile,
         Guid batchEntryId,
         VrCharaManifest manifest,
@@ -1299,7 +1723,7 @@ public sealed class ExportPlanner : IExportPlanner
                      sourceDirectory,
                      $"{resourceKey}_*",
                      SearchOption.TopDirectoryOnly)
-                 .Where(path => Path.GetExtension(path).ToLowerInvariant() is ".g4pk" or ".mevbin" or ".objbin")
+                 .Where(path => Path.GetExtension(path).Equals(".objbin", StringComparison.OrdinalIgnoreCase))
                  .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
         {
             var packageResourcePath = $"common/chr/_uniform/99_CUSTOM/{resourceKey}/{Path.GetFileName(sourcePath)}";
@@ -1483,6 +1907,48 @@ public sealed class ExportPlanner : IExportPlanner
         else if (normalized.StartsWith("chr/", StringComparison.OrdinalIgnoreCase))
             normalized = normalized["chr/".Length..];
         return normalized;
+    }
+
+    private static void ValidateAnimationRigProfile(
+        string dumpRoot,
+        VrCharaManifest manifest,
+        CharacterMotionFamily family,
+        CharacterAnimationProfile animationProfile)
+    {
+        if (string.IsNullOrWhiteSpace(family.BodySkeletonResourcePath))
+            throw new InvalidDataException("The source character has no resolved body skeleton resource.");
+
+        var bodySkeletonPath = Path.GetFullPath(Path.Combine(dumpRoot,
+            family.BodySkeletonResourcePath.Replace('/', Path.DirectorySeparatorChar)));
+        var commonCharacterRoot = Path.GetFullPath(Path.Combine(dumpRoot, "common", "chr"))
+            + Path.DirectorySeparatorChar;
+        if (!bodySkeletonPath.StartsWith(commonCharacterRoot, StringComparison.Ordinal)
+            || !File.Exists(bodySkeletonPath))
+            throw new InvalidDataException($"The assigned body skeleton '{family.BodySkeletonResourcePath}' is unavailable.");
+
+        var assignedSkeletonHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(bodySkeletonPath)))
+            .ToLowerInvariant();
+        if (!assignedSkeletonHash.Equals(animationProfile.SourceRig.Sha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException(
+                $"Animation source rig hash does not match the body's assigned G4SK '{family.BodySkeletonResourcePath}'.");
+
+        var modelPath = NormalizeBodyModelPath(animationProfile.ModelPath);
+        if (modelPath is null)
+            throw new InvalidDataException("The animation profile has no custom model path.");
+        var targetSkeletonPath = Path.ChangeExtension($"common/chr/{modelPath}", ".g4sk")
+            .Replace('\\', '/');
+        var targetSkeleton = manifest.Resources.SingleOrDefault(resource =>
+            resource.VirtualPath.Equals(targetSkeletonPath, StringComparison.OrdinalIgnoreCase));
+        if (targetSkeleton is null)
+        {
+            if (!animationProfile.TargetRig.Sha256.Equals(assignedSkeletonHash, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException(
+                    "The animation profile changes the target G4SK but the custom model package has no matching G4SK resource.");
+            return;
+        }
+
+        if (!targetSkeleton.Checksum.Equals(animationProfile.TargetRig.Sha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("The animation target rig hash does not match the packaged custom G4SK.");
     }
 
     private static bool IsRuntimeBodyRecord(CfgBinEntry entry) =>
@@ -1992,7 +2458,8 @@ public sealed class ExportPlanner : IExportPlanner
 
     private static List<ExportResourceOperation> RewriteCustomResourceNames(
         IEnumerable<ExportResourceOperation> resources,
-        IReadOnlyList<ExportIdAssignment> assignments)
+        IReadOnlyList<ExportIdAssignment> assignments,
+        IReadOnlyList<ExportCharacterClothesOperation> equipmentOperations)
     {
         var characterIds = assignments
             .Where(assignment => assignment.Domain == "character")
@@ -2002,7 +2469,11 @@ public sealed class ExportPlanner : IExportPlanner
             if (!characterIds.TryGetValue(resource.BatchEntryId, out var internalName))
                 return resource;
             var sourcePath = resource.PackageResourcePath ?? resource.DestinationPath;
-            var destination = RewriteCustomResourcePath(sourcePath, internalName);
+            var customShoesPath = equipmentOperations.SingleOrDefault(operation =>
+                operation.BatchEntryId == resource.BatchEntryId && operation.IsShoes)?.CustomModelPath;
+            var isCustomShoesResource = customShoesPath is not null
+                && sourcePath.Contains(GetCustomModelDirectory(customShoesPath), StringComparison.OrdinalIgnoreCase);
+            var destination = RewriteCustomResourcePath(sourcePath, internalName, isCustomShoesResource);
             return string.Equals(destination, sourcePath, StringComparison.Ordinal)
                 ? resource
                 : resource with { DestinationPath = destination, PackageResourcePath = sourcePath };
@@ -2046,6 +2517,52 @@ public sealed class ExportPlanner : IExportPlanner
         }).ToList();
     }
 
+    private static (List<ExportCharacterBodyOperation> Bodies, List<ExportCharacterModelOperation> Models)
+        AllocateCustomBodyModelIds(
+            string rootPath,
+            IReadOnlyList<ExportCharacterBodyOperation> bodies,
+            IReadOnlyList<ExportCharacterModelOperation> models,
+            IReadOnlyList<ExportIdAssignment> assignments)
+    {
+        var characterNames = assignments
+            .Where(assignment => assignment.Domain == "character")
+            .ToDictionary(assignment => assignment.BatchEntryId, assignment => assignment.ResolvedKey);
+        var usedByTable = new Dictionary<string, HashSet<int>>(StringComparer.OrdinalIgnoreCase);
+        var resolvedBodies = new List<ExportCharacterBodyOperation>(bodies.Count);
+        var resolvedModels = models.ToList();
+        foreach (var body in bodies)
+        {
+            if (!usedByTable.TryGetValue(body.ModelTablePath, out var used))
+            {
+                var tablePath = Path.Combine(rootPath, body.ModelTablePath.Replace('/', Path.DirectorySeparatorChar));
+                used = CfgBinDocument.Read(File.ReadAllBytes(tablePath)).Entries
+                    .Where(entry => entry.Name == "CHARA_BODY_INFO" && entry.Values.Count > 0)
+                    .Select(entry => checked((int)GetCfgInteger(entry.Values[0])))
+                    .ToHashSet();
+                usedByTable.Add(body.ModelTablePath, used);
+            }
+
+            var characterName = characterNames[body.BatchEntryId];
+            var probe = 0u;
+            int bodyModelId;
+            do
+            {
+                var key = probe == 0 ? $"{characterName}.body" : $"{characterName}.body#{probe}";
+                bodyModelId = unchecked((int)(CharacterMotionInfoT2bWriter.Crc32(key) | 0x80000000u));
+                probe++;
+            }
+            while (!used.Add(bodyModelId));
+
+            resolvedBodies.Add(body with { BodyModelId = bodyModelId });
+            for (var index = 0; index < resolvedModels.Count; index++)
+            {
+                if (resolvedModels[index].BatchEntryId == body.BatchEntryId)
+                    resolvedModels[index] = resolvedModels[index] with { BodyModelId = bodyModelId };
+            }
+        }
+        return (resolvedBodies, resolvedModels);
+    }
+
     private static List<ExportModelDependencyOperation> RewriteCustomModelDependencyNames(
         IEnumerable<ExportModelDependencyOperation> operations,
         IReadOnlyList<ExportIdAssignment> assignments)
@@ -2071,18 +2588,24 @@ public sealed class ExportPlanner : IExportPlanner
         var characterIds = assignments
             .Where(assignment => assignment.Domain == "character")
             .ToDictionary(assignment => assignment.BatchEntryId, assignment => assignment.ResolvedKey);
-        var uniformIds = assignments
+        var modelIds = assignments
             .Where(assignment => assignment.Domain == "uniformModel")
+            .ToDictionary(assignment => assignment.BatchEntryId, assignment => assignment.NumericId);
+        var shoesIds = assignments
+            .Where(assignment => assignment.Domain == "shoesModel")
             .ToDictionary(assignment => assignment.BatchEntryId, assignment => assignment.NumericId);
         return operations.Select(operation =>
         {
-            if (!characterIds.TryGetValue(operation.BatchEntryId, out var internalName)
-                || !uniformIds.TryGetValue(operation.BatchEntryId, out var uniformId))
+            if (!characterIds.TryGetValue(operation.BatchEntryId, out var internalName))
                 return operation;
-            var resourceKey = $"u{internalName[1..]}";
+            var ids = operation.IsShoes ? shoesIds : modelIds;
+            if (!ids.TryGetValue(operation.BatchEntryId, out var assignedModelId)) return operation;
+            var resourceKey = operation.IsShoes
+                ? $"s{internalName[1..]}"
+                : $"u{internalName[1..]}";
             return operation with
             {
-                UniformModelId = uniformId,
+                UniformModelId = assignedModelId,
                 ResourceKey = resourceKey,
                 ModelPath = $"_uniform/{resourceKey}/{resourceKey}.g4md",
                 TexturePath = $"_uniform/{resourceKey}/{resourceKey}.g4tx",
@@ -2094,17 +2617,29 @@ public sealed class ExportPlanner : IExportPlanner
         IEnumerable<ExportCharacterModelOperation> operations,
         IReadOnlyList<ExportCharacterClothesOperation> clothesOperations)
     {
-        var uniforms = clothesOperations.ToDictionary(operation => operation.BatchEntryId, operation => operation.UniformModelId);
-        return operations.Select(operation => uniforms.TryGetValue(operation.BatchEntryId, out var uniformId)
-            ? operation with { UniformModel = unchecked((int)uniformId) }
-            : operation).ToList();
+        var uniforms = clothesOperations.Where(operation => !operation.IsShoes)
+            .ToDictionary(operation => operation.BatchEntryId, operation => operation.UniformModelId);
+        var shoes = clothesOperations.Where(operation => operation.IsShoes)
+            .ToDictionary(operation => operation.BatchEntryId, operation => operation.UniformModelId);
+        return operations.Select(operation => operation with
+        {
+            UniformModel = uniforms.TryGetValue(operation.BatchEntryId, out var uniformId)
+                ? unchecked((int)uniformId) : operation.UniformModel,
+            ShoesModel = shoes.TryGetValue(operation.BatchEntryId, out var shoesId)
+                ? unchecked((int)shoesId) : operation.ShoesModel,
+        }).ToList();
     }
 
     private static string RewriteCustomResourcePath(
         string path,
-        string internalName)
+        string internalName,
+        bool isCustomShoes = false)
     {
         var normalized = path.Replace('\\', '/');
+        const string portraitPrefix = "assets/portraits/";
+        if (normalized.StartsWith(portraitPrefix, StringComparison.OrdinalIgnoreCase))
+            return $"{portraitPrefix}{internalName}/{Path.GetFileName(normalized)}";
+
         const string customMarker = "_face/99_CUSTOM/";
         var customIndex = normalized.IndexOf(customMarker, StringComparison.OrdinalIgnoreCase);
         if (customIndex >= 0)
@@ -2118,8 +2653,13 @@ public sealed class ExportPlanner : IExportPlanner
                 var extension = Path.GetExtension(fileName);
                 if (!string.IsNullOrWhiteSpace(extension))
                 {
+                    var sourceStem = segments[0];
+                    var fileStem = Path.GetFileNameWithoutExtension(fileName);
+                    var fileSuffix = fileStem.StartsWith(sourceStem, StringComparison.OrdinalIgnoreCase)
+                        ? fileStem[sourceStem.Length..]
+                        : string.Empty;
                     segments[0] = internalName;
-                    segments[^1] = internalName + extension;
+                    segments[^1] = internalName + fileSuffix + extension;
                     return prefix + string.Join('/', segments);
                 }
             }
@@ -2129,9 +2669,6 @@ public sealed class ExportPlanner : IExportPlanner
         var uniformIndex = normalized.IndexOf(customUniformMarker, StringComparison.OrdinalIgnoreCase);
         if (uniformIndex >= 0)
         {
-            var uniformName = internalName.StartsWith("c", StringComparison.OrdinalIgnoreCase)
-                ? $"u{internalName[1..]}"
-                : $"u{internalName}";
             var prefix = normalized[..(uniformIndex + "_uniform/".Length)];
             var suffix = normalized[(uniformIndex + customUniformMarker.Length)..];
             var segments = suffix.Split('/', StringSplitOptions.RemoveEmptyEntries);
@@ -2141,6 +2678,10 @@ public sealed class ExportPlanner : IExportPlanner
                 if (!string.IsNullOrWhiteSpace(extension))
                 {
                     var sourceStem = segments[0];
+                    var partPrefix = isCustomShoes || sourceStem.StartsWith('s') ? "s" : "u";
+                    var uniformName = internalName.StartsWith("c", StringComparison.OrdinalIgnoreCase)
+                        ? $"{partPrefix}{internalName[1..]}"
+                        : $"{partPrefix}{internalName}";
                     var fileStem = Path.GetFileNameWithoutExtension(segments[^1]);
                     var fileSuffix = fileStem.StartsWith(sourceStem, StringComparison.OrdinalIgnoreCase)
                         ? fileStem[sourceStem.Length..]
@@ -2161,6 +2702,14 @@ public sealed class ExportPlanner : IExportPlanner
         }
 
         return path;
+    }
+
+    private static string GetCustomModelDirectory(string modelPath)
+    {
+        var normalized = modelPath.Replace('\\', '/').TrimStart('/');
+        if (normalized.StartsWith("common/chr/", StringComparison.OrdinalIgnoreCase))
+            normalized = normalized["common/chr/".Length..];
+        return normalized[..(normalized.LastIndexOf('/') + 1)];
     }
 
     private IReadOnlyList<ExportIdAssignment> AllocateIds(
@@ -2195,6 +2744,13 @@ public sealed class ExportPlanner : IExportPlanner
                     SymbolicKey = $"u{ResolveWrittenInternalName(characterByBatch[request.BatchEntryId])[1..]}",
                     RequiresExactCrc = true,
                 })
+            .Select(request => request.Domain != "shoesModel"
+                ? request
+                : request with
+                {
+                    SymbolicKey = $"s{ResolveWrittenInternalName(characterByBatch[request.BatchEntryId])[1..]}",
+                    RequiresExactCrc = true,
+                })
             .ToArray();
         var remainingAssignments = _idAllocator.Allocate(remainingRequests, inventory);
         var remainingIndex = 0;
@@ -2208,6 +2764,32 @@ public sealed class ExportPlanner : IExportPlanner
         }
         return assignments;
     }
+
+    private static string ResolveGeneratedMotionPath(
+        AnimationBankSource bank,
+        string generatedFamilyName,
+        string? generatedUniformName)
+    {
+        if (bank.IsEvent)
+            return AvatarAnimationResources.RenameIdentifiers(bank.ResourcePath, bank.SourceIdentifier!, generatedFamilyName);
+        if (bank.ResourcePath.StartsWith("_uniform/", StringComparison.Ordinal))
+        {
+            if (string.IsNullOrWhiteSpace(generatedUniformName))
+                throw new InvalidDataException($"Uniform-specific motion bank '{bank.ResourcePath}' has no generated uniform ID.");
+            return $"_uniform/{generatedUniformName}/{generatedUniformName}_p{bank.Type}.g4pk";
+        }
+        if (bank.IsPrimaryFamily)
+            return $"{generatedFamilyName}/{generatedFamilyName}_p{bank.Type}.g4pk";
+        var sourceStem = Path.GetFileName(Path.GetDirectoryName(bank.ResourcePath));
+        if (string.IsNullOrWhiteSpace(sourceStem) || sourceStem.Contains("..", StringComparison.Ordinal))
+            throw new InvalidDataException($"Alternate motion bank '{bank.ResourcePath}' has no source family directory.");
+        return $"{generatedFamilyName}/{generatedFamilyName}_from_{sourceStem}_p{bank.Type}.g4pk";
+    }
+
+    private static string ResolveGeneratedMotionFamilyName(string characterId) =>
+        characterId.StartsWith("c99", StringComparison.Ordinal)
+            ? $"c00{characterId[3..]}"
+            : characterId;
 
     private static string ResolveWrittenInternalName(ExportIdAssignment characterAssignment)
     {

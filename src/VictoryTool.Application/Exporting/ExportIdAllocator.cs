@@ -69,6 +69,7 @@ public static class CharacterIdInventoryBuilder
         var shopItemIds = new HashSet<uint>();
         var modelIds = new HashSet<uint>();
         var uniformModelIds = new HashSet<uint>();
+        var shoesModelIds = new HashSet<uint>();
         var deliveryIdSet = (deliveryIds ?? []).ToHashSet();
         var deliveryReceivedSet = (deliveryReceivedFlags ?? []).ToHashSet();
         var deliveryTitleSet = (deliveryTitleIds ?? []).ToHashSet();
@@ -91,6 +92,8 @@ public static class CharacterIdInventoryBuilder
             AddInteger(entry, 0, modelIds);
         foreach (var entry in (clothesEntries ?? []).Where(entry => entry.Name == "CHARA_PARTS_CLOTHES_MODEL"))
             AddInteger(entry, 0, uniformModelIds);
+        foreach (var entry in (clothesEntries ?? []).Where(entry => entry.Name == "CHARA_PARTS_SHOES_MODEL"))
+            AddInteger(entry, 0, shoesModelIds);
         return ExportIdInventory.Create(new Dictionary<string, IEnumerable<uint>>
         {
             ["character"] = characterIds,
@@ -100,6 +103,7 @@ public static class CharacterIdInventoryBuilder
             ["shopItem"] = shopItemIds,
             ["model"] = modelIds,
             ["uniformModel"] = uniformModelIds,
+            ["shoesModel"] = shoesModelIds,
             ["delivery"] = deliveryIdSet,
             ["deliveryReceived"] = deliveryReceivedSet,
             ["deliveryTitleText"] = deliveryTitleSet,
@@ -158,6 +162,7 @@ public sealed class FileSystemCharacterIdInventoryService : ICharacterIdInventor
             ["shopItemCount"] = inventory.Count("shopItem"),
             ["modelCount"] = inventory.Count("model"),
             ["uniformModelCount"] = inventory.Count("uniformModel"),
+            ["shoesModelCount"] = inventory.Count("shoesModel"),
             ["deliveryCount"] = inventory.Count("delivery"),
             ["deliveryTitleCount"] = inventory.Count("deliveryTitleText"),
         });

@@ -7,6 +7,7 @@ using VictoryTool.Application.Profiles;
 using VictoryTool.Application.Assets;
 using VictoryTool.Application.Diagnostics;
 using VictoryTool.G4.Textures;
+using VictoryTool.G4.Animations;
 
 namespace VictoryTool.Application.Packages;
 
@@ -58,6 +59,10 @@ public interface IVrCharaPackageService
 
 public sealed class ZipVrCharaPackageService : IVrCharaPackageService
 {
+    private const long MaximumMetadataEntryBytes = 16 * 1024 * 1024;
+    private const long MaximumAuthoredResourceBytes = 256 * 1024 * 1024;
+    private const long MaximumAuthoredPackageBytes = 768 * 1024 * 1024;
+
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -95,22 +100,49 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             throw new InvalidDataException("A .vrchara package must contain exactly one manifest.json.");
         }
 
-        await using var stream = manifests[0].Open();
-        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-        var manifest = document.RootElement.TryGetProperty("formatVersion", out _)
-            ? document.RootElement.Deserialize<VrCharaManifest>(Options)
-            : MigrateLegacyManifest(document.RootElement);
+        var manifestContent = await ReadEntryContentAsync(manifests[0], MaximumMetadataEntryBytes, cancellationToken);
+        using var document = ParsePackageJson(manifestContent, "manifest.json");
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("manifest.json must contain a JSON object.");
+        VrCharaManifest? manifest;
+        try
+        {
+            manifest = document.RootElement.TryGetProperty("formatVersion", out _)
+                ? document.RootElement.Deserialize<VrCharaManifest>(Options)
+                : MigrateLegacyManifest(document.RootElement);
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException("The character manifest has invalid fields.", exception);
+        }
         if (manifest is null) throw new InvalidDataException("The character manifest is empty.");
+        if (manifest.Character is null || manifest.Character.Fields is null)
+            throw new InvalidDataException("The character manifest must contain a character with a fields object.");
+        if (manifest.Resources is null || manifest.GameResources is null || manifest.Patches is null)
+            throw new InvalidDataException("The character manifest is missing a required resource or patch list.");
         manifest = manifest with { Character = NormalizeLegacyAppearance(manifest.Character, document.RootElement) };
         IReadOnlyDictionary<string, CharacterPackageLocalization>? locales = null;
         if (!string.IsNullOrWhiteSpace(manifest.LocalesFile))
         {
-            var localesEntry = archive.GetEntry(manifest.LocalesFile);
+            var matchingLocalesEntries = archive.Entries
+                .Where(entry => entry.FullName == manifest.LocalesFile)
+                .Take(2)
+                .ToArray();
+            if (matchingLocalesEntries.Length > 1)
+                throw new InvalidDataException($"The package contains duplicate locales entries: {manifest.LocalesFile}");
+            var localesEntry = matchingLocalesEntries.SingleOrDefault();
             if (localesEntry is not null)
             {
-                await using var localesStream = localesEntry.Open();
-                locales = await JsonSerializer.DeserializeAsync<IReadOnlyDictionary<string, CharacterPackageLocalization>>(
-                    localesStream, Options, cancellationToken);
+                var localesContent = await ReadEntryContentAsync(localesEntry, MaximumMetadataEntryBytes, cancellationToken);
+                try
+                {
+                    locales = JsonSerializer.Deserialize<IReadOnlyDictionary<string, CharacterPackageLocalization>>(
+                        localesContent, Options);
+                }
+                catch (JsonException exception)
+                {
+                    throw new InvalidDataException("The package locales file has invalid JSON.", exception);
+                }
             }
         }
         manifest = SynchronizeManifestLocalizations(manifest, locales);
@@ -118,15 +150,32 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
 
         var validation = Validate(manifest);
         if (!validation.IsValid) throw new InvalidDataException(string.Join(" ", validation.Errors));
-        var resources = new List<AuthoredResource>(manifest.Resources.Count);
+        var requestedResourcePaths = manifest.Resources
+            .Select(resource => $"resources/{resource.VirtualPath}")
+            .ToHashSet(StringComparer.Ordinal);
+        var resourceEntryByPath = new Dictionary<string, ZipArchiveEntry>(StringComparer.Ordinal);
+        foreach (var entry in archive.Entries)
+        {
+            if (!requestedResourcePaths.Contains(entry.FullName)) continue;
+            if (!resourceEntryByPath.TryAdd(entry.FullName, entry))
+                throw new InvalidDataException($"Duplicate authored resource entry: {entry.FullName}");
+        }
+
+        var resourceEntries = new List<(CharacterResource Resource, ZipArchiveEntry Entry)>(manifest.Resources.Count);
         foreach (var resource in manifest.Resources)
         {
-            var entry = archive.GetEntry($"resources/{resource.VirtualPath}")
+            var resourcePath = $"resources/{resource.VirtualPath}";
+            var entry = resourceEntryByPath.GetValueOrDefault(resourcePath)
                 ?? throw new InvalidDataException($"Missing authored resource: {resource.VirtualPath}");
-            await using var resourceStream = entry.Open();
-            await using var memory = new MemoryStream();
-            await resourceStream.CopyToAsync(memory, cancellationToken);
-            var content = memory.ToArray();
+            if (entry.Length != resource.ByteLength)
+                throw new InvalidDataException($"Uncompressed length mismatch for authored resource: {resource.VirtualPath}");
+            resourceEntries.Add((resource, entry));
+        }
+
+        var resources = new List<AuthoredResource>(manifest.Resources.Count);
+        foreach (var (resource, entry) in resourceEntries)
+        {
+            var content = await ReadEntryContentAsync(entry, MaximumAuthoredResourceBytes, cancellationToken);
             if (content.LongLength != resource.ByteLength
                 || !string.Equals(Hash(content), resource.Checksum, StringComparison.OrdinalIgnoreCase))
             {
@@ -144,6 +193,22 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             ["localizationCount"] = manifest.Localizations?.Count ?? 0,
         });
         return package;
+    }
+
+    private static async Task<byte[]> ReadEntryContentAsync(
+        ZipArchiveEntry entry,
+        long maximumBytes,
+        CancellationToken cancellationToken)
+    {
+        if (entry.Length < 0 || entry.Length > maximumBytes || entry.Length > int.MaxValue)
+            throw new InvalidDataException($"ZIP entry '{entry.FullName}' exceeds its {maximumBytes / (1024 * 1024)} MiB uncompressed size limit.");
+        var content = new byte[(int)entry.Length];
+        await using var stream = entry.Open();
+        await stream.ReadExactlyAsync(content, cancellationToken);
+        var probe = new byte[1];
+        if (await stream.ReadAsync(probe, cancellationToken) != 0)
+            throw new InvalidDataException($"ZIP entry '{entry.FullName}' expands beyond its declared uncompressed length.");
+        return content;
     }
 
     private static async Task<CharacterDraft> HydrateAuthoredResourcesAsync(
@@ -167,6 +232,7 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             draft.Models?.HeadModelPath,
             draft.Models?.BodyModelPath,
             draft.Models?.UniformModelPath,
+            draft.Models?.ShoesModelPath,
         }
         .Concat(ExpandModelResourcePaths(draft.Models))
         .Select(path => path ?? string.Empty)
@@ -241,6 +307,7 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
                 HeadModelPath = ReplaceHydratedModelPath(models.HeadModelPath, extracted),
                 BodyModelPath = ReplaceHydratedModelPath(models.BodyModelPath, extracted),
                 UniformModelPath = ReplaceHydratedModelPath(models.UniformModelPath, extracted),
+                ShoesModelPath = ReplaceHydratedModelPath(models.ShoesModelPath, extracted),
             };
         }
         GlobalLog.Info("vrchara_resources_hydrated", new Dictionary<string, object?>
@@ -284,7 +351,7 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
     private static IReadOnlyList<string> ExpandModelResourcePaths(CharacterDraftModels? models)
     {
         var paths = new List<string>();
-        foreach (var modelPath in new[] { models?.HeadModelPath, models?.BodyModelPath, models?.UniformModelPath })
+        foreach (var modelPath in new[] { models?.HeadModelPath, models?.BodyModelPath, models?.UniformModelPath, models?.ShoesModelPath })
         {
             var packagePath = ToModelPackagePath(modelPath);
             if (packagePath is null) continue;
@@ -419,6 +486,20 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             "Models.UniformModelPath",
             "_uniform",
             "custom uniform model");
+        normalized = PackCustomModelFamily(
+            normalized,
+            resources,
+            normalized.Models?.BodyModelPath,
+            "Models.BodyModelPath",
+            "_uniform",
+            "custom body model");
+        normalized = PackCustomModelFamily(
+            normalized,
+            resources,
+            normalized.Models?.ShoesModelPath,
+            "Models.ShoesModelPath",
+            "_uniform",
+            "custom shoes model");
         return (normalized, resources);
     }
 
@@ -466,11 +547,109 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
                 resources.Add(new AuthoredResource(virtualStem + extension, File.ReadAllBytes(companionPath)));
         }
 
+        var animationConfigPath = Path.ChangeExtension(fullModelPath, ".g4anim.json");
+        var lightweightAnimations = false;
+        if (File.Exists(animationConfigPath))
+        {
+            var profile = JsonSerializer.Deserialize<CharacterAnimationProfile>(
+                File.ReadAllText(animationConfigPath), Options)
+                ?? throw new InvalidDataException($"The animation config is empty: {animationConfigPath}");
+            lightweightAnimations = profile.AvatarRecipe is not null;
+            var animationResourceDirectory = virtualStem[..(virtualStem.LastIndexOf('/') + 1)];
+            var generatedBanks = (lightweightAnimations ? Enumerable.Empty<string>() : Directory.EnumerateFiles(
+                    Path.GetDirectoryName(fullModelPath)!,
+                    $"{stem}_from_*_p*.g4mt",
+                    SearchOption.TopDirectoryOnly))
+                .Select(path =>
+                {
+                    var fileStem = Path.GetFileNameWithoutExtension(path);
+                    var prefix = $"{stem}_from_";
+                    var route = fileStem.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                        ? fileStem[prefix.Length..]
+                        : string.Empty;
+                    var typeStart = route.LastIndexOf("_p", StringComparison.OrdinalIgnoreCase);
+                    var sourceFamily = typeStart > 0 ? route[..typeStart] : string.Empty;
+                    var bankType = typeStart >= 0 ? route[(typeStart + 2)..] : string.Empty;
+                    if (bankType.Length != 3 || !bankType.All(char.IsAsciiDigit))
+                        throw new InvalidDataException($"Generated G4MT bank has an invalid type suffix: {path}");
+                    if (sourceFamily.Length == 0 || sourceFamily.Any(character =>
+                            !char.IsAsciiLetterOrDigit(character) && character != '_'))
+                        throw new InvalidDataException($"Generated G4MT bank has an invalid source-family name: {path}");
+                    var sourceResourcePath = $"{sourceFamily}/{sourceFamily}_p{bankType}.g4pk";
+                    return new CharacterAnimationBank(sourceResourcePath, bankType,
+                        animationResourceDirectory + Path.GetFileName(path),
+                        Hash(File.ReadAllBytes(path)));
+                })
+                .OrderBy(bank => bank.SourceResourcePath, StringComparer.Ordinal)
+                .ToArray();
+            var generatedPackages = new List<CharacterAnimationPackage>();
+            if (!lightweightAnimations && fieldName.Equals("Models.UniformModelPath", StringComparison.Ordinal))
+            {
+                if (string.IsNullOrWhiteSpace(profile.ModelStem)
+                    || profile.ModelStem.Any(character => !char.IsAsciiLetterOrDigit(character) && character is not '_' and not '-'))
+                    throw new InvalidDataException("The animation config has an invalid model ID for resolving G4PK banks.");
+                var dataRoot = fullModelPath[..marker];
+                var packageDirectory = Path.Combine(dataRoot, "common", "chr", profile.ModelStem);
+                if (Directory.Exists(packageDirectory))
+                {
+                    var packagePrefix = $"{profile.ModelStem}_p";
+                    foreach (var packagePath in Directory.EnumerateFiles(packageDirectory,
+                                 $"{profile.ModelStem}_p*.g4pk", SearchOption.TopDirectoryOnly))
+                    {
+                        var packageName = Path.GetFileNameWithoutExtension(packagePath);
+                        var type = packageName.StartsWith(packagePrefix, StringComparison.OrdinalIgnoreCase)
+                            ? packageName[packagePrefix.Length..]
+                            : string.Empty;
+                        if (type.Length != 3 || !type.All(char.IsAsciiDigit))
+                            throw new InvalidDataException($"Generated G4PK bank has an invalid type suffix: {packagePath}");
+                        if (new FileInfo(packagePath).Length > MaximumAuthoredResourceBytes)
+                            throw new InvalidDataException($"Generated G4PK bank exceeds the 256 MiB package resource limit: {packagePath}");
+
+                        var resourcePath = $"common/chr/{profile.ModelStem}/{Path.GetFileName(packagePath)}";
+                        var content = File.ReadAllBytes(packagePath);
+                        if (G4pkAnimationPackage.Read(content).Resources.Count != 1)
+                            throw new InvalidDataException($"Generated G4PK bank must contain exactly one G4MT resource: {packagePath}");
+                        var existingResource = resources.FirstOrDefault(resource =>
+                            resource.VirtualPath.Equals(resourcePath, StringComparison.OrdinalIgnoreCase));
+                        if (existingResource is null)
+                            resources.Add(new AuthoredResource(resourcePath, content));
+                        else if (!existingResource.Content.Span.SequenceEqual(content))
+                            throw new InvalidDataException($"Conflicting generated G4PK bank: {resourcePath}");
+                        generatedPackages.Add(new CharacterAnimationPackage(type, resourcePath, Hash(content)));
+                    }
+                }
+            }
+            if (!lightweightAnimations && profile.GeneratedBanks is { Count: > 0 }
+                && !profile.GeneratedBanks.OrderBy(bank => bank.SourceResourcePath, StringComparer.Ordinal)
+                    .SequenceEqual(generatedBanks))
+                throw new InvalidDataException($"The animation config bank manifest does not match the G4MT files beside {fullModelPath}.");
+            profile = profile with
+            {
+                ModelPath = virtualStem + ".g4md",
+                SchemaVersion = generatedBanks.Length > 0 || generatedPackages.Count > 0 ? 6 : profile.SchemaVersion,
+                GeneratedBanks = generatedBanks,
+                GeneratedPackages = generatedPackages,
+            };
+            ValidateAnimationProfile(profile, stem);
+            var targetSkeletonPath = Path.ChangeExtension(fullModelPath, ".g4sk");
+            if (File.Exists(targetSkeletonPath)
+                && !Hash(File.ReadAllBytes(targetSkeletonPath)).Equals(profile.TargetRig.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"The animation config does not match its model G4SK: {animationConfigPath}");
+            var existing = draft.AnimationProfiles ?? [];
+            var prior = existing.FirstOrDefault(item =>
+                item.ModelPath.Equals(profile.ModelPath, StringComparison.OrdinalIgnoreCase));
+            if (prior is not null && !prior.TargetRig.Sha256.Equals(profile.TargetRig.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"Conflicting animation configs target the same model: {profile.ModelPath}");
+            if (prior is null)
+                draft = draft with { AnimationProfiles = existing.Append(profile).ToArray() };
+        }
+
         foreach (var companionPath in Directory.EnumerateFiles(
                      Path.GetDirectoryName(fullModelPath)!,
                      $"{stem}_*",
                      SearchOption.TopDirectoryOnly)
-                 .Where(IsModelCompanion)
+                 .Where(path => IsModelCompanion(path)
+                     && (!lightweightAnimations || Path.GetExtension(path).ToLowerInvariant() is not (".g4pk" or ".g4mt")))
                  .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
         {
             var companionName = Path.GetFileName(companionPath);
@@ -487,14 +666,16 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             Models = (draft.Models ?? new CharacterDraftModels(null, null)) with
             {
                 HeadModelPath = fieldName == "Models.HeadModelPath" ? relativeModelPath : draft.Models?.HeadModelPath,
+                BodyModelPath = fieldName == "Models.BodyModelPath" ? relativeModelPath : draft.Models?.BodyModelPath,
                 UniformModelPath = fieldName == "Models.UniformModelPath" ? relativeModelPath : draft.Models?.UniformModelPath,
+                ShoesModelPath = fieldName == "Models.ShoesModelPath" ? relativeModelPath : draft.Models?.ShoesModelPath,
             },
             Fields = modelFields,
         };
     }
 
     private static bool IsModelCompanion(string path) =>
-        Path.GetExtension(path).ToLowerInvariant() is ".g4pk" or ".mevbin" or ".objbin";
+        Path.GetExtension(path).ToLowerInvariant() is ".g4pk" or ".g4mt" or ".mevbin" or ".objbin";
 
     private static void AddSourcePortraitResource(
         ICollection<AuthoredResource> resources,
@@ -734,12 +915,38 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
         var errors = new List<string>();
         if (manifest.FormatVersion != 2) errors.Add("Unsupported .vrchara manifest version.");
         if (manifest.Character is null) errors.Add("The package must contain one character.");
+        foreach (var profile in manifest.Character?.AnimationProfiles ?? [])
+        {
+            if (profile is null)
+            {
+                errors.Add("The package contains an empty animation config entry.");
+                continue;
+            }
+            try
+            {
+                ValidateAnimationProfile(profile, profile.ModelStem);
+            }
+            catch (InvalidDataException exception)
+            {
+                errors.Add(exception.Message);
+            }
+        }
         if (!string.IsNullOrWhiteSpace(manifest.LocalesFile)
             && (!IsSafeVirtualPath(manifest.LocalesFile) || !manifest.LocalesFile.EndsWith(".json", StringComparison.OrdinalIgnoreCase)))
             errors.Add($"Invalid locales file path: {manifest.LocalesFile}");
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        long totalResourceBytes = 0;
         foreach (var resource in manifest.Resources)
         {
+            if (resource is null)
+            {
+                errors.Add("The package contains an empty authored resource entry.");
+                continue;
+            }
+            if (resource.ByteLength < 0 || resource.ByteLength > MaximumAuthoredPackageBytes - totalResourceBytes)
+                errors.Add($"The package's authored resources exceed the 768 MiB uncompressed size limit at '{resource.VirtualPath}'.");
+            else
+                totalResourceBytes += resource.ByteLength;
             if (!IsSafeVirtualPath(resource.VirtualPath))
                 errors.Add($"Invalid authored resource path: {resource.VirtualPath}");
             else if (!paths.Add(resource.VirtualPath))
@@ -751,13 +958,41 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
                 && !resource.VirtualPath.StartsWith("common/chr/_uniform/99_CUSTOM/", StringComparison.Ordinal))
                 errors.Add("Custom model resources must use a supported 99_CUSTOM face or uniform path.");
         }
+        var resourceByPath = (manifest.Resources ?? [])
+            .Where(resource => resource is not null && !string.IsNullOrWhiteSpace(resource.VirtualPath))
+            .GroupBy(resource => resource.VirtualPath, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        foreach (var profile in manifest.Character?.AnimationProfiles ?? [])
+        foreach (var bank in profile?.GeneratedBanks ?? [])
+        {
+            if (bank is null || !resourceByPath.TryGetValue(bank.ResourcePath, out var resource)
+                || !resource.Checksum.Equals(bank.Sha256, StringComparison.OrdinalIgnoreCase))
+                errors.Add($"Generated G4MT bank '{bank?.ResourcePath}' is missing or its checksum differs from the animation config.");
+        }
+        foreach (var profile in manifest.Character?.AnimationProfiles ?? [])
+        foreach (var package in profile?.GeneratedPackages ?? [])
+        {
+            if (package is null || !resourceByPath.TryGetValue(package.ResourcePath, out var resource)
+                || !resource.Checksum.Equals(package.Sha256, StringComparison.OrdinalIgnoreCase))
+                errors.Add($"Generated G4PK bank '{package?.ResourcePath}' is missing or its checksum differs from the animation config.");
+        }
         foreach (var reference in manifest.GameResources)
         {
+            if (reference is null)
+            {
+                errors.Add("The package contains an empty game resource reference.");
+                continue;
+            }
             if (!IsSafeVirtualPath(reference.VirtualPath))
                 errors.Add($"Invalid game resource reference: {reference.VirtualPath}");
         }
         foreach (var patchSet in manifest.Patches)
         {
+            if (patchSet is null)
+            {
+                errors.Add("The package contains an empty CFGBIN patch set.");
+                continue;
+            }
             if (!IsSafeVirtualPath(patchSet.TablePath)
                 || !patchSet.TablePath.EndsWith(".cfg.bin", StringComparison.OrdinalIgnoreCase)
                 || !(patchSet.TablePath.StartsWith("common/gamedata/", StringComparison.OrdinalIgnoreCase)
@@ -765,11 +1000,33 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             {
                 errors.Add($"Invalid CFGBIN patch table path: {patchSet.TablePath}");
             }
+            if (patchSet.Records is null)
+            {
+                errors.Add($"CFGBIN patch set '{patchSet.TablePath}' has no record list.");
+                continue;
+            }
+            foreach (var record in patchSet.Records)
+            {
+                if (record is null)
+                {
+                    errors.Add($"CFGBIN patch set '{patchSet.TablePath}' contains an empty record.");
+                    continue;
+                }
+                if (string.IsNullOrWhiteSpace(record.SymbolicKey))
+                    errors.Add($"CFGBIN patch set '{patchSet.TablePath}' contains a record without a symbolic key.");
+                if (record.Values is null)
+                    errors.Add($"CFGBIN patch record '{record.SymbolicKey}' has no values.");
+            }
         }
         if (manifest.Localizations is not null)
         {
             foreach (var localization in manifest.Localizations)
             {
+                if (localization.Value is null)
+                {
+                    errors.Add($"Localization '{localization.Key}' has no value.");
+                    continue;
+                }
                 if (string.IsNullOrWhiteSpace(localization.Key)
                     || localization.Key.Contains('/')
                     || localization.Key.Contains('\\'))
@@ -785,6 +1042,192 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             });
         return new PackageValidationResult(errors);
     }
+
+    private static void ValidateAnimationProfile(CharacterAnimationProfile profile, string expectedStem)
+    {
+        if (profile is null || profile.SourceRig is null || profile.TargetRig is null
+            || profile.Joints is null || profile.GeneratedBanks is null || profile.GeneratedPackages is null
+            || string.IsNullOrWhiteSpace(profile.ModelStem)
+            || profile.SchemaVersion is not (1 or 2 or 3 or 4 or 5 or 6 or 7) || profile.Producer != "G4_Blender"
+            || !profile.ModelStem.Equals(expectedStem, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Unsupported or mismatched animation config for model '{expectedStem}'.");
+        if (!IsSha256(profile.SourceRig.Sha256) || !IsSha256(profile.TargetRig.Sha256))
+            throw new InvalidDataException($"Animation config for '{expectedStem}' has an invalid rig hash.");
+        if (!IsSafeVirtualPath(profile.ModelPath)
+            || !profile.ModelPath.EndsWith(".g4md", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Animation config for '{expectedStem}' has an invalid model path.");
+        if (profile.SourceModelStem is not null
+            && (profile.SourceModelStem.Length == 0
+                || profile.SourceModelStem.Any(character => !char.IsAsciiLetterOrDigit(character) && character is not '_' and not '-')))
+            throw new InvalidDataException($"Animation config for '{expectedStem}' has an invalid source-model identity.");
+        if (profile.AvatarRecipe is { } recipe)
+        {
+            if (profile.SchemaVersion != 7 || string.IsNullOrWhiteSpace(profile.SourceModelStem)
+                || profile.GeneratedBanks.Count != 0 || profile.GeneratedPackages.Count != 0)
+                throw new InvalidDataException("Lightweight animation recipes require schema 7 without generated banks.");
+            recipe.Validate();
+            if (!Hash(Convert.FromBase64String(recipe.SourceSkeletonBase64)).Equals(profile.SourceRig.Sha256, StringComparison.OrdinalIgnoreCase)
+                || !Hash(Convert.FromBase64String(recipe.TargetSkeletonBase64)).Equals(profile.TargetRig.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("The animation recipe skeletons do not match the profile rig hashes.");
+        }
+        else if (profile.SchemaVersion == 7)
+            throw new InvalidDataException("Animation schema 7 requires an avatar recipe.");
+        if (profile.Joints.Count == 0)
+            throw new InvalidDataException($"Animation config for '{expectedStem}' has no joints.");
+        if ((profile.GeneratedBanks.Count > 0 || profile.GeneratedPackages.Count > 0) && profile.SchemaVersion < 6)
+            throw new InvalidDataException($"Animation config for '{expectedStem}' uses generated banks without schema version 6.");
+        var sourceBankPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var bankPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var bank in profile.GeneratedBanks)
+        {
+            if (bank is null || string.IsNullOrWhiteSpace(bank.Type) || bank.Type.Length != 3
+                || !bank.Type.All(char.IsAsciiDigit) || !IsSha256(bank.Sha256)
+                || string.IsNullOrWhiteSpace(bank.SourceResourcePath) || !IsSafeVirtualPath(bank.SourceResourcePath)
+                || !HasAnimationBankRoute(bank.SourceResourcePath, bank.Type)
+                || !sourceBankPaths.Add(bank.SourceResourcePath)
+                || string.IsNullOrWhiteSpace(bank.ResourcePath) || !IsSafeVirtualPath(bank.ResourcePath)
+                || !bank.ResourcePath.EndsWith($"_from_{Path.GetFileName(Path.GetDirectoryName(bank.SourceResourcePath))}_p{bank.Type}.g4mt", StringComparison.OrdinalIgnoreCase)
+                || !bankPaths.Add(bank.ResourcePath))
+                throw new InvalidDataException($"Animation config for '{expectedStem}' has an invalid or duplicate generated G4MT bank.");
+        }
+        var packagePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var packageTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var package in profile.GeneratedPackages)
+        {
+            if (package is null || string.IsNullOrWhiteSpace(package.Type)
+                || package.Type.Length != 3 || !package.Type.All(char.IsAsciiDigit)
+                || !IsSha256(package.Sha256) || !IsSafeVirtualPath(package.ResourcePath)
+                || !package.ResourcePath.EndsWith($"/{profile.ModelStem}_p{package.Type}.g4pk", StringComparison.OrdinalIgnoreCase)
+                || !packagePaths.Add(package.ResourcePath) || !packageTypes.Add(package.Type))
+                throw new InvalidDataException($"Animation config for '{expectedStem}' has an invalid or duplicate generated G4PK bank.");
+        }
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var sourceNamesByHash = new Dictionary<uint, string>();
+        foreach (var joint in profile.Joints)
+        {
+            if (joint is null || string.IsNullOrWhiteSpace(joint.Name) || !names.Add(joint.Name)
+                || joint.SourceRest is null || joint.TargetRest is null)
+                throw new InvalidDataException($"Animation config for '{expectedStem}' has an empty or duplicate joint name.");
+            ValidateTransform(joint.SourceRest, expectedStem, joint.Name);
+            ValidateTransform(joint.TargetRest, expectedStem, joint.Name);
+            if (profile.SchemaVersion >= 5)
+            {
+                if ((joint.SourceName is null) != (joint.SourceNameCrc32 is null)
+                    || (joint.SourceName is not null && string.IsNullOrWhiteSpace(joint.SourceName)))
+                    throw new InvalidDataException($"Animation config for '{expectedStem}' has an invalid source-joint mapping for '{joint.Name}'.");
+                if (joint.SourceName is { } sourceName)
+                {
+                    var sourceHash = joint.SourceNameCrc32!.Value;
+                    if (sourceNamesByHash.TryGetValue(sourceHash, out var priorName)
+                        && !priorName.Equals(sourceName, StringComparison.Ordinal))
+                        throw new InvalidDataException($"Animation config for '{expectedStem}' has conflicting source names for joint hash {sourceHash}.");
+                    sourceNamesByHash.TryAdd(sourceHash, sourceName);
+                }
+            }
+            if (joint.MotionBasisRotation is not null)
+            {
+                if (profile.SchemaVersion < 3 || joint.MotionBasisRotation.Count != 4
+                    || joint.MotionBasisRotation.Any(value => !float.IsFinite(value))
+                    || joint.MotionBasisRotation.Sum(value => value * value) <= float.Epsilon)
+                    throw new InvalidDataException($"Animation config for '{expectedStem}' has an invalid motion-basis rotation for joint '{joint.Name}'.");
+            }
+        }
+        foreach (var joint in profile.Joints)
+            if (joint.Parent is not null && (!names.Contains(joint.Parent) || joint.Parent.Equals(joint.Name, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException($"Animation config for '{expectedStem}' has an invalid parent for joint '{joint.Name}'.");
+        var sourceNames = profile.Joints
+            .Where(joint => joint.SourceName is not null)
+            .Select(joint => joint.SourceName!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        ValidateAnimationHierarchy(profile.Joints, joint => joint.Parent, expectedStem, "target");
+        if (profile.SchemaVersion < 4)
+        {
+            if (profile.Joints.Any(joint => joint.SourceParent is not null))
+                throw new InvalidDataException($"Animation config for '{expectedStem}' uses source parents without schema version 4.");
+            ValidateAnimationHierarchy(profile.Joints, joint => joint.Parent, expectedStem, "source");
+        }
+        else if (profile.AvatarRecipe is null)
+        {
+            var targetBasedParents = profile.Joints.All(joint => joint.SourceParent is null || names.Contains(joint.SourceParent));
+            foreach (var joint in profile.Joints)
+                if (joint.SourceParent is not null
+                    && (!(targetBasedParents ? names : sourceNames).Contains(joint.SourceParent)
+                        || joint.SourceParent.Equals(targetBasedParents ? joint.Name : joint.SourceName ?? joint.Name,
+                            StringComparison.OrdinalIgnoreCase)))
+                    throw new InvalidDataException($"Animation config for '{expectedStem}' has an invalid source parent for joint '{joint.Name}'.");
+            if (targetBasedParents)
+                ValidateAnimationHierarchy(profile.Joints, joint => joint.SourceParent, expectedStem, "source");
+            else
+                ValidateSourceAnimationHierarchy(profile.Joints, expectedStem);
+        }
+    }
+
+    private static bool HasAnimationBankRoute(string resourcePath, string type)
+    {
+        var parts = resourcePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 2
+            && parts[0].Length > 0
+            && parts[1].Equals($"{parts[0]}_p{type}.g4pk", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void ValidateAnimationHierarchy(IReadOnlyList<CharacterAnimationJoint> joints,
+        Func<CharacterAnimationJoint, string?> parentOf, string stem, string label)
+    {
+        var byName = joints.ToDictionary(joint => joint.Name, StringComparer.OrdinalIgnoreCase);
+        foreach (var joint in joints)
+        {
+            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var current = joint;
+            while (true)
+            {
+                if (!visited.Add(current.Name))
+                    throw new InvalidDataException($"Animation config for '{stem}' has a {label} hierarchy cycle at '{current.Name}'.");
+                var parent = parentOf(current);
+                if (parent is null) break;
+                current = byName[parent];
+            }
+        }
+    }
+
+    private static void ValidateSourceAnimationHierarchy(
+        IReadOnlyList<CharacterAnimationJoint> joints, string stem)
+    {
+        var parentsByName = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var joint in joints)
+        {
+            if (joint.SourceName is null)
+                continue;
+            if (parentsByName.TryGetValue(joint.SourceName, out var existingParent)
+                && !string.Equals(existingParent, joint.SourceParent, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"Animation config for '{stem}' has conflicting source parents for joint '{joint.SourceName}'.");
+            parentsByName[joint.SourceName] = joint.SourceParent;
+        }
+
+        foreach (var name in parentsByName.Keys)
+        {
+            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string? current = name;
+            while (current is not null && parentsByName.TryGetValue(current, out var parent))
+            {
+                if (!visited.Add(current))
+                    throw new InvalidDataException($"Animation config for '{stem}' has a source hierarchy cycle at '{current}'.");
+                current = parent;
+            }
+        }
+    }
+
+    private static void ValidateTransform(CharacterAnimationTransform transform, string stem, string joint)
+    {
+        if (transform.Translation is null || transform.Rotation is null || transform.Scale is null
+            || transform.Translation.Count != 3 || transform.Rotation.Count != 4 || transform.Scale.Count != 3
+            || transform.Translation.Concat(transform.Rotation).Concat(transform.Scale).Any(value => !float.IsFinite(value)))
+            throw new InvalidDataException($"Animation config for '{stem}' has an invalid transform for joint '{joint}'.");
+        var rotationLengthSquared = transform.Rotation.Sum(value => value * value);
+        if (!float.IsFinite(rotationLengthSquared) || rotationLengthSquared <= float.Epsilon)
+            throw new InvalidDataException($"Animation config for '{stem}' has an invalid rotation quaternion for joint '{joint}'.");
+    }
+
+    private static bool IsSha256(string? value) => value is { Length: 64 } && value.All(Uri.IsHexDigit);
 
     public PackageValidationResult ValidateAgainstDump(VrCharaManifest manifest, GameDumpProfile profile)
     {
@@ -808,8 +1251,27 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
 
     private static VrCharaManifest? MigrateLegacyManifest(JsonElement root)
     {
-        var draft = root.Deserialize<CharacterDraft>(Options);
-        return draft is null ? null : new VrCharaManifest(2, draft, [], [], []);
+        try
+        {
+            var draft = root.Deserialize<CharacterDraft>(Options);
+            return draft is null ? null : new VrCharaManifest(2, draft, [], [], []);
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException("The legacy character manifest has invalid fields.", exception);
+        }
+    }
+
+    private static JsonDocument ParsePackageJson(byte[] content, string entryName)
+    {
+        try
+        {
+            return JsonDocument.Parse(content);
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException($"The package entry '{entryName}' contains invalid JSON.", exception);
+        }
     }
 
     private static CharacterDraft NormalizeDraft(CharacterDraft draft)
@@ -878,6 +1340,7 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             HeadModelPath = models.HeadModelPath ?? GetModelField(fields, "Models.HeadModelPath"),
             BodyModelPath = models.BodyModelPath ?? GetModelField(fields, "Models.BodyModelPath"),
             UniformModelPath = models.UniformModelPath ?? GetModelField(fields, "Models.UniformModelPath"),
+            ShoesModelPath = models.ShoesModelPath ?? GetModelField(fields, "Models.ShoesModelPath"),
             SkinColorRgba = models.SkinColorRgba ?? GetModelField(fields, "Models.SkinColorRgba"),
             UniformModel = models.UniformModel
                 ?? ParseNullableInt(GetModelField(fields, "Models.UniformModel")),
@@ -902,6 +1365,7 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
         SetModelField(fields, "Models.HeadModelPath", models.HeadModelPath);
         SetModelField(fields, "Models.BodyModelPath", models.BodyModelPath);
         SetModelField(fields, "Models.UniformModelPath", models.UniformModelPath);
+        SetModelField(fields, "Models.ShoesModelPath", models.ShoesModelPath);
         SetModelField(fields, "Models.SkinColorRgba", models.SkinColorRgba);
         SetModelField(fields, "Models.UniformModel", models.UniformModel);
         SetModelField(fields, "Models.ShoesModel", models.ShoesModel);
@@ -977,8 +1441,10 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
 
     private static bool IsSafeVirtualPath(string path) =>
         !string.IsNullOrWhiteSpace(path)
+        && !path.Any(char.IsControl)
         && !Path.IsPathRooted(path)
         && !path.Contains("..", StringComparison.Ordinal)
+        && !path.Contains(':')
         && !path.Contains('\\');
 
     private static VrCharaManifest CreateManifest(VrCharaPackage package)

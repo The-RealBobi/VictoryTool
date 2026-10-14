@@ -27,10 +27,54 @@ public interface IModelDependencyResolver
         GameDumpProfile profile,
         ExportPlatform platform,
         string modelPath);
+
+    ModelDependencyResult ResolveCustomFaceMetadata(GameDumpProfile profile, string modelPath);
 }
 
 public sealed class ModelDependencyResolver : IModelDependencyResolver
 {
+    public ModelDependencyResult ResolveCustomFaceMetadata(GameDumpProfile profile, string modelPath)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentException.ThrowIfNullOrWhiteSpace(modelPath);
+        var normalizedModelPath = NormalizeCommonModelPath(modelPath);
+        const string customFacePrefix = "common/chr/_face/99_CUSTOM/";
+        if (!normalizedModelPath.StartsWith(customFacePrefix, StringComparison.OrdinalIgnoreCase)
+            || !Path.GetExtension(normalizedModelPath).Equals(".g4md", StringComparison.OrdinalIgnoreCase))
+            return new ModelDependencyResult([],
+            [Error("export.custom_face_metadata_path_invalid",
+                $"Custom face metadata cannot be resolved for '{modelPath}'.",
+                "Select a model under the custom face folder.")]);
+
+        var stem = Path.GetFileNameWithoutExtension(normalizedModelPath);
+        var categoryRoot = Path.Combine(profile.RootPath, "common", "chr", "_face");
+        if (!Directory.Exists(categoryRoot))
+            return MissingMetadata(modelPath, "The selected dump has no face model metadata.");
+
+        var sourceConfigs = Directory.EnumerateFiles(categoryRoot, $"{stem}.objbin", SearchOption.AllDirectories)
+            .Where(path => !Path.GetRelativePath(categoryRoot, path).Replace('\\', '/')
+                .StartsWith("99_CUSTOM/", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (sourceConfigs.Length != 1)
+            return MissingMetadata(modelPath, sourceConfigs.Length == 0
+                ? $"No source OBJBIN was found for custom face '{stem}'."
+                : $"More than one source OBJBIN was found for custom face '{stem}'.");
+
+        var sourceDirectory = Path.GetDirectoryName(sourceConfigs[0])!;
+        var sourceClobin = Path.Combine(sourceDirectory, $"{stem}.clobin");
+        if (!File.Exists(sourceClobin))
+            return MissingMetadata(modelPath, $"The source face metadata for '{stem}' has no CLOBIN companion.");
+
+        var destinationDirectory = normalizedModelPath[..normalizedModelPath.LastIndexOf('/')];
+        return new ModelDependencyResult(
+        [
+            new ModelDependency(ModelDependencyKind.ObjectMetadata,
+                $"{destinationDirectory}/{stem}.objbin", sourceConfigs[0]),
+            new ModelDependency(ModelDependencyKind.ObjectMetadata,
+                $"{destinationDirectory}/{stem}.clobin", sourceClobin),
+        ], []);
+    }
+
     public ModelDependencyResult Resolve(
         GameDumpProfile profile,
         ExportPlatform platform,
@@ -187,4 +231,8 @@ public sealed class ModelDependencyResolver : IModelDependencyResolver
 
     private static Diagnostic Error(string code, string message, string recoveryAction) =>
         new(code, DiagnosticSeverity.Error, message, recoveryAction);
+
+    private static ModelDependencyResult MissingMetadata(string modelPath, string reason) =>
+        new([], [Error("export.custom_face_metadata_missing", reason,
+            $"Include the matching .objbin and .clobin with '{modelPath}', or select a dump that contains them.")]);
 }

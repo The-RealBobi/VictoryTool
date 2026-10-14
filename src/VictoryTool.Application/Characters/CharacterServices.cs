@@ -742,7 +742,8 @@ public sealed class CharacterCloneService : ICharacterCloneService
                 ParseNullableInt(source.Fields.GetValueOrDefault("Models.EquipmentFlag2")),
                 ParseNullableInt(ReadModelField(source.Fields, "Models.ChestSize", "Models.BoobSize")),
                 ParseNullableInt(source.Fields.GetValueOrDefault("Models.ForceKit")),
-                source.Fields.GetValueOrDefault("Models.UniformModelPath")),
+                source.Fields.GetValueOrDefault("Models.UniformModelPath"),
+                source.Fields.GetValueOrDefault("Models.ShoesModelPath")),
             Assets: new CharacterDraftAssets(null, null),
             Localization: new CharacterDraftLocalization(
                 null,
@@ -987,6 +988,7 @@ public sealed class CharacterDraftService : ICharacterDraftService
             "Models.ChestSize" or "Models.BoobSize" => updated with { Models = (draft.Models ?? new CharacterDraftModels(null, null)) with { ChestSize = ParseNullableInt(value) } },
             "Models.ForceKit" => updated with { Models = (draft.Models ?? new CharacterDraftModels(null, null)) with { ForceKit = ParseNullableInt(value) } },
             "Models.UniformModelPath" => updated with { Models = (draft.Models ?? new CharacterDraftModels(null, null)) with { UniformModelPath = value } },
+            "Models.ShoesModelPath" => updated with { Models = (draft.Models ?? new CharacterDraftModels(null, null)) with { ShoesModelPath = value } },
             "Assets.StandardPortraitPath" => updated with
             {
                 Assets = (draft.Assets ?? new CharacterDraftAssets(null, null)) with { StandardPortraitPath = value },

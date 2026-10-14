@@ -7,7 +7,8 @@ public sealed record CharacterBodyWriteRequest(
     int SourceBodyModelId,
     int BodyModelId,
     string BodyModelPath,
-    string? SkeletonModelPath = null);
+    string? SkeletonModelPath = null,
+    int? MotionFamilyCrc32 = null);
 
 public interface ICharacterBodyT2bWriter
 {
@@ -32,6 +33,8 @@ public sealed class CharacterBodyT2bWriter : ICharacterBodyT2bWriter
             throw new InvalidDataException("CHARA_BODY_INFO model path is not a string.");
         if (request.SkeletonModelPath is not null && source.Values[1].Type != CfgBinValueType.String)
             throw new InvalidDataException("CHARA_BODY_INFO skeleton model path is not a string.");
+        if (request.MotionFamilyCrc32 is not null && source.Values[3].Type != CfgBinValueType.Integer)
+            throw new InvalidDataException("CHARA_BODY_INFO motion family is not an integer.");
         if (document.Entries.Any(entry => entry.Name == "CHARA_BODY_INFO"
                 && entry.Values.Count >= 1
                 && GetInteger(entry.Values[0]) == request.BodyModelId))
@@ -43,6 +46,10 @@ public sealed class CharacterBodyT2bWriter : ICharacterBodyT2bWriter
             : (long)request.BodyModelId;
         values[2] = request.BodyModelPath;
         if (request.SkeletonModelPath is not null) values[1] = request.SkeletonModelPath;
+        if (request.MotionFamilyCrc32 is { } motionFamilyCrc)
+            values[3] = document.ValueWidth == CfgBinValueWidth.Int32
+                ? (object)motionFamilyCrc
+                : (long)motionFamilyCrc;
         var result = T2bCountedListWriter.InsertClones(
             document,
             source,
@@ -56,9 +63,13 @@ public sealed class CharacterBodyT2bWriter : ICharacterBodyT2bWriter
             throw new InvalidDataException("The written body model path failed read-back validation.");
         if (!string.Equals(written.Values[1].Value as string, request.SkeletonModelPath ?? source.Values[1].Value as string, StringComparison.Ordinal))
             throw new InvalidDataException("The written skeleton model path failed read-back validation.");
+        if (request.MotionFamilyCrc32 is { } expectedMotionFamily
+            && GetInteger(written.Values[3]) != expectedMotionFamily)
+            throw new InvalidDataException("The written motion family failed read-back validation.");
         for (var index = 1; index < source.Values.Count; index++)
         {
-            if (index == 2 || (index == 1 && request.SkeletonModelPath is not null)) continue;
+            if (index == 2 || (index == 1 && request.SkeletonModelPath is not null)
+                || (index == 3 && request.MotionFamilyCrc32 is not null)) continue;
             if (!Equals(source.Values[index].Value, written.Values[index].Value))
                 throw new InvalidDataException($"Opaque body model field {index} changed unexpectedly.");
         }
