@@ -5,6 +5,3 @@ https://github.com/google/material-design-icons
 The refresh, search, sort, filter_alt and keyboard_arrow_down icons are
 Material Symbols provided under the Apache License, Version 2.0.
 See MaterialSymbols-Apache-2.0.txt for the license text.
-
-The supplied SVG path geometry is used in Avalonia PathIcon controls.
-The original SVG geometry is retained; the SVG wrapper is not used.
