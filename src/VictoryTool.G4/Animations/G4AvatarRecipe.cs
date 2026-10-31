@@ -13,7 +13,7 @@ public sealed record G4AvatarNode(string Name, string? Parent, float[] RestMatri
     G4AvatarTransform LocalRest, G4AvatarTransform? TrackRest);
 public sealed record G4AvatarTwist(string Bone, string Driver, string End, float Fraction);
 
-public sealed record G4AvatarRecipe(
+public sealed partial record G4AvatarRecipe(
     int Version, string Algorithm, bool ExportChr, bool ExportEvent, string ChrFamily, string EventSkeleton,
     string SourceSkeletonBase64, string TargetSkeletonBase64,
     IReadOnlyList<G4AvatarNode> SourceNodes, IReadOnlyList<G4AvatarNode> TargetNodes,

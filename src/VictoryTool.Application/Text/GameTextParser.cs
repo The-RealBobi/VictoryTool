@@ -10,6 +10,7 @@ public enum CharacterReferenceKind
     FirstName,
     LastName,
     FullName,
+    MapName,
 }
 
 public sealed record GameTextCharacterReference(
@@ -116,9 +117,9 @@ public static class GameTextParser
         var kind = content[..separator] switch
         {
             "FST" => CharacterReferenceKind.FirstName,
-            "LST" => CharacterReferenceKind.LastName,
-            "FUL" => CharacterReferenceKind.FullName,
-            "FLC" => CharacterReferenceKind.FullName,
+            "LST" or "LAF" or "LFC" => CharacterReferenceKind.LastName,
+            "FUL" or "FLL" or "FLC" or "FFC" or "FFS" or "FLA" => CharacterReferenceKind.FullName,
+            "MNT" => CharacterReferenceKind.MapName,
             _ => (CharacterReferenceKind?)null,
         };
         if (kind is null) return false;

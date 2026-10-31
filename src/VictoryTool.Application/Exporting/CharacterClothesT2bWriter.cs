@@ -98,36 +98,25 @@ public sealed class CharacterClothesT2bWriter : ICharacterClothesT2bWriter
         }
         if (request.IsShoes && modelReferenceValues.Length > 1)
             modelReferenceValues[1] = document.ValueWidth == CfgBinValueWidth.Int32 ? (object)1 : 1L;
-        var result = T2bCountedListWriter.InsertClones(
-            document,
-            modelSource,
-            [modelValues],
-            modelListStart,
-            modelListEnd,
-            companionRows: [(modelReferenceSource, modelReferenceValues)]);
-
-        var withModel = CfgBinDocument.Read(result);
-        var sourceModelPath = request.SourceModelPath ?? $"_uniform/{request.SourceResourceKey}/{request.SourceResourceKey}.g4md";
-        var infoTemplates = withModel.Entries.Where(entry => entry.Name == infoTableName).ToArray();
-        var infoTemplate = request.IsShoes && request.SourceInfoIndex is { } templateInfoIndex
-            ? (uint)templateInfoIndex < (uint)infoTemplates.Length && infoTemplates[templateInfoIndex].Values.Count >= 3
-                ? infoTemplates[templateInfoIndex]
-                : throw new InvalidDataException("The source shoes info index moved while cloning its model row.")
-            : infoTemplates.Single(entry => entry.Values.Count >= (request.IsShoes ? 3 : 22)
-                && entry.Values[0].Value is string path
-                && path.Equals(sourceModelPath, StringComparison.Ordinal));
-        var infoValues = infoTemplate.Values.Select(value => value.Value).ToArray();
+        var infoValues = infoSource.Values.Select(value => value.Value).ToArray();
         infoValues[0] = request.ModelPath;
         infoValues[1] = request.TexturePath;
         infoValues[2] = document.ValueWidth == CfgBinValueWidth.Int32
             ? (object)request.ClothesInfoType
             : (long)request.ClothesInfoType;
-        result = T2bCountedListWriter.InsertClones(
-            withModel,
-            infoTemplate,
-            [infoValues],
-            infoListStart,
-            infoListEnd);
+        // The target info row must exist before native link validation accepts the new model reference.
+        var withInfoBytes = T2bCountedListWriter.InsertClones(
+            document, infoSource, [infoValues], infoListStart, infoListEnd);
+        var withInfo = CfgBinDocument.Read(withInfoBytes);
+        var modelTemplate = FindSingle(withInfo, modelTableName, entry =>
+            entry.Values.Count >= (request.IsShoes ? 1 : 2)
+            && GetInteger(entry.Values[0]) == request.SourceUniformModelId);
+        var referenceTemplate = withInfo.Entries.ElementAtOrDefault(modelTemplate.Index + 1);
+        if (referenceTemplate?.Name != referenceTableName)
+            throw new InvalidDataException("The source equipment model lost its adjacent info reference.");
+        var result = T2bCountedListWriter.InsertClones(
+            withInfo, modelTemplate, [modelValues], modelListStart, modelListEnd,
+            companionRows: [(referenceTemplate, modelReferenceValues)]);
 
         ValidateResult(result, request);
         GlobalLog.Debug("character_clothes_written", new Dictionary<string, object?>

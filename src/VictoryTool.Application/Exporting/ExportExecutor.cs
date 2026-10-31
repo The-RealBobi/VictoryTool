@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Security.Cryptography;
 using System.Text;
+using System.Buffers.Binary;
 using VictoryTool.Application.Assets;
 using VictoryTool.Application.Characters;
 using VictoryTool.Application.Diagnostics;
@@ -95,6 +96,8 @@ public sealed class ExportExecutor : IExportExecutor
                 "The export plan contains CFGBIN patch operations that have not passed the table writer gate.");
         }
 
+        var targetNames = AvatarAnimationTargetNames.Prepare(plan);
+        plan = targetNames.Plan;
         var outputPath = Path.GetFullPath(plan.OutputPath);
         if (Directory.Exists(outputPath) || File.Exists(outputPath))
             throw new IOException("The export output path already exists.");
@@ -107,6 +110,24 @@ public sealed class ExportExecutor : IExportExecutor
         Directory.CreateDirectory(stagingPath);
 
         var publishedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var tables = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+        var changedTables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        async Task<byte[]> ReadTableAsync(string path)
+        {
+            if (!tables.TryGetValue(path, out var bytes))
+            {
+                if (path.StartsWith(stagingPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                    ReportProgress(progress, "config_read", Path.GetRelativePath(stagingPath, path));
+                bytes = await File.ReadAllBytesAsync(path, cancellationToken);
+                tables.Add(path, bytes);
+            }
+            return bytes;
+        }
+        void UpdateTable(string path, byte[] bytes)
+        {
+            tables[path] = bytes;
+            changedTables.Add(path);
+        }
         try
         {
             ReportProgress(progress, "starting", null);
@@ -160,7 +181,8 @@ public sealed class ExportExecutor : IExportExecutor
                 var completed = 0;
                 var progressLogTimer = System.Diagnostics.Stopwatch.StartNew();
                 GlobalLog.Info("animation_family_registration_started", new Dictionary<string, object?> { ["count"] = total });
-                foreach (var request in plan.AnimationGenerationRequests)
+                completed = await GenerateAvatarAnimationsAsync(plan, stagingPath, publishedPaths, progress, cancellationToken);
+                foreach (var request in plan.AnimationGenerationRequests.Where(request => request.Profile.AvatarRecipe is null))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     ReportProgress(progress, "animation_package", request.PackagePath);
@@ -171,49 +193,10 @@ public sealed class ExportExecutor : IExportExecutor
                     foreach (var bankSource in request.Banks)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
-                        ReportProgress(progress, "animation", bankSource.ResourcePath);
+                        ReportProgress(progress, "animation", $"{completed + 1}/{total} · {bankSource.ResourcePath}");
                         byte[] generatedBankBytes;
                         byte[] destinationPackageBytes;
                         var sourcePackageBytes = await File.ReadAllBytesAsync(bankSource.Path, cancellationToken);
-                        if (request.Profile.AvatarRecipe is { } recipe)
-                        {
-                            byte[] output;
-                            try
-                            {
-                                output = await Task.Run(() => AvatarAnimationResources.Export(sourcePackageBytes,
-                                    bankSource, recipe, request.GeneratedFamilyName!, cancellationToken), cancellationToken);
-                            }
-                            catch (InvalidDataException exception)
-                            {
-                                throw new InvalidDataException($"Animation bank '{bankSource.ResourcePath}' failed: {exception.Message}", exception);
-                            }
-                            var outputRoute = bankSource.DestinationResourcePath
-                                ?? throw new InvalidDataException($"Animation bank '{bankSource.ResourcePath}' has no output route.");
-                            var animationOutputPath = GetSafeDestination(stagingPath,
-                                bankSource.IsEvent ? outputRoute : $"common/chr/{outputRoute}");
-                            if (AvatarAnimationResources.IsNativeEventEffect(bankSource) && publishedPaths.Contains(animationOutputPath))
-                            {
-                                var published = await File.ReadAllBytesAsync(animationOutputPath, cancellationToken);
-                                if (!published.AsSpan().SequenceEqual(output))
-                                    throw new InvalidDataException($"Native event effects target '{outputRoute}' with different content.");
-                            }
-                            else
-                            {
-                                ReserveDestination(animationOutputPath, publishedPaths);
-                                Directory.CreateDirectory(Path.GetDirectoryName(animationOutputPath)!);
-                                await File.WriteAllBytesAsync(animationOutputPath, output, cancellationToken);
-                            }
-                            completed++;
-                            if (completed == total || progressLogTimer.Elapsed >= TimeSpan.FromSeconds(5))
-                            {
-                                GlobalLog.Info("animation_family_registration_progress", new Dictionary<string, object?>
-                                {
-                                    ["completed"] = completed, ["total"] = total, ["remaining"] = total - completed,
-                                });
-                                progressLogTimer.Restart();
-                            }
-                            continue;
-                        }
                         if (bankSource.GeneratedPackageResourcePath is { } generatedPackagePath)
                         {
                             if (!authoredBanks.TryGetValue(generatedPackagePath, out var generatedPackageResource))
@@ -277,13 +260,12 @@ public sealed class ExportExecutor : IExportExecutor
                 foreach (var request in plan.AnimationGenerationRequests.Where(request => request.Banks.Any(bank => !bank.IsEvent)))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    ReportProgress(progress, "motion_table", request.Family.MotionTablePath);
-                    var tablePath = GetSafeDestination(stagingPath, request.Family.MotionTablePath);
-                    var table = await File.ReadAllBytesAsync(tablePath, cancellationToken);
+                        var tablePath = GetSafeDestination(stagingPath, request.Family.MotionTablePath);
+                    var table = await ReadTableAsync(tablePath);
                     table = new CharacterMotionInfoT2bWriter().Append(table, request.Family.Crc32,
                         request.GeneratedFamilyName ?? throw new InvalidDataException("The generated motion family name was not assigned."),
                         request.Banks.Where(bank => !bank.IsEvent).ToArray());
-                    await File.WriteAllBytesAsync(tablePath, table, cancellationToken);
+                    UpdateTable(tablePath, table);
                 }
             }
 
@@ -333,6 +315,8 @@ public sealed class ExportExecutor : IExportExecutor
                     ReserveDestination(destination, publishedPaths);
                     Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
                     var content = resource.Content.ToArray();
+                    if (targetNames.Names.TryGetValue(operation.BatchEntryId, out var boneNames))
+                        content = AvatarAnimationTargetNames.RenameResource(content, boneNames);
                     if (operation.DestinationPath.Contains("_face/99_CUSTOM/", StringComparison.OrdinalIgnoreCase)
                         && Path.GetExtension(packageResourcePath).Equals(".objbin", StringComparison.OrdinalIgnoreCase))
                     {
@@ -389,7 +373,6 @@ public sealed class ExportExecutor : IExportExecutor
             foreach (var operation in plan.LocalizationOperations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                ReportProgress(progress, "localization", operation.NameTablePath);
                 var ids = new CharacterTextIds(
                     FindAssignedId(plan, operation.BatchEntryId, "nameText", ".name.full"),
                     FindAssignedId(plan, operation.BatchEntryId, "nameText", ".name.short"),
@@ -398,19 +381,19 @@ public sealed class ExportExecutor : IExportExecutor
                 var namePath = GetSafeDestination(stagingPath, operation.NameTablePath);
                 var descriptionPath = GetSafeDestination(stagingPath, operation.DescriptionTablePath);
                 var romanizedPath = GetSafeDestination(stagingPath, operation.RomanizedNameTablePath);
-                var nameTable = await File.ReadAllBytesAsync(namePath, cancellationToken);
-                var descriptionTable = await File.ReadAllBytesAsync(descriptionPath, cancellationToken);
-                var romanizedNameTable = await File.ReadAllBytesAsync(romanizedPath, cancellationToken);
+                var nameTable = await ReadTableAsync(namePath);
+                var descriptionTable = await ReadTableAsync(descriptionPath);
+                var romanizedNameTable = await ReadTableAsync(romanizedPath);
                 var result = _localizationWriter.Append(
                     nameTable,
                     descriptionTable,
                     romanizedNameTable,
                     ids,
                     operation.Text);
-                await File.WriteAllBytesAsync(namePath, result.NameTable, cancellationToken);
-                await File.WriteAllBytesAsync(descriptionPath, result.DescriptionTable, cancellationToken);
+                UpdateTable(namePath, result.NameTable);
+                UpdateTable(descriptionPath, result.DescriptionTable);
                 if (result.RomanizedNameTable is not null)
-                    await File.WriteAllBytesAsync(romanizedPath, result.RomanizedNameTable, cancellationToken);
+                    UpdateTable(romanizedPath, result.RomanizedNameTable);
             }
 
             GlobalLog.Debug("export_models_started", new Dictionary<string, object?>
@@ -420,7 +403,6 @@ public sealed class ExportExecutor : IExportExecutor
             foreach (var operation in plan.CharacterBodyOperations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                ReportProgress(progress, "body", operation.ModelTablePath);
                 if (operation.SkeletonTemplatePath is { } skeletonTemplatePath
                     && operation.SkeletonModelPath is { } skeletonModelPath)
                 {
@@ -436,7 +418,7 @@ public sealed class ExportExecutor : IExportExecutor
                     publishedPaths.Add(destination);
                 }
                 var bodyPath = GetSafeDestination(stagingPath, operation.ModelTablePath);
-                var modelTable = await File.ReadAllBytesAsync(bodyPath, cancellationToken);
+                var modelTable = await ReadTableAsync(bodyPath);
                 var result = _characterBodyWriter.Append(
                     modelTable,
                     new CharacterBodyWriteRequest(
@@ -445,15 +427,13 @@ public sealed class ExportExecutor : IExportExecutor
                         operation.BodyModelPath,
                         operation.SkeletonModelPath,
                         operation.MotionFamilyCrc32));
-                await File.WriteAllBytesAsync(bodyPath, result, cancellationToken);
+                UpdateTable(bodyPath, result);
             }
-            ValidateCharacterSkeletonResources(stagingPath, plan);
             foreach (var operation in plan.CharacterClothesOperations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                ReportProgress(progress, "clothes", operation.ClothesTablePath);
                 var clothesPath = GetSafeDestination(stagingPath, operation.ClothesTablePath);
-                var clothesTable = await File.ReadAllBytesAsync(clothesPath, cancellationToken);
+                var clothesTable = await ReadTableAsync(clothesPath);
                 var result = _characterClothesWriter.Append(
                     clothesTable,
                     new CharacterClothesWriteRequest(
@@ -467,14 +447,13 @@ public sealed class ExportExecutor : IExportExecutor
                         operation.IsShoes,
                         operation.SourceModelPath,
                         operation.SourceInfoIndex));
-                await File.WriteAllBytesAsync(clothesPath, result, cancellationToken);
+                UpdateTable(clothesPath, result);
             }
             foreach (var operation in plan.CharacterModelOperations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                ReportProgress(progress, "models", operation.ModelTablePath);
                 var modelPath = GetSafeDestination(stagingPath, operation.ModelTablePath);
-                var modelTable = await File.ReadAllBytesAsync(modelPath, cancellationToken);
+                var modelTable = await ReadTableAsync(modelPath);
                 var result = _characterModelWriter.Append(
                     modelTable,
                     new CharacterModelWriteRequest(
@@ -491,69 +470,70 @@ public sealed class ExportExecutor : IExportExecutor
                         operation.ChestSize,
                         operation.ForceKit,
                         operation.BodyModelId));
-                await File.WriteAllBytesAsync(modelPath, result, cancellationToken);
+                UpdateTable(modelPath, result);
             }
+
 
             GlobalLog.Debug("export_character_core_started", new Dictionary<string, object?>
             {
                 ["count"] = plan.CharacterCoreOperations.Count,
             });
-            foreach (var operation in plan.CharacterCoreOperations)
+            foreach (var group in plan.CharacterCoreOperations.GroupBy(operation =>
+                         (operation.BaseTablePath, operation.ParameterTablePath)))
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                ReportProgress(progress, "character_data", operation.BaseTablePath);
-                var characterId = FindAssignedId(plan, operation.BatchEntryId, "character");
-                var request = new CharacterCoreWriteRequest(
-                    operation.SourceBaseId,
-                    operation.SourceParameterId,
-                    characterId,
-                    FindAssignedParameterId(plan, operation.BatchEntryId, operation.VariantIndex),
-                    ResolveInternalName(plan, operation.BatchEntryId),
-                    FindAssignedId(plan, operation.BatchEntryId, "nameText", ".name.full"),
-                    FindAssignedId(plan, operation.BatchEntryId, "nameText", ".name.short"),
-                    FindAssignedId(plan, operation.BatchEntryId, "nameText", ".name.upper"),
-                    FindAssignedId(plan, operation.BatchEntryId, "descriptionText", ".description"),
-                    operation.Affinity,
-                    operation.MainPosition,
-                    operation.SubPosition,
-                    operation.Skills,
-                    operation.UsesAllocatedModel
-                        ? FindAssignedId(plan, operation.BatchEntryId, "model")
-                        : null,
-                    EnforceIdentityHash: operation.VariantIndex == 0,
-                    operation.PlayStyle,
-                    operation.Growth,
-                    operation.Rank,
-                    operation.AbilityBoardId,
-                    operation.SpecialRarity,
-                    operation.Gender,
-                    operation.AcademicYear,
-                    operation.SourceSeries,
-                    operation.UniformPortraitVariant,
-                    operation.TeamAssociation1,
-                    operation.TeamAssociation2,
-                    operation.TeamAssociation3,
-                    operation.OriginGameAssociationIndex,
-                    operation.SkillsUnlocked,
-                    operation.WritesBaseRow);
-                var basePath = GetSafeDestination(stagingPath, operation.BaseTablePath);
-                var parameterPath = GetSafeDestination(stagingPath, operation.ParameterTablePath);
-                var baseTable = await File.ReadAllBytesAsync(basePath, cancellationToken);
-                var parameterTable = await File.ReadAllBytesAsync(parameterPath, cancellationToken);
-                var sourceBaseTable = operation.TemplateBaseTableSourcePath is null
-                    ? baseTable
-                    : await File.ReadAllBytesAsync(operation.TemplateBaseTableSourcePath, cancellationToken);
-                var sourceParameterTable = operation.TemplateParameterTableSourcePath is null
-                    ? parameterTable
-                    : await File.ReadAllBytesAsync(operation.TemplateParameterTableSourcePath, cancellationToken);
-                var result = _characterCoreWriter.Append(
-                    baseTable,
-                    parameterTable,
-                    sourceBaseTable,
-                    sourceParameterTable,
-                    request);
-                await File.WriteAllBytesAsync(basePath, result.BaseTable, cancellationToken);
-                await File.WriteAllBytesAsync(parameterPath, result.ParameterTable, cancellationToken);
+                var basePath = GetSafeDestination(stagingPath, group.Key.BaseTablePath);
+                var parameterPath = GetSafeDestination(stagingPath, group.Key.ParameterTablePath);
+                var baseTable = await ReadTableAsync(basePath);
+                var parameterTable = await ReadTableAsync(parameterPath);
+                var sources = new List<CharacterCoreWriteSource>();
+                foreach (var operation in group)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var characterId = FindAssignedId(plan, operation.BatchEntryId, "character");
+                    var request = new CharacterCoreWriteRequest(
+                        operation.SourceBaseId,
+                        operation.SourceParameterId,
+                        characterId,
+                        FindAssignedParameterId(plan, operation.BatchEntryId, operation.VariantIndex),
+                        ResolveInternalName(plan, operation.BatchEntryId),
+                        FindAssignedId(plan, operation.BatchEntryId, "nameText", ".name.full"),
+                        FindAssignedId(plan, operation.BatchEntryId, "nameText", ".name.short"),
+                        FindAssignedId(plan, operation.BatchEntryId, "nameText", ".name.upper"),
+                        FindAssignedId(plan, operation.BatchEntryId, "descriptionText", ".description"),
+                        operation.Affinity,
+                        operation.MainPosition,
+                        operation.SubPosition,
+                        operation.Skills,
+                        operation.UsesAllocatedModel
+                            ? FindAssignedId(plan, operation.BatchEntryId, "model")
+                            : null,
+                        EnforceIdentityHash: operation.VariantIndex == 0,
+                        operation.PlayStyle,
+                        operation.Growth,
+                        operation.Rank,
+                        operation.AbilityBoardId,
+                        operation.SpecialRarity,
+                        operation.Gender,
+                        operation.AcademicYear,
+                        operation.SourceSeries,
+                        operation.UniformPortraitVariant,
+                        operation.TeamAssociation1,
+                        operation.TeamAssociation2,
+                        operation.TeamAssociation3,
+                        operation.OriginGameAssociationIndex,
+                        operation.SkillsUnlocked,
+                        operation.WritesBaseRow);
+                    var sourceBaseTable = operation.TemplateBaseTableSourcePath is null
+                        ? baseTable
+                        : await ReadTableAsync(operation.TemplateBaseTableSourcePath);
+                    var sourceParameterTable = operation.TemplateParameterTableSourcePath is null
+                        ? parameterTable
+                        : await ReadTableAsync(operation.TemplateParameterTableSourcePath);
+                    sources.Add(new CharacterCoreWriteSource(request, sourceBaseTable, sourceParameterTable));
+                }
+                var result = _characterCoreWriter.AppendBatch(baseTable, parameterTable, sources, cancellationToken);
+                UpdateTable(basePath, result.BaseTable);
+                UpdateTable(parameterPath, result.ParameterTable);
             }
 
             GlobalLog.Debug("export_shop_started", new Dictionary<string, object?>
@@ -563,9 +543,8 @@ public sealed class ExportExecutor : IExportExecutor
             foreach (var operation in plan.ShopCharacterOperations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                ReportProgress(progress, "shop", operation.ShopTablePath);
                 var shopPath = GetSafeDestination(stagingPath, operation.ShopTablePath);
-                var shopTable = await File.ReadAllBytesAsync(shopPath, cancellationToken);
+                var shopTable = await ReadTableAsync(shopPath);
                 var result = _shopCharacterWriter.Append(
                     shopTable,
                     new ShopCharacterWriteRequest(
@@ -577,19 +556,19 @@ public sealed class ExportExecutor : IExportExecutor
                         operation.SpecialVariant,
                         operation.IsFree,
                         operation.SourceShopParameterId));
-                await File.WriteAllBytesAsync(shopPath, result, cancellationToken);
+                UpdateTable(shopPath, result);
             }
 
             GlobalLog.Debug("export_delivery_started", new Dictionary<string, object?>
             {
                 ["count"] = plan.CharacterDeliveryOperations.Count,
             });
-            foreach (var operation in plan.CharacterDeliveryOperations)
+            foreach (var group in plan.CharacterDeliveryOperations.GroupBy(operation => operation.DeliveryTablePath, StringComparer.OrdinalIgnoreCase))
             {
+                var operation = group.First();
                 cancellationToken.ThrowIfCancellationRequested();
-                ReportProgress(progress, "delivery", operation.DeliveryTablePath);
                 var deliveryPath = GetSafeDestination(stagingPath, operation.DeliveryTablePath);
-                var deliveryTable = await File.ReadAllBytesAsync(deliveryPath, cancellationToken);
+                var deliveryTable = await ReadTableAsync(deliveryPath);
                 var result = _characterDeliveryWriter.Append(
                     deliveryTable,
                     new VictoryTool.CfgBin.CharacterDeliveryWriteRequest(
@@ -600,8 +579,12 @@ public sealed class ExportExecutor : IExportExecutor
                         FindAssignedParameterId(plan, operation.BatchEntryId, operation.VariantIndex),
                         operation.VariantIndex == 0 && plan.DeliveryLocalizationOperations.Count > 0
                             ? FindAssignedId(plan, operation.BatchEntryId, "deliveryTitleText", ".delivery.title")
-                            : null));
-                await File.WriteAllBytesAsync(deliveryPath, result, cancellationToken);
+                            : null)
+                    {
+                        AdditionalCharacterParameterIds = group.Skip(1)
+                            .Select(item => FindAssignedParameterId(plan, item.BatchEntryId, item.VariantIndex)).ToArray(),
+                    });
+                UpdateTable(deliveryPath, result);
             }
 
             GlobalLog.Debug("export_delivery_localizations_started", new Dictionary<string, object?>
@@ -609,16 +592,26 @@ public sealed class ExportExecutor : IExportExecutor
                 ["count"] = plan.DeliveryLocalizationOperations.Count,
             });
             var deliveryTextWriter = new DeliveryTextWriter();
-            foreach (var operation in plan.DeliveryLocalizationOperations)
+            foreach (var group in plan.DeliveryLocalizationOperations.GroupBy(operation => operation.TablePath, StringComparer.OrdinalIgnoreCase))
             {
+                var operation = group.First();
                 cancellationToken.ThrowIfCancellationRequested();
-                ReportProgress(progress, "delivery_localization", operation.TablePath);
                 var tablePath = GetSafeDestination(stagingPath, operation.TablePath);
-                var table = await File.ReadAllBytesAsync(tablePath, cancellationToken);
+                var table = await ReadTableAsync(tablePath);
                 var titleId = FindAssignedId(plan, operation.BatchEntryId, "deliveryTitleText", ".delivery.title");
                 var result = deliveryTextWriter.AppendTitle(table, titleId, operation.Title);
-                await File.WriteAllBytesAsync(tablePath, result, cancellationToken);
+                UpdateTable(tablePath, result);
             }
+
+            foreach (var path in changedTables)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                ReportProgress(progress, "config_write", Path.GetRelativePath(stagingPath, path));
+                await File.WriteAllBytesAsync(path, tables[path], cancellationToken);
+            }
+            tables.Clear();
+            SynchronizeCustomMeshCapacity(stagingPath, plan);
+            var characterResources = ValidateCharacterSkeletonResources(stagingPath, plan);
 
             cancellationToken.ThrowIfCancellationRequested();
             const string integrityManifestName = "victorytool-export-manifest.sha256";
@@ -662,17 +655,20 @@ public sealed class ExportExecutor : IExportExecutor
                     request.Category,
                     sourceModelStem = request.Profile.SourceModelStem,
                     sourceFamily = request.Family.Name,
+                    eventSkeleton = (request.EventRecipe ?? request.Profile.AvatarRecipe)?.EventSkeleton,
                     generatedFamily = request.GeneratedFamilyName,
                     generatedFamilyCrc32 = request.GeneratedFamilyCrc32?.ToString("X8"),
                     banks = request.Banks.Select(bank => new
                     {
                         sourceResourcePath = bank.ResourcePath,
+                        registrationMode = bank.IsEvent ? "replace_native" : "custom_family",
                         type = bank.Type,
                         outputPath = bank.IsEvent ? bank.DestinationResourcePath : $"common/chr/{bank.DestinationResourcePath}",
                         sha256 = integrityHashes[bank.IsEvent ? bank.DestinationResourcePath! : $"common/chr/{bank.DestinationResourcePath}"],
                         g4mtSha256 = bank.GeneratedChecksum,
                     }).OrderBy(bank => bank.outputPath, StringComparer.Ordinal).ToArray(),
                 }).ToArray(),
+                resourceValidation = new { status = "passed", characters = characterResources },
                 assignedIds = plan.AssignedIds,
                 deliveryTitles = plan.DeliveryLocalizationOperations
                     .Select(operation => new
@@ -792,9 +788,7 @@ public sealed class ExportExecutor : IExportExecutor
         if (string.IsNullOrWhiteSpace(sourceName)) return content;
         var marker = sourceName.IndexOf("_1_", StringComparison.Ordinal);
         var sourceStem = marker > 0 ? sourceName[..marker] : sourceName.Split('_')[0];
-        return string.Equals(sourceStem, destinationStem, StringComparison.Ordinal)
-            ? content
-            : document.RenameIdentifier(sourceStem, destinationStem);
+        return document.RenameIdentifier(sourceStem, destinationStem);
     }
 
     private static byte[] RebaseCharacterObjectConfig(byte[] content, string characterName)
@@ -873,35 +867,92 @@ public sealed class ExportExecutor : IExportExecutor
             throw new InvalidDataException(
                 $"The exported portrait does not contain the expected two layers for '{expectedStem}'.");
         }
+        var hashes = document.Textures.Select(texture => texture.StoredHash).ToArray();
+        var ids = document.Textures.Select(texture => (int)texture.Id).ToArray();
+        if (document.TotalCount != expectedNames.Count
+            || !ids.Order().SequenceEqual(Enumerable.Range(0, hashes.Length))
+            || !ids.Select(index => hashes[index]).SequenceEqual(hashes.Order()))
+            throw new InvalidDataException($"The exported portrait lookup is not ordered by texture hash for '{expectedStem}'.");
     }
 
     private static void ValidateCharacterModelResources(string stagingPath, ExportPlan plan)
     {
-        var platformRoot = plan.Platform == ExportPlatform.Pc ? "dx11" : "nx";
         foreach (var operation in plan.CharacterModelOperations)
-        {
-            var relativeFacePath = operation.FaceModelPath.Replace('\\', '/').TrimStart('/');
-            var commonFacePath = relativeFacePath.StartsWith("common/", StringComparison.OrdinalIgnoreCase)
-                ? relativeFacePath
-                : $"common/chr/{relativeFacePath}";
-            var extension = Path.GetExtension(commonFacePath);
-            if (!extension.Equals(".g4md", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException(
-                    $"The character model '{operation.FaceModelPath}' is not a G4MD resource.");
+            ValidateModelFamily(stagingPath, operation.FaceModelPath, plan.Platform);
+    }
 
-            var stem = commonFacePath[..^extension.Length];
-            var texturePath = $"{platformRoot}/{stem["common/".Length..]}.g4tx";
-            foreach (var path in new[] { commonFacePath, $"{stem}.g4mg", texturePath })
+    private static void ValidateModelFamily(string stagingPath, string modelPath, ExportPlatform platform)
+    {
+        var commonPath = NormalizeCommonResourcePath(modelPath);
+        if (!Path.GetExtension(commonPath).Equals(".g4md", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"The character model '{modelPath}' is not a G4MD resource.");
+        var platformRoot = platform == ExportPlatform.Pc ? "dx11" : "nx";
+        var stem = Path.ChangeExtension(commonPath, null);
+        var texturePath = $"{platformRoot}/{stem["common/".Length..]}.g4tx";
+        foreach (var path in new[] { commonPath, $"{stem}.g4mg", texturePath })
+        {
+            if (!File.Exists(GetSafeDestination(stagingPath, path)))
+                throw new InvalidDataException($"The exported model family '{modelPath}' is incomplete; missing '{path}'.");
+        }
+    }
+
+    private sealed record CharacterResourceValidation(
+        Guid BatchEntryId, uint ModelId, int BodyModelId, string ModelPath,
+        string ObjectConfigPath, string SkeletonPath, string SkeletonSha256, int JointCount,
+        int MeshCapacity);
+
+    private static void SynchronizeCustomMeshCapacity(string stagingPath, ExportPlan plan)
+    {
+        Span<byte> header = stackalloc byte[0x24];
+        foreach (var body in plan.CharacterBodyOperations)
+        {
+            if (body.SkeletonModelPath is not { } skeletonConfig)
+                continue;
+            var heads = plan.CharacterModelOperations.Where(model => model.BatchEntryId == body.BatchEntryId)
+                .Select(model => model.FaceModelPath).ToArray();
+            var paths = heads.Append(body.BodyModelPath)
+                .Concat(plan.CharacterClothesOperations.Where(part => part.BatchEntryId == body.BatchEntryId)
+                    .Select(part => part.ModelPath))
+                .Select(NormalizeCommonResourcePath).Distinct(StringComparer.OrdinalIgnoreCase);
+            var count = 0;
+            foreach (var path in paths)
             {
-                if (!File.Exists(GetSafeDestination(stagingPath, path)))
-                    throw new InvalidDataException(
-                        $"The exported face model family is incomplete; missing '{path}'.");
+                var file = GetSafeDestination(stagingPath, path);
+                // Native equipment may remain in the game archives; only staged geometry contributes here.
+                if (!File.Exists(file))
+                    continue;
+                using var stream = File.OpenRead(file);
+                stream.ReadExactly(header);
+                if (!header[..4].SequenceEqual("G4MD"u8))
+                    throw new InvalidDataException($"The custom model '{path}' is not a G4MD resource.");
+                count = checked(count + BinaryPrimitives.ReadUInt16LittleEndian(header[0x20..]));
+            }
+            var configs = heads.Select(path => Path.ChangeExtension(path, ".objbin")).Append(skeletonConfig)
+                .Select(NormalizeCommonResourcePath).Distinct(StringComparer.OrdinalIgnoreCase);
+            foreach (var path in configs)
+            {
+                var file = GetSafeDestination(stagingPath, path);
+                if (!File.Exists(file))
+                    continue;
+                var config = CfgBinDocument.Read(File.ReadAllBytes(file));
+                var capacity = config.Entries.SingleOrDefault(entry => entry.Name == "SETUP_PARAM"
+                    && entry.Values.Count >= 2 && Equals(entry.Values[0].Value, "MeshNum"))
+                    ?? throw new InvalidDataException($"The custom object config '{path}' has no MeshNum parameter.");
+                if (Convert.ToInt32(capacity.Values[1].Value) < count)
+                    File.WriteAllBytes(file, config.WriteWithValueEdits([new CfgBinValueEdit(capacity.Index, 1, count)]));
             }
         }
     }
 
-    private static void ValidateCharacterSkeletonResources(string stagingPath, ExportPlan plan)
+    private static IReadOnlyList<CharacterResourceValidation> ValidateCharacterSkeletonResources(string stagingPath, ExportPlan plan)
     {
+        foreach (var request in plan.AnimationGenerationRequests)
+        {
+            if (!plan.CharacterBodyOperations.Any(body => body.BatchEntryId == request.BatchEntryId
+                    && body.SkeletonModelPath is not null))
+                throw new InvalidDataException("The custom animation rig has no character body registration. Re-export the character package with its skeleton references.");
+        }
+        var validations = new List<CharacterResourceValidation>();
         foreach (var operation in plan.CharacterBodyOperations)
         {
             if (operation.SkeletonModelPath is not { } skeletonModelPath)
@@ -922,6 +973,19 @@ public sealed class ExportExecutor : IExportExecutor
                 throw new InvalidDataException(
                     $"The exported body model {operation.BodyModelId} resolves to '{(bodyRows.Length == 1 ? bodyRows[0].Values[1].Value : "no unique row")}', not '{skeletonModelPath}'.");
 
+            if (!string.Equals(bodyRows[0].Values[2].Value as string, operation.BodyModelPath, StringComparison.Ordinal))
+                throw new InvalidDataException($"The exported body model {operation.BodyModelId} does not reference its geometry '{operation.BodyModelPath}'.");
+            ValidateModelFamily(stagingPath, operation.BodyModelPath, plan.Platform);
+            var modelId = FindAssignedId(plan, operation.BatchEntryId, "model");
+            var modelRows = table.Entries.Where(entry => entry.Name == "CHARA_MODEL_INFO"
+                && entry.Values.Count >= 5
+                && Convert.ToInt64(entry.Values[0].Value) == unchecked((int)modelId)).ToArray();
+            if (modelRows.Length != 1 || Convert.ToInt64(modelRows[0].Values[4].Value) != operation.BodyModelId)
+                throw new InvalidDataException($"The exported character model {modelId} is not linked to custom body {operation.BodyModelId}.");
+            if (operation.MotionFamilyCrc32 is { } familyCrc
+                && Convert.ToInt64(bodyRows[0].Values[3].Value) != familyCrc)
+                throw new InvalidDataException($"The exported body model {operation.BodyModelId} is not linked to its generated CHR animation family.");
+
             var objectConfigPath = NormalizeCommonResourcePath(skeletonModelPath);
             if (!Path.GetExtension(objectConfigPath).Equals(".objbin", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"The custom skeleton object config path '{skeletonModelPath}' is not an OBJBIN resource.");
@@ -930,6 +994,8 @@ public sealed class ExportExecutor : IExportExecutor
                 throw new InvalidDataException($"The custom skeleton object config '{objectConfigPath}' is missing.");
 
             var config = CfgBinDocument.Read(File.ReadAllBytes(objectConfigFile));
+            var meshCapacity = config.Entries.Single(entry => entry.Name == "SETUP_PARAM"
+                && entry.Values.Count >= 2 && Equals(entry.Values[0].Value, "MeshNum"));
             var skeletonRows = config.Entries.Where(entry => entry.Name == "SETUP_PARAM"
                 && entry.Values.Count >= 2
                 && string.Equals(entry.Values[0].Value as string, "Skeleton", StringComparison.Ordinal)).ToArray();
@@ -942,7 +1008,18 @@ public sealed class ExportExecutor : IExportExecutor
                 || !File.Exists(GetSafeDestination(stagingPath, commonSkeletonPath)))
                 throw new InvalidDataException(
                     $"The custom skeleton object config '{objectConfigPath}' references a missing G4SK resource '{skeletonPath}'.");
+            var skeletonBytes = File.ReadAllBytes(GetSafeDestination(stagingPath, commonSkeletonPath));
+            var skeleton = G4skSkeletonReader.Read(skeletonBytes);
+            var skeletonHash = Convert.ToHexString(SHA256.HashData(skeletonBytes));
+            var requests = plan.AnimationGenerationRequests.Where(request => request.BatchEntryId == operation.BatchEntryId).ToArray();
+            if (requests.Length > 0 && !requests.Any(request =>
+                    string.Equals(request.Profile.TargetRig.Sha256, skeletonHash, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException($"The exported skeleton '{commonSkeletonPath}' does not match the rig used for this character's animations.");
+            validations.Add(new CharacterResourceValidation(operation.BatchEntryId, modelId, operation.BodyModelId,
+                NormalizeCommonResourcePath(operation.BodyModelPath), objectConfigPath, commonSkeletonPath,
+                skeletonHash, skeleton.Nodes.Count, Convert.ToInt32(meshCapacity.Values[1].Value)));
         }
+        return validations;
     }
 
     private static string NormalizeCommonResourcePath(string resourcePath)
@@ -1037,6 +1114,93 @@ public sealed class ExportExecutor : IExportExecutor
             if (!actualTargets.SetEquals(expectedTargets) || actualTargets.Count != generatedInfos.Length)
                 throw new InvalidDataException($"Generated G4MT p{bankType} clip {generatedClip.Index} does not target exactly the supplied G4SK joints.");
         }
+    }
+
+    private async Task<int> GenerateAvatarAnimationsAsync(
+        ExportPlan plan, string stagingPath, HashSet<string> publishedPaths,
+        IProgress<ExportProgress>? progress, CancellationToken cancellationToken)
+    {
+        var requests = plan.AnimationGenerationRequests.Where(request => request.Profile.AvatarRecipe is not null).ToArray();
+        foreach (var request in requests)
+        {
+            ReportProgress(progress, "animation_package", request.PackagePath);
+            await _packageService.LoadPackageAsync(request.PackagePath, cancellationToken);
+        }
+        var rigKeys = requests.SelectMany(request => new[] { request.Profile.AvatarRecipe!, request.EventRecipe ?? request.Profile.AvatarRecipe! }).Distinct()
+            .ToDictionary(recipe => recipe, recipe => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(recipe))));
+        var groups = requests.SelectMany(request => request.Banks.Select(bank => (Request: request, Bank: bank)))
+            .GroupBy(job => job.Bank.IsEvent ? job.Bank.DestinationResourcePath : $"common/chr/{job.Bank.DestinationResourcePath}",
+                StringComparer.OrdinalIgnoreCase).ToArray();
+        if (groups.Length == 0) return 0;
+        var estimatedWorkerMemory = Math.Max(256L * 1024 * 1024,
+            groups.SelectMany(group => group).Max(job => new FileInfo(job.Bank.Path).Length) * 32);
+        var memoryBudget = Math.Max(estimatedWorkerMemory, GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 4);
+        var workers = (int)Math.Max(1, Math.Min(Environment.ProcessorCount, Math.Min(groups.Length, memoryBudget / estimatedWorkerMemory)));
+        var clipWorkers = groups.Length == 1
+            ? (int)Math.Max(1, Math.Min(Environment.ProcessorCount, memoryBudget / estimatedWorkerMemory)) : 1;
+        var total = plan.AnimationGenerationRequests.Sum(request => request.Banks.Count);
+        var completed = 0;
+        var progressLock = new object();
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        GlobalLog.Info("animation_workers_started", new Dictionary<string, object?> { ["workers"] = workers, ["clipWorkers"] = clipWorkers, ["destinations"] = groups.Length });
+        await Parallel.ForEachAsync(groups, new ParallelOptions
+        {
+            MaxDegreeOfParallelism = workers, CancellationToken = cancellationToken,
+        }, async (group, token) =>
+        {
+            byte[]? merged = null;
+            var rigs = new HashSet<string>(StringComparer.Ordinal);
+            var bones = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var (request, bank) in group)
+            {
+                token.ThrowIfCancellationRequested();
+                lock (progressLock)
+                    ReportProgress(progress, "animation", $"{completed}/{total} · {bank.ResourcePath}");
+                var recipe = bank.IsEvent ? request.EventRecipe ?? request.Profile.AvatarRecipe! : request.Profile.AvatarRecipe!;
+                var route = bank.DestinationResourcePath
+                    ?? throw new InvalidDataException($"Animation bank '{bank.ResourcePath}' has no output route.");
+                if (bank.IsEvent && !string.Equals(route, bank.ResourcePath, StringComparison.Ordinal))
+                    throw new InvalidDataException($"EVENT bank '{bank.ResourcePath}' must replace its native route instead of '{route}'.");
+                var destination = GetSafeDestination(stagingPath, bank.IsEvent ? route : $"common/chr/{route}");
+                var effect = AvatarAnimationResources.IsNativeEventEffect(bank);
+                var rigKey = rigKeys[recipe];
+                if (merged is not null && !bank.IsEvent)
+                    throw new InvalidDataException($"Multiple animation banks target '{route}'.");
+                if (merged is null || effect || !rigs.Contains(rigKey))
+                {
+                    var customBones = recipe.TargetNodes.Select(node => node.Name)
+                        .Except(recipe.SourceNodes.Select(node => node.Name), StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal);
+                    if (merged is not null && !effect && bones.Overlaps(customBones))
+                        throw new InvalidDataException($"Shared EVENT bank '{route}' has incompatible custom rigs with overlapping bone names.");
+                    var source = effect || merged is null ? await File.ReadAllBytesAsync(bank.Path, token) : merged;
+                    byte[] output;
+                    try { output = AvatarAnimationResources.Export(source, bank, recipe, clipWorkers, token); }
+                    catch (InvalidDataException exception)
+                    { throw new InvalidDataException($"Animation bank '{bank.ResourcePath}' failed: {exception.Message}", exception); }
+                    if (effect && merged is not null && !merged.AsSpan().SequenceEqual(output))
+                        throw new InvalidDataException($"Native event effects target '{route}' with different content.");
+                    if (merged is null)
+                        lock (publishedPaths) ReserveDestination(destination, publishedPaths);
+                    merged = output;
+                    rigs.Add(rigKey);
+                    bones.UnionWith(customBones);
+                    Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                    await File.WriteAllBytesAsync(destination, output, token);
+                }
+                lock (progressLock)
+                {
+                    completed++;
+                    ReportProgress(progress, "animation", $"{completed}/{total} · {bank.ResourcePath}");
+                    if (completed == total || timer.Elapsed >= TimeSpan.FromSeconds(5))
+                    {
+                        GlobalLog.Info("animation_family_registration_progress", new Dictionary<string, object?>
+                        { ["completed"] = completed, ["total"] = total, ["remaining"] = total - completed });
+                        timer.Restart();
+                    }
+                }
+            }
+        });
+        return completed;
     }
 
     private static string GetSafeDestination(string stagingPath, string virtualPath)

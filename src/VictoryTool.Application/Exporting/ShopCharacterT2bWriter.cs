@@ -105,9 +105,7 @@ public sealed class ShopCharacterT2bWriter : IShopCharacterT2bWriter
             inserts.Add(new CfgBinEntryInsert(listEnd.Index, template.Index, values));
         }
 
-        var countEdited = CfgBinDocument.Read(document.WriteWithValueEdits(
-            [new CfgBinValueEdit(listBegin.Index, 0, checked(markerCount + 1))]));
-        var result = countEdited.WriteWithInsertedEntries(inserts);
+        var result = document.WriteWithInsertedEntries(inserts);
         ValidateResult(result, request, document.EntryCount, listBegin.Index, markerCount);
         GlobalLog.Debug("shop_character_written", new Dictionary<string, object?>
         {

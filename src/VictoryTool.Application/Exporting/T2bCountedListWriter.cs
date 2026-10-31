@@ -37,10 +37,9 @@ internal static class T2bCountedListWriter
                 throw new InvalidDataException("An inserted row does not match its source row field count.");
         }
 
-        var updated = CfgBinDocument.Read(document.WriteWithValueEdits(
-            [new CfgBinValueEdit(begin.Index, 0, AddCount(document, oldCount, rows.Count))]));
+        RequireCountRule(beginName, endName, rows[0].Template.Name!);
         var inserts = rows.Select(row => new CfgBinEntryInsert(end.Index, row.Template.Index, row.Values)).ToArray();
-        var result = updated.WriteWithInsertedEntries(inserts);
+        var result = document.WriteWithInsertedEntries(inserts);
         var restored = CfgBinDocument.Read(result);
         var restoredBegin = restored.Entries[begin.Index];
         var restoredEnd = restored.Entries.Single(entry => entry.Name == endName && entry.Index > begin.Index);
@@ -61,10 +60,30 @@ internal static class T2bCountedListWriter
         int? insertionIndex = null,
         IReadOnlyList<(CfgBinEntry Template, IReadOnlyList<object?> Values)>? companionRows = null)
     {
+        var inserts = PrepareClones(document, template, rows, beginName, endName, insertionIndex, companionRows);
+        var result = document.WriteWithInsertedEntries(inserts);
+        if (rows.Count == 0 || document.EntryCount == 1) return result;
+        var begin = document.Entries.Take(template.Index + 1).Last(entry => entry.Name == beginName);
+        var end = document.Entries.Skip(template.Index + 1).First(entry => entry.Name == endName);
+        var oldCount = GetInteger(begin.Values[0]);
+        var restored = CfgBinDocument.Read(result);
+        var restoredBegin = restored.Entries[begin.Index];
+        var restoredEnd = restored.Entries.Single(entry => entry.Name == endName && entry.Index > begin.Index);
+        if (GetInteger(restoredBegin.Values[0]) != oldCount + rows.Count
+            || restoredEnd.Index - end.Index != inserts.Length)
+            throw new InvalidDataException($"{beginName} insertion failed read-back validation.");
+        return result;
+    }
+
+    public static CfgBinEntryInsert[] PrepareClones(
+        CfgBinDocument document, CfgBinEntry template, IReadOnlyList<IReadOnlyList<object?>> rows,
+        string beginName, string endName, int? insertionIndex,
+        IReadOnlyList<(CfgBinEntry Template, IReadOnlyList<object?> Values)>? companionRows)
+    {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(template);
         ArgumentNullException.ThrowIfNull(rows);
-        if (rows.Count == 0) return document.WriteUnmodified();
+        if (rows.Count == 0) return [];
 
         var begin = document.Entries.Take(template.Index + 1)
             .LastOrDefault(entry => entry.Name == beginName);
@@ -74,8 +93,7 @@ internal static class T2bCountedListWriter
         {
             // Minimal unit fixtures created before counted-list support contain one template row only.
             if (document.EntryCount == 1)
-                return document.WriteWithAppendedEntries(rows.Select(values =>
-                    new CfgBinEntryAppend(template.Index, values)));
+                return rows.Select(values => new CfgBinEntryInsert(document.EntryCount, template.Index, values)).ToArray();
             throw new InvalidDataException(
                 $"Template row '{template.Name}' is not inside {beginName}/{endName}.");
         }
@@ -89,31 +107,35 @@ internal static class T2bCountedListWriter
             throw new InvalidDataException(
                 $"{beginName} declares {oldCount} rows but contains {actualCount} '{template.Name}' rows.");
 
-        var updated = CfgBinDocument.Read(document.WriteWithValueEdits(
-            [new CfgBinValueEdit(begin.Index, 0, AddCount(document, oldCount, rows.Count))]));
+        RequireCountRule(beginName, endName, template.Name!);
         var beforeIndex = insertionIndex ?? end.Index;
         if (beforeIndex <= begin.Index || beforeIndex > end.Index)
             throw new InvalidDataException($"The insertion boundary for {beginName} lies outside its list.");
-        var inserts = rows.Select(values =>
+        return rows.Select(values =>
                 new CfgBinEntryInsert(beforeIndex, template.Index, values))
             .Concat((companionRows ?? []).Select(row =>
                 new CfgBinEntryInsert(beforeIndex, row.Template.Index, row.Values)))
             .ToArray();
-        var result = updated.WriteWithInsertedEntries(inserts);
-        var restored = CfgBinDocument.Read(result);
-        var restoredBegin = restored.Entries[begin.Index];
-        var restoredEnd = restored.Entries.Single(entry => entry.Name == endName && entry.Index > begin.Index);
-        if (GetInteger(restoredBegin.Values[0]) != oldCount + rows.Count
-            || restoredEnd.Index - end.Index != inserts.Length)
-            throw new InvalidDataException($"{beginName} insertion failed read-back validation.");
-        return result;
     }
 
-    private static object AddCount(CfgBinDocument document, long count, int increment)
+    public static void ValidateBatchCount(CfgBinDocument before, CfgBinDocument after,
+        string beginName, string endName, string rowName, int added)
     {
-        if (document.ValueWidth == CfgBinValueWidth.Int32)
-            return checked((int)(count + increment));
-        return checked(count + increment);
+        if (added == 0 || before.EntryCount == 1) return;
+        var original = before.Entries.Single(entry => entry.Name == beginName);
+        var begin = after.Entries.Single(entry => entry.Name == beginName);
+        var end = after.Entries.Single(entry => entry.Name == endName && entry.Index > begin.Index);
+        var expected = GetInteger(original.Values[0]) + added;
+        var actual = after.Entries.Skip(begin.Index + 1).Take(end.Index - begin.Index - 1)
+            .Count(entry => entry.Name == rowName);
+        if (GetInteger(begin.Values[0]) != expected || actual != expected)
+            throw new InvalidDataException($"{beginName} batch insertion failed read-back validation.");
+    }
+
+    private static void RequireCountRule(string begin, string end, string child)
+    {
+        if (!CfgBinSchema.Catalog.Counts.Any(rule => rule.Start == begin && rule.End == end && rule.Child == child && rule.Position == 0))
+            throw new InvalidDataException($"The structure catalog has no verified COUNT rule for {begin}/{child}/{end}.");
     }
 
     private static long GetInteger(CfgBinValue value) => value.Value switch

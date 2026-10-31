@@ -44,7 +44,8 @@ public sealed record PlayerCardAssetRequest(
     int? BodyTypeOverride = null,
     int? GenderOverride = null,
     int? UniformModelOverride = null,
-    int? ChestSizeOverride = null);
+    int? ChestSizeOverride = null,
+    uint? SkinColorRgbaOverride = null);
 
 public interface IPlayerCardAssetLoader
 {
@@ -98,13 +99,25 @@ public sealed class PlayerCardAssetLoader : IPlayerCardAssetLoader
         var body = LoadSpriteAsync(
             profile, PlayerCardSpriteKind.BodyType, bodyType, request.Locale, cancellationToken);
         var chestSize = request.ChestSizeOverride ?? request.Character.BaseMetadata?.ChestSize ?? 0;
-        var uniform = LoadUniformAsync(
+        var uniformModel = request.UniformModelOverride ?? request.Character.BaseMetadata?.UniformModel;
+        var source = request.Character.BaseMetadata;
+        var exactUniform = genderValue == source?.Gender
+            && bodyType == source?.BodyType
+            && chestSize == (source?.ChestSize ?? 0)
+            && uniformModel == source?.UniformModel
+                ? request.Character.UniformPreviewAsset
+                : null;
+        var skinColor = request.SkinColorRgbaOverride ?? request.Character.BaseMetadata?.SkinColorRgba ?? 0;
+        var uniform = request.Character.PortraitMetadata?.IncludesUniform == true
+            ? Task.FromResult(new LoadedBitmap(null, null))
+            : LoadUniformAsync(
             profile,
             genderValue,
             bodyType,
             chestSize,
-            request.Character.UniformPreviewAsset,
-            request.UniformModelOverride ?? request.Character.BaseMetadata?.UniformModel,
+            skinColor == 0 ? DefaultSkinColorArgb : (skinColor >> 8) | (skinColor << 24),
+            exactUniform,
+            uniformModel,
             request.Locale,
             cancellationToken);
 
@@ -128,7 +141,10 @@ public sealed class PlayerCardAssetLoader : IPlayerCardAssetLoader
         }
         catch (Exception exception)
         {
-            GlobalLog.Error("player_card_assets_failed", exception);
+            if (exception is OperationCanceledException && cancellationToken.IsCancellationRequested)
+                GlobalLog.Debug("player_card_assets_cancelled");
+            else
+                GlobalLog.Error("player_card_assets_failed", exception);
             DisposeCompleted(position);
             DisposeCompleted(gender);
             DisposeCompleted(body);
@@ -164,6 +180,7 @@ public sealed class PlayerCardAssetLoader : IPlayerCardAssetLoader
         int? gender,
         int? bodyType,
         int chestSize,
+        uint skinColorArgb,
         UniformAssetDescriptor? exactAsset,
         int? uniformModel,
         string locale,
@@ -179,7 +196,7 @@ public sealed class PlayerCardAssetLoader : IPlayerCardAssetLoader
             new UniformPreviewRequest(
                 gender.Value,
                 bodyType.Value,
-                DefaultSkinColorArgb,
+                skinColorArgb,
                 locale,
                 exactAsset,
                 ChestSize: chestSize,

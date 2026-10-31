@@ -108,20 +108,19 @@ public sealed class CharacterLocalizationEditorRow : ObservableObject
         OnPropertyChanged(nameof(Label));
     }
 
-    private static string LanguageLabel(string locale, string applicationLocale)
+    internal static string LanguageLabel(string locale, string applicationLocale)
     {
-        var spanish = string.Equals(applicationLocale, "es", StringComparison.OrdinalIgnoreCase);
         return locale.ToLowerInvariant() switch
         {
-            "de" => spanish ? "Alemán" : "German",
-            "en" => spanish ? "Inglés" : "English",
-            "es" => spanish ? "Español" : "Spanish",
-            "fr" => spanish ? "Francés" : "French",
-            "it" => spanish ? "Italiano" : "Italian",
-            "ja" => spanish ? "Japonés" : "Japanese",
-            "pt" => spanish ? "Portugués" : "Portuguese",
-            "zh_hans" => spanish ? "Chino simplificado" : "Chinese (Simplified)",
-            "zh_hant" => spanish ? "Chino tradicional" : "Chinese (Traditional)",
+            "de" => WorkflowText.ForLocale(applicationLocale, "German"),
+            "en" => WorkflowText.ForLocale(applicationLocale, "English"),
+            "es" => WorkflowText.ForLocale(applicationLocale, "Spanish"),
+            "fr" => WorkflowText.ForLocale(applicationLocale, "French"),
+            "it" => WorkflowText.ForLocale(applicationLocale, "Italian"),
+            "ja" => WorkflowText.ForLocale(applicationLocale, "Japanese"),
+            "pt" => WorkflowText.ForLocale(applicationLocale, "Portuguese"),
+            "zh_hans" => WorkflowText.ForLocale(applicationLocale, "Chinese (Simplified)"),
+            "zh_hant" => WorkflowText.ForLocale(applicationLocale, "Chinese (Traditional)"),
             _ => locale.Replace('_', '-').ToUpperInvariant(),
         };
     }
@@ -231,13 +230,31 @@ public sealed class CharacterRosterRow : ObservableObject, IDisposable
     private Bitmap? _uniformPortrait;
     private CharacterCatalogItem _character;
     private bool _isPortraitLoading;
+    private string _locale = "en";
+
+    public string DisplayName => DisplayNameDocument.PlainText;
+    public RubyTextDocumentViewModel DisplayNameDocument => RubyTextDocumentViewModel.From(GameTextResolver.Resolve(
+        GameTextParser.Parse(CharacterDisplayName.Resolve(Character, _locale)),
+        Character.TextReferences ?? CharacterTextReferenceIndex.Empty, _locale));
+    public string Position => WorkflowText.ForLocale(_locale, Character.Position);
+
+    public void SetLanguage(string locale)
+    {
+        _locale = locale;
+        OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(DisplayNameDocument));
+        OnPropertyChanged(nameof(Position));
+    }
 
     public CharacterRosterRow(CharacterCatalogItem character) => _character = character;
 
     public CharacterCatalogItem Character
     {
         get => _character;
-        set => SetProperty(ref _character, value);
+        set
+        {
+            if (SetProperty(ref _character, value)) SetLanguage(_locale);
+        }
     }
     public Bitmap? UniformPortrait
     {
@@ -261,7 +278,7 @@ public sealed class CharacterRosterRow : ObservableObject, IDisposable
     public void Dispose() => UniformPortrait?.Dispose();
 }
 
-public sealed class MainWindowViewModel : ObservableObject
+public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 {
     private const int RosterPortraitConcurrency = 2;
     private readonly ICharacterCatalogService _catalogService;
@@ -296,6 +313,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private int? _selectedSpecialRarity;
     private CharacterSort _selectedCharacterSort = CharacterSort.DisplayName;
     private bool _customUniformSelected;
+    private bool _customShoesSelected;
     private string _statusMessage = "Select a game dump to begin.";
     private bool _isWorkspaceReady;
     private bool _isIndexing;
@@ -321,7 +339,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private bool _exportOutputPathGenerated;
     private bool _generateAnimationsEnabled;
     private bool _generateChrAnimations = true;
-    private bool _generateEventAnimations;
+    private bool _generateEventAnimations = true;
     private bool _isExporting;
     private string _exportProgressMessage = string.Empty;
     private CancellationTokenSource? _exportCancellation;
@@ -342,10 +360,10 @@ public sealed class MainWindowViewModel : ObservableObject
     private CharacterPortraitLoadResult? _standardPortraitResult;
     private CharacterPortraitLoadResult? _uniformPortraitResult;
     private Bitmap? _appearancePortrait;
-    private string? _appearancePortraitPath;
     private GameDumpProfile? _playerCardAssetProfile;
+    private readonly IUniformPreviewResolver? _rosterUniformResolver;
     private GameTaxonomyIndex? _gameTaxonomy;
-    private readonly Dictionary<(EquipmentCategory Category, string Locale), IReadOnlyList<LocalizedEquipment>>
+    private readonly Dictionary<(EquipmentCategory Category, string Locale), ObservableCollection<LocalizedEquipment>>
         _appearanceEquipmentOptions = [];
     private readonly Dictionary<string, IReadOnlyList<LocalizedTeam>> _teamAssociationOptions =
         new(StringComparer.OrdinalIgnoreCase);
@@ -373,6 +391,7 @@ public sealed class MainWindowViewModel : ObservableObject
     public static MainWindowViewModel CreateDesktopDefault()
     {
         var previewService = new GameAssetPreviewService(new BcnG4TextureDecoder(), capacity: 2);
+        var uniforms = new UniformPreviewResolver(previewService);
         return new MainWindowViewModel(
             new FileSystemCharacterCatalogService(),
             new CharacterCloneService(),
@@ -383,7 +402,8 @@ public sealed class MainWindowViewModel : ObservableObject
             portraitLoader: new CharacterPortraitLoader(previewService),
             playerCardAssetLoader: new PlayerCardAssetLoader(
                 previewService,
-                new UniformPreviewResolver(previewService)));
+                uniforms),
+            rosterUniformResolver: uniforms);
     }
 
     public MainWindowViewModel(
@@ -399,12 +419,14 @@ public sealed class MainWindowViewModel : ObservableObject
         IPlayerCardAssetLoader? playerCardAssetLoader = null,
         GameDumpProfile? playerCardAssetProfile = null,
         ICharacterStatCalculator? characterStatCalculator = null,
-        IExportExecutor? exportExecutor = null)
+        IExportExecutor? exportExecutor = null,
+        IUniformPreviewResolver? rosterUniformResolver = null)
     {
         _catalogService = catalogService;
         _cloneService = cloneService;
         _draftService = draftService ?? new CharacterDraftService(cloneService);
         _portraitLoader = portraitLoader;
+        _rosterUniformResolver = rosterUniformResolver;
         _playerCardAssetLoader = playerCardAssetLoader;
         _playerCardAssetProfile = playerCardAssetProfile;
         _loadDumpStatistics = characterStatCalculator is null;
@@ -417,6 +439,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _projectStore = projectStore;
         _recoveryRoot = recoveryRoot;
         Project = ModProjectDocument.Create("Untitled Mod");
+        InitializeBatchPreviews();
 
         LoadGameDumpCommand = new AsyncCommand(LoadGameDumpAsync);
         AddPackageCommand = new DelegateCommand(AddPackage);
@@ -473,7 +496,7 @@ public sealed class MainWindowViewModel : ObservableObject
         });
     }
 
-    public ModProjectDocument Project { get; }
+    public ModProjectDocument Project { get; private set; }
 
     public IReadOnlyList<NavigationItem> Navigation { get; } =
     [
@@ -510,7 +533,7 @@ public sealed class MainWindowViewModel : ObservableObject
     public string IndexProgressMessage
     {
         get => _indexProgressMessage;
-        private set => SetProperty(ref _indexProgressMessage, value);
+        private set { if (SetProperty(ref _indexProgressMessage, value)) OnPropertyChanged(nameof(BusyMessage)); }
     }
 
     public string PackageInput
@@ -533,7 +556,11 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _selectedAffinity;
         set
         {
-            if (SetProperty(ref _selectedAffinity, value)) ScheduleSearch();
+            if (SetProperty(ref _selectedAffinity, value))
+            {
+                OnPropertyChanged(nameof(SelectedAffinityFilterChoice));
+                ScheduleSearch();
+            }
         }
     }
 
@@ -591,6 +618,21 @@ public sealed class MainWindowViewModel : ObservableObject
         set { if (SetProperty(ref _selectedSpecialRarity, value)) ScheduleSearch(); }
     }
 
+    public IReadOnlyList<IdentityChoice> CharacterSortChoices => CharacterSorts.Select(value => new IdentityChoice(value.ToString(),
+        Workflow(value switch { CharacterSort.DisplayName => "Name", CharacterSort.Id => "ID", CharacterSort.OriginGame => "Origin game", _ => value.ToString() }))).ToArray();
+    public IdentityChoice? SelectedCharacterSortChoice
+    {
+        get => CharacterSortChoices.FirstOrDefault(choice => choice.Value == SelectedCharacterSort.ToString());
+        set { if (value is not null && Enum.TryParse<CharacterSort>(value.Value, out var sort)) SelectedCharacterSort = sort; }
+    }
+    public IReadOnlyList<IdentityChoice> CharacterAffinityFilterChoices => CharacterAffinities
+        .Select(value => new IdentityChoice(value.ToString(), ResolveAffinityName(value))).ToArray();
+    public IdentityChoice? SelectedAffinityFilterChoice
+    {
+        get => CharacterAffinityFilterChoices.FirstOrDefault(choice => choice.Value == SelectedAffinity?.ToString());
+        set { if (value is not null && Enum.TryParse<CharacterAffinity>(value.Value, out var affinity)) SelectedAffinity = affinity; }
+    }
+
     public IReadOnlyList<string> SeriesOptions => Characters
         .Select(character => character.Series)
         .Where(value => !string.IsNullOrWhiteSpace(value) && value != "Unknown")
@@ -599,7 +641,7 @@ public sealed class MainWindowViewModel : ObservableObject
         .ToArray();
 
     public IReadOnlyList<int> AcademicYearOptions => DistinctBaseValues(metadata => metadata.AcademicYear);
-    private string UnknownAcademicYearLabel => SelectedLanguageCode == "es" ? "Desconocido" : "Unknown";
+    private string UnknownAcademicYearLabel => Workflow("Unknown");
     public IReadOnlyList<int> GenderOptions => DistinctBaseValues(metadata => metadata.Gender);
     public IReadOnlyList<int> BodyTypeOptions => CharacterBodyTypeCatalog.Values;
     public IReadOnlyList<IdentityChoice> BodyTypeChoices => BodyTypeOptions
@@ -630,37 +672,60 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _selectedCharacterSort;
         set
         {
-            if (SetProperty(ref _selectedCharacterSort, value)) ScheduleSearch();
+            if (SetProperty(ref _selectedCharacterSort, value))
+            {
+                OnPropertyChanged(nameof(SelectedCharacterSortChoice));
+                ScheduleSearch();
+            }
         }
     }
 
     public string StatusMessage
     {
         get => _statusMessage;
-        private set => SetProperty(ref _statusMessage, value);
+        private set
+        {
+            _localizedWorkflowStatus = null;
+            SetProperty(ref _statusMessage, value);
+            _isErrorStatus = false;
+            OnPropertyChanged(nameof(ErrorStatusMessage));
+        }
+    }
+
+    private bool _isErrorStatus;
+    public string ErrorStatusMessage => _isErrorStatus ? StatusMessage : string.Empty;
+
+    public void SetUserErrorStatusMessage(string message)
+    {
+        StatusMessage = message;
+        _isErrorStatus = true;
+        OnPropertyChanged(nameof(ErrorStatusMessage));
     }
 
     public bool IsExporting
     {
         get => _isExporting;
-        private set => SetProperty(ref _isExporting, value);
+        private set { if (SetProperty(ref _isExporting, value)) NotifyOperationStateChanged(); }
     }
 
     public string ExportProgressMessage
     {
         get => _exportProgressMessage;
-        private set => SetProperty(ref _exportProgressMessage, value);
+        private set { if (SetProperty(ref _exportProgressMessage, value)) OnPropertyChanged(nameof(BusyMessage)); }
     }
 
-    public string CancelExportLabel => SelectedLanguageCode == "es" ? "Cancelar" : "Cancel";
+    public string CancelExportLabel => Workflow("Cancel");
 
     public void CancelExport()
     {
+        _indexCancellation?.Cancel();
+        _planningCancellation?.Cancel();
         _exportCancellation?.Cancel();
-        ExportProgressMessage = SelectedLanguageCode == "es" ? "Cancelando…" : "Cancelling…";
+        if (IsIndexing) IndexProgressMessage = Workflow("Cancelling…");
+        else ExportProgressMessage = Workflow("Cancelling…");
     }
 
-    public string LogButtonLabel => SelectedLanguageCode == "es" ? "Abrir registro" : "Open log";
+    public string LogButtonLabel => Workflow("Open log");
 
     public bool IsWorkspaceReady
     {
@@ -676,6 +741,9 @@ public sealed class MainWindowViewModel : ObservableObject
                 OnPropertyChanged(nameof(IsActionChoiceVisible));
                 OnPropertyChanged(nameof(IsMainMenuVisible));
                 OnPropertyChanged(nameof(IsIncorporationVisible));
+                OnPropertyChanged(nameof(ForwardActionLabel));
+                OnPropertyChanged(nameof(CanAdvanceWorkflow));
+                OnPropertyChanged(nameof(ShowWorkflowNavigation));
                 OnPropertyChanged(nameof(CanGoBack));
             }
         }
@@ -683,8 +751,11 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public bool IsOnboardingVisible => !IsWorkspaceReady;
     public bool IsMainMenuVisible => IsWorkspaceReady && ActiveWorkspace == WorkspaceKind.Project && WizardStep == WizardStep.Setup;
+    public string ForwardActionLabel => IsIncorporationVisible ? WizardText.Export : WizardText.Next;
+    public bool CanAdvanceWorkflow => IsIncorporationVisible ? CanStartExport : CanGoNext;
+    public bool ShowWorkflowNavigation => !IsMainMenuVisible;
     public bool IsIncorporationVisible => IsWorkspaceReady && ActiveWorkspace == WorkspaceKind.Batch && WizardStep == WizardStep.Setup;
-    public bool IsPostSavePromptVisible { get => _isPostSavePromptVisible; private set => SetProperty(ref _isPostSavePromptVisible, value); }
+    public bool IsPostSavePromptVisible { get => _isPostSavePromptVisible; private set { if (SetProperty(ref _isPostSavePromptVisible, value)) NotifyOperationStateChanged(); } }
     public bool HasModificationSource => !string.IsNullOrWhiteSpace(_modificationSourcePath);
     public bool ShowActionChoice => false;
     public bool IsCreationChoiceVisible => false;
@@ -702,54 +773,38 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public void BeginCreateFlow()
     {
-        _modificationSourcePath = null;
-        _activeDraftId = null;
-        OnPropertyChanged(nameof(HasModificationSource));
-        ActiveDraft = null;
+        if (!CanInteract) return;
+        if (!_resumeEditor || ActiveDraft is null)
+        {
+            SelectedCharacter = null;
+            _activeDraftId = null;
+            ActiveDraft = null;
+            ResetModificationContext();
+            ResetCharacterSearch();
+        }
         ActiveWorkspace = WorkspaceKind.Characters;
-        WizardStep = WizardStep.Character;
+        WizardStep = ActiveDraft is null ? WizardStep.Character : _resumeWizardStep;
+        _resumeEditor = true;
     }
 
     public void BeginIncorporationFlow()
     {
+        if (!CanInteract) return;
         AcquisitionMode = AcquisitionMode.Delivery;
+        RefreshBatchPreviews();
         ActiveWorkspace = WorkspaceKind.Batch;
         WizardStep = WizardStep.Setup;
     }
 
-    public async Task LoadModificationAsync(string path)
-    {
-        using var operation = GlobalLog.BeginOperation("ui_modification_load");
-        if (_packageService is null) { StatusMessage = "The .vrchara package service is not configured."; return; }
-        GlobalLog.Info("modification_load_started");
-        try
-        {
-            var draft = await _packageService.LoadAsync(path, CancellationToken.None);
-            _activeDraftId = null;
-            ActiveDraft = draft;
-            SetTechniqueVariantChoicesFromDraft(ActiveDraft);
-            _modificationSourcePath = path;
-            OnPropertyChanged(nameof(HasModificationSource));
-            ActiveWorkspace = WorkspaceKind.Characters;
-            WizardStep = WizardStep.Details;
-            StatusMessage = "Character package loaded for modification.";
-            GlobalLog.Info("modification_load_completed");
-        }
-        catch (Exception exception) when (exception is IOException or InvalidDataException or ArgumentException)
-        {
-            GlobalLog.Error("modification_load_failed", exception);
-            StatusMessage = exception.Message;
-        }
-    }
+    public Task LoadModificationAsync(string path) => LoadModificationWithPickerAsync(() => Task.FromResult<string?>(path));
 
     public void ReturnToMainMenu()
     {
+        if (IsBusy) return;
+        if (IsPostSavePromptVisible) _resumeEditor = false;
+        else if (WizardStep != WizardStep.Setup) _resumeEditor = ActiveDraft is not null;
         IsPostSavePromptVisible = false;
-        _activeDraftId = null;
-        ActiveDraft = null;
-        _modificationSourcePath = null;
-        _lastSavedPackagePath = null;
-        OnPropertyChanged(nameof(HasModificationSource));
+        if (WizardStep != WizardStep.Setup) _resumeWizardStep = WizardStep;
         ActiveWorkspace = WorkspaceKind.Project;
         WizardStep = WizardStep.Setup;
     }
@@ -757,6 +812,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public void ConfirmAddSavedPackage() => AddLastSavedPackageToBatch();
     public void AddLastSavedPackageToBatch()
     {
+        if (IsBusy) return;
+        _resumeEditor = false;
         IsPostSavePromptVisible = false;
         if (!string.IsNullOrWhiteSpace(_lastSavedPackagePath)) { PackageInput = _lastSavedPackagePath; AddPackage(); }
     }
@@ -764,7 +821,7 @@ public sealed class MainWindowViewModel : ObservableObject
     public bool IsIndexing
     {
         get => _isIndexing;
-        private set => SetProperty(ref _isIndexing, value);
+        private set { if (SetProperty(ref _isIndexing, value)) NotifyOperationStateChanged(); }
     }
 
     public WorkspaceKind ActiveWorkspace
@@ -781,6 +838,9 @@ public sealed class MainWindowViewModel : ObservableObject
                 OnPropertyChanged(nameof(IsResearchWorkspace));
                 OnPropertyChanged(nameof(IsMainMenuVisible));
                 OnPropertyChanged(nameof(IsIncorporationVisible));
+                OnPropertyChanged(nameof(ForwardActionLabel));
+                OnPropertyChanged(nameof(CanAdvanceWorkflow));
+                OnPropertyChanged(nameof(ShowWorkflowNavigation));
             }
         }
     }
@@ -806,6 +866,9 @@ public sealed class MainWindowViewModel : ObservableObject
             OnPropertyChanged(nameof(IsActionChoiceVisible));
             OnPropertyChanged(nameof(IsMainMenuVisible));
             OnPropertyChanged(nameof(IsIncorporationVisible));
+            OnPropertyChanged(nameof(ForwardActionLabel));
+            OnPropertyChanged(nameof(CanAdvanceWorkflow));
+            OnPropertyChanged(nameof(ShowWorkflowNavigation));
         }
     }
 
@@ -817,14 +880,14 @@ public sealed class MainWindowViewModel : ObservableObject
     public bool IsAppearanceStep => WizardStep == WizardStep.Appearance;
     public bool IsAcquisitionStep => WizardStep == WizardStep.Acquisition;
     public bool IsReviewStep => WizardStep == WizardStep.Review;
-    public bool CanGoBack => WizardStep != WizardStep.Setup || (IsWorkspaceReady && ActiveWorkspace == WorkspaceKind.Batch);
-    public bool CanGoNext => WizardStep switch
+    public bool CanGoBack => CanInteract && (WizardStep != WizardStep.Setup || (IsWorkspaceReady && ActiveWorkspace == WorkspaceKind.Batch));
+    public bool CanGoNext => CanInteract && (WizardStep switch
     {
         WizardStep.Setup => IsWorkspaceReady && ActiveWorkspace != WorkspaceKind.Batch,
         WizardStep.Character => HasSelectedCharacter,
         WizardStep.Review => false,
-        _ => true,
-    };
+        _ => HasActiveDraft,
+    });
 
     private static readonly WizardStep[] WizardSteps =
         [WizardStep.Setup, WizardStep.Character, WizardStep.Details, WizardStep.Attributes, WizardStep.Skills, WizardStep.Appearance, WizardStep.Review];
@@ -846,7 +909,7 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         if (WizardStep == WizardStep.Setup) { if (IsWorkspaceReady) ReturnToMainMenu(); return; }
         if (!CanGoBack) return;
-        if (WizardStep == WizardStep.Character)
+        if (WizardStep == WizardStep.Character || (WizardStep == WizardStep.Details && HasModificationSource))
         {
             ReturnToMainMenu();
             return;
@@ -861,7 +924,8 @@ public sealed class MainWindowViewModel : ObservableObject
         var step = parameter is WizardStep typed
             ? typed
             : parameter is string text && Enum.TryParse<WizardStep>(text, out var parsed) ? parsed : (WizardStep)(-1);
-        if (Array.IndexOf(WizardSteps, step) < 0) return;
+        if (!CanInteract || Array.IndexOf(WizardSteps, step) < 0) return;
+        if (step > WizardStep.Character && ActiveDraft is null) return;
         if (step > WizardStep && !IsWorkspaceReady) return;
         if (step == WizardStep.Character)
         {
@@ -882,8 +946,16 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _selectedCharacter;
         set
         {
+            if (!ReferenceEquals(value, _selectedCharacter) && !ConfirmEditorReplacement(() => SelectedCharacter = value))
+            {
+                OnPropertyChanged(nameof(SelectedCharacter));
+                OnPropertyChanged(nameof(SelectedRosterRow));
+                return;
+            }
             if (SetProperty(ref _selectedCharacter, value))
             {
+                if (value is not null)
+                    GlobalLog.Info("character_selected", new Dictionary<string, object?> { ["id"] = value.Id, ["name"] = value.DisplayName });
                 var rosterRow = value is null
                     ? null
                     : RosterRows.FirstOrDefault(row => row.Character.Id == value.Id);
@@ -922,6 +994,11 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _selectedRosterRow;
         set
         {
+            if (!ReferenceEquals(value, _selectedRosterRow) && !ConfirmEditorReplacement(() => SelectedRosterRow = value))
+            {
+                OnPropertyChanged(nameof(SelectedRosterRow));
+                return;
+            }
             // Avalonia can briefly report a null selection while a filtered list is rebuilt.
             // Keep the active character until the replacement rows have been installed.
             if (value is null && _isUpdatingRosterRows) return;
@@ -974,11 +1051,14 @@ public sealed class MainWindowViewModel : ObservableObject
     private static CharacterAffinity ParseAffinity(string value, CharacterAffinity fallback) =>
         Enum.TryParse<CharacterAffinity>(value, true, out var affinity) ? affinity : fallback;
     public Bitmap? SelectedPortrait => _standardPortraitResult?.Bitmap;
+
     public Bitmap? PlayerCardBackPortrait => _standardPortraitResult?.Bitmap;
     public Bitmap? PlayerCardFrontPortrait => _uniformPortraitResult?.Bitmap;
+    public Bitmap? AppearanceBackPortrait => StandardPortraitPreview ?? PlayerCardBackPortrait;
+    public Bitmap? AppearanceFrontPortrait => UniformPortraitPreview ?? PlayerCardFrontPortrait;
     public Bitmap? AppearancePortrait => _appearancePortrait ?? PlayerCardFrontPortrait;
     public bool HasLayeredAppearance => _appearancePortrait is null
-        && (PlayerCardBackPortrait is not null || PlayerCardFrontPortrait is not null);
+        && (AppearanceBackPortrait is not null || AppearanceFrontPortrait is not null);
     public bool ShowAppearancePortrait => !HasLayeredAppearance;
     public Bitmap? PlayerCardPositionIcon => _playerCardAssets?.PositionIcon;
     public Bitmap? PlayerCardGenderIcon => _playerCardAssets?.GenderIcon;
@@ -1026,14 +1106,12 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
-    public string PlayerCardDisplayName =>
-        GetPlayerCardLocalization()?.FullName
-        ?? SelectedCharacter?.DisplayName
-        ?? string.Empty;
+    public RubyTextDocumentViewModel PlayerCardDisplayNameDocument => BuildGameTextDocument(
+        SelectedCharacter is { } character ? CharacterDisplayName.Resolve(character, SelectedLanguageCode) : string.Empty);
+    public string PlayerCardDisplayName => PlayerCardDisplayNameDocument.PlainText;
 
-    public string PlayerCardShortName =>
-        GetPlayerCardLocalization()?.ShortName
-        ?? PlayerCardDisplayName;
+    public string PlayerCardShortName => BuildGameTextDocument(
+        GetPlayerCardLocalization()?.ShortName ?? PlayerCardDisplayName).PlainText;
 
     public string PlayerCardRomanizedName => SelectedCharacter?.RomanizedNames is { Count: > 0 } names
         ? (names.GetValueOrDefault("ja") ?? names.Values.First()).FullName ?? string.Empty
@@ -1041,7 +1119,9 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string PlayerCardDescription => GetPlayerCardLocalization()?.Description ?? string.Empty;
     public RubyTextDocumentViewModel PlayerCardRomanizedNameDocument => BuildGameTextDocument(PlayerCardRomanizedName);
-    public RubyTextDocumentViewModel PlayerCardDescriptionDocument => BuildGameTextDocument(PlayerCardDescription);
+    public RubyTextDocumentViewModel PlayerCardDescriptionDocument => RubyTextDocumentViewModel.FromParagraphs(
+        GameTextResolver.Resolve(GameTextParser.Parse(PlayerCardDescription),
+            SelectedCharacter?.TextReferences ?? _gameTextReferences ?? CharacterTextReferenceIndex.Empty, PlayerCardLocale));
     public CharacterAffinity PlayerCardAffinity => SelectedVariant?.Affinity
         ?? SelectedCharacter?.Affinity
         ?? CharacterAffinity.Unknown;
@@ -1049,10 +1129,17 @@ public sealed class MainWindowViewModel : ObservableObject
     public string PlayerCardPosition => SelectedVariant is null
         ? ResolvePositionName(SelectedCharacter?.Position)
         : ResolvePositionName(SelectedVariant.MainPosition);
-    public string PlayerCardSeries => SelectedCharacter?.BaseMetadata is { } characterBase
-        && SelectedCharacter.Taxonomy is { } taxonomy
-            ? taxonomy.ResolveSeries(unchecked((uint)characterBase.SourceSeries), PlayerCardLocale)
-            : SelectedCharacter?.Series ?? "Unknown";
+    public string PlayerCardSeries
+    {
+        get
+        {
+            var series = SelectedCharacter?.BaseMetadata is { } characterBase && SelectedCharacter.Taxonomy is { } taxonomy
+                ? taxonomy.ResolveSeries(unchecked((uint)characterBase.SourceSeries), PlayerCardLocale)
+                : SelectedCharacter?.Series;
+            return series is null || series.StartsWith("Unknown", StringComparison.Ordinal) ? string.Empty : series;
+        }
+    }
+    public bool HasPlayerCardSeries => !string.IsNullOrWhiteSpace(PlayerCardSeries);
     public int? PlayerCardGender => SelectedCharacter?.BaseMetadata?.Gender;
     public int? PlayerCardBodyType => ActiveDraftBodyType ?? SelectedCharacter?.BaseMetadata?.BodyType;
     public string PlayerCardAcademicYear => SelectedCharacter?.BaseMetadata is { AcademicYear: 0 }
@@ -1063,14 +1150,29 @@ public sealed class MainWindowViewModel : ObservableObject
             ?? characterBase.AcademicYear.ToString(CultureInfo.InvariantCulture)
             : "Unknown";
 
-    public string ReviewDisplayName => GetReviewLocalization()?.LocalizedName
-        ?? ActiveDraft?.Identity?.DisplayName
-        ?? ActiveDraft?.DisplayName
-        ?? string.Empty;
+    public RubyTextDocumentViewModel ReviewDisplayNameDocument => BuildGameTextDocument(
+        CharacterDisplayName.Resolve(
+            GetReviewLocalization()?.LocalizedName ?? ActiveDraft?.Identity?.DisplayName ?? ActiveDraft?.DisplayName ?? string.Empty,
+            GetReviewLocalization()?.RomanizedName ?? ActiveDraft?.Localization?.RomanizedName,
+            SelectedLanguageCode));
+    public string ReviewDisplayName => ReviewDisplayNameDocument.PlainText;
 
-    public string ReviewSeries => GetActiveDraftField("Identity.SeriesName", "Unknown");
+    public string ReviewSeries
+    {
+        get
+        {
+            var id = ParseNullableInt(ActiveDraft?.Fields.GetValueOrDefault("Identity.SourceSeries"));
+            var series = id is { } value && _gameTaxonomy is not null
+                ? _gameTaxonomy.ResolveSeries(unchecked((uint)value), SelectedLanguageCode)
+                : GetActiveDraftField("Identity.SeriesName", "");
+            return series.StartsWith("Unknown", StringComparison.Ordinal) ? string.Empty : series;
+        }
+    }
+    public bool HasReviewSeries => !string.IsNullOrWhiteSpace(ReviewSeries);
 
-    public string ReviewOriginGame => GetActiveDraftField("Identity.OriginGameName", "Unknown");
+    public string ReviewOriginGame => ParseNullableInt(ActiveDraft?.Fields.GetValueOrDefault("Identity.OriginGameIndex")) is { } index
+        ? CharacterOriginGameCatalog.ResolveName(index, SelectedLanguageCode)
+        : GetActiveDraftField("Identity.OriginGameName", "");
 
     public string ReviewAffinity => ResolveAffinityName(
         ActiveDraft?.Gameplay?.Affinity is { } affinity
@@ -1090,6 +1192,9 @@ public sealed class MainWindowViewModel : ObservableObject
     }
     public int? PlayerCardRank => SelectedVariant?.Rank;
     public int? PlayerCardSpecialRarity => SelectedVariant?.SpecialRarity;
+    public string PlayerCardRarityName => SelectedVariant is { } variant
+        ? (_gameTaxonomy ?? GameTaxonomyIndex.Empty).ResolveSpecialRarity(variant.SpecialRarity, SelectedLanguageCode)
+        : string.Empty;
 
     public IReadOnlyList<PlayerCardSkillRow> PlayerCardLearnedSkills => SelectedVariant?.EnumerateMainSkillSlots()
         .Select((skill, index) => new PlayerCardSkillRow(
@@ -1109,7 +1214,7 @@ public sealed class MainWindowViewModel : ObservableObject
         var parsed = GameTextParser.Parse(source);
         var resolved = GameTextResolver.Resolve(
             parsed,
-            SelectedCharacter?.TextReferences ?? CharacterTextReferenceIndex.Empty,
+            SelectedCharacter?.TextReferences ?? _gameTextReferences ?? CharacterTextReferenceIndex.Empty,
             PlayerCardLocale);
         return RubyTextDocumentViewModel.From(resolved);
     }
@@ -1129,7 +1234,7 @@ public sealed class MainWindowViewModel : ObservableObject
             {
                 var skill = variants[index];
                 var name = IsArmoredKeshin(skill.Name)
-                    ? $"[KESHIN] ({(SelectedLanguageCode == "es" ? "Armadura" : "Armor")}) {skill.Name}"
+                    ? $"[KESHIN] ({Workflow("Armor")}) {skill.Name}"
                     : skill.Name;
                 decorated.Add(skill with { Name = name });
             }
@@ -1143,7 +1248,7 @@ public sealed class MainWindowViewModel : ObservableObject
             {
                 var suffix = variants.Length == 1
                     ? string.Empty
-                    : $" ({(SelectedLanguageCode == "es" ? "variante" : "variant")} {index + 1})";
+                    : $" ({Workflow("Variant")} {index + 1})";
                 result.Add(variants[index] with { Name = variants[index].Name + suffix });
             }
         }
@@ -1184,12 +1289,14 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         if (SelectedCharacter?.Localizations is not { Count: > 0 } localizations) return null;
         var locale = PlayerCardLocale;
-        return localizations.GetValueOrDefault(locale) ?? localizations.Values.First();
+        return localizations.GetValueOrDefault(locale) ?? localizations.GetValueOrDefault("en") ?? localizations.Values.First();
     }
 
     private void NotifyPlayerCardChanged()
     {
         OnPropertyChanged(nameof(PlayerCardDisplayName));
+        OnPropertyChanged(nameof(PlayerCardDisplayNameDocument));
+        OnPropertyChanged(nameof(HasPlayerCardSeries));
         OnPropertyChanged(nameof(PlayerCardShortName));
         OnPropertyChanged(nameof(PlayerCardRomanizedName));
         OnPropertyChanged(nameof(PlayerCardDescription));
@@ -1204,6 +1311,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(PlayerCardAcademicYear));
         OnPropertyChanged(nameof(PlayerCardRank));
         OnPropertyChanged(nameof(PlayerCardSpecialRarity));
+        OnPropertyChanged(nameof(PlayerCardRarityName));
         OnPropertyChanged(nameof(PlayerCardLearnedSkills));
         OnPropertyChanged(nameof(AppearancePortrait));
         OnPropertyChanged(nameof(HasLayeredAppearance));
@@ -1251,140 +1359,6 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(PlayerCardStatistics));
     }
 
-    private void SchedulePortraitLoad(CharacterCatalogItem? character)
-    {
-        _portraitCancellation?.Cancel();
-        _portraitCancellation?.Dispose();
-        _portraitCancellation = null;
-        ReplacePortraitResults(null, null);
-        SelectedPortraitDiagnosticCode = null;
-        if (character is null || _portraitLoader is null) return;
-
-        var cancellation = new CancellationTokenSource();
-        _portraitCancellation = cancellation;
-        _ = LoadPortraitsAsync(character, cancellation);
-    }
-
-    private async Task LoadPortraitsAsync(
-        CharacterCatalogItem character,
-        CancellationTokenSource cancellation)
-    {
-        try
-        {
-            var loader = _portraitLoader!;
-            var standardTask = loader.LoadAsync(
-                new CharacterPortraitRequest(character, CharacterPortraitKind.Standard),
-                cancellation.Token);
-            var uniformTask = loader.LoadAsync(
-                new CharacterPortraitRequest(character, CharacterPortraitKind.UniformCompatible),
-                cancellation.Token);
-            await Task.WhenAll(standardTask, uniformTask);
-            var standard = standardTask.Result;
-            var uniform = uniformTask.Result;
-            if (cancellation.IsCancellationRequested || !ReferenceEquals(SelectedCharacter, character))
-            {
-                standard.Dispose();
-                uniform.Dispose();
-                return;
-            }
-            ReplacePortraitResults(standard, uniform);
-            SelectedPortraitDiagnosticCode = standard.DiagnosticCode ?? uniform.DiagnosticCode;
-        }
-        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-        {
-        }
-    }
-
-    private void ReplacePortraitResults(
-        CharacterPortraitLoadResult? standard,
-        CharacterPortraitLoadResult? uniform)
-    {
-        var previousStandard = _standardPortraitResult;
-        var previousUniform = _uniformPortraitResult;
-        _standardPortraitResult = standard;
-        _uniformPortraitResult = uniform;
-        OnPropertyChanged(nameof(SelectedPortrait));
-        OnPropertyChanged(nameof(PlayerCardBackPortrait));
-        OnPropertyChanged(nameof(PlayerCardFrontPortrait));
-        OnPropertyChanged(nameof(AppearancePortrait));
-        OnPropertyChanged(nameof(HasLayeredAppearance));
-        OnPropertyChanged(nameof(ShowAppearancePortrait));
-        previousStandard?.Dispose();
-        previousUniform?.Dispose();
-    }
-
-    private void SchedulePlayerCardAssetLoad(
-        CharacterCatalogItem? character,
-        CharacterVariantSummary? variant)
-    {
-        _playerCardAssetCancellation?.Cancel();
-        _playerCardAssetCancellation?.Dispose();
-        _playerCardAssetCancellation = null;
-        var generation = ++_playerCardAssetGeneration;
-        ReplacePlayerCardAssets(null);
-        if (character is null || _playerCardAssetLoader is null || _playerCardAssetProfile is null)
-            return;
-
-        var cancellation = new CancellationTokenSource();
-        _playerCardAssetCancellation = cancellation;
-        _ = LoadPlayerCardAssetsAsync(character, variant, generation, cancellation);
-    }
-
-    private async Task LoadPlayerCardAssetsAsync(
-        CharacterCatalogItem character,
-        CharacterVariantSummary? variant,
-        long generation,
-        CancellationTokenSource cancellation)
-    {
-        try
-        {
-            var locale = PlayerCardLocale;
-            var assets = await _playerCardAssetLoader!.LoadAsync(
-                _playerCardAssetProfile!,
-                new PlayerCardAssetRequest(
-                    character,
-                    variant,
-                    locale,
-                    ActiveDraftBodyType,
-                    ParseNullableInt(ActiveDraft?.Fields.GetValueOrDefault("Identity.Gender")),
-                    ActiveDraft?.Models?.UniformModel,
-                    ActiveDraft?.Models?.ChestSize),
-                cancellation.Token);
-            if (cancellation.IsCancellationRequested
-                || generation != _playerCardAssetGeneration
-                || !ReferenceEquals(SelectedCharacter, character)
-                || !ReferenceEquals(SelectedVariant, variant))
-            {
-                assets.Dispose();
-                return;
-            }
-            ReplacePlayerCardAssets(assets);
-        }
-        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-        {
-        }
-    }
-
-    private void ReplacePlayerCardAssets(PlayerCardAssetSet? assets)
-    {
-        var previous = _playerCardAssets;
-        _playerCardAssets = assets;
-        OnPropertyChanged(nameof(PlayerCardPositionIcon));
-        OnPropertyChanged(nameof(PlayerCardGenderIcon));
-        OnPropertyChanged(nameof(PlayerCardBodyTypeIcon));
-        OnPropertyChanged(nameof(PlayerCardUniform));
-        OnPropertyChanged(nameof(HasLayeredAppearance));
-        OnPropertyChanged(nameof(ShowAppearancePortrait));
-        OnPropertyChanged(nameof(HasPlayerCardPositionIcon));
-        OnPropertyChanged(nameof(HasPlayerCardGenderIcon));
-        OnPropertyChanged(nameof(HasPlayerCardBodyTypeIcon));
-        OnPropertyChanged(nameof(ShowPlayerCardPositionId));
-        OnPropertyChanged(nameof(ShowPlayerCardGenderId));
-        OnPropertyChanged(nameof(ShowPlayerCardBodyTypeId));
-        OnPropertyChanged(nameof(PlayerCardAssetDiagnosticCodes));
-        previous?.Dispose();
-    }
-
     public CharacterDraft? ActiveDraft
     {
         get => _activeDraft;
@@ -1408,6 +1382,8 @@ public sealed class MainWindowViewModel : ObservableObject
                 OnPropertyChanged(nameof(ActiveDraftTeamAssociationChoice));
                 if (previous?.SymbolicId != value?.SymbolicId)
                 {
+                    _customUniformSelected = false;
+                    _customShoesSelected = false;
                     _localesJsonPath = null;
                     OnPropertyChanged(nameof(LocalesJsonPath));
                     OnPropertyChanged(nameof(AppearanceModelOptions));
@@ -1416,6 +1392,9 @@ public sealed class MainWindowViewModel : ObservableObject
                     OnPropertyChanged(nameof(AppearanceGloveOptions));
                     OnPropertyChanged(nameof(TeamAssociationOptions));
                 }
+                if (previous?.SymbolicId != value?.SymbolicId)
+                    _savedDraft = value is null ? null : _savedDrafts.GetValueOrDefault(value.SymbolicId);
+                NotifyReadinessChanged();
                 NotifyActiveDraftEditorProperties();
                 NotifyReviewChanged();
                 RefreshAppearancePortrait();
@@ -1465,15 +1444,10 @@ public sealed class MainWindowViewModel : ObservableObject
         .OrderBy(choice => choice.Label, StringComparer.CurrentCultureIgnoreCase)
         .ToArray();
 
-    public IReadOnlyList<IdentityChoice> IdentityGenderChoices => Characters
-        .Where(character => character.BaseMetadata is not null)
-        .Select(character => character.BaseMetadata!.Gender)
-        .Concat([1, 2, 5])
-        .Distinct()
-        .Order()
+    public IReadOnlyList<IdentityChoice> IdentityGenderChoices => new[] { 1, 2, 5 }
         .Select(value => new IdentityChoice(
             value.ToString(CultureInfo.InvariantCulture),
-            CharacterGenderCatalog.ResolveName(value, SelectedLanguageCode)))
+            Workflow(CharacterGenderCatalog.ResolveName(value, "en"))))
         .ToArray();
 
     public IReadOnlyList<IdentityChoice> IdentityOriginGameChoices =>
@@ -1810,6 +1784,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public IReadOnlyList<LocalizedEquipment> AppearanceUniformOptions => GetAppearanceEquipment(EquipmentCategory.Uniform);
     public IReadOnlyList<LocalizedEquipment> AppearanceShoesOptions => GetAppearanceEquipment(EquipmentCategory.Shoes);
     public IReadOnlyList<LocalizedEquipment> AppearanceGloveOptions => GetAppearanceEquipment(EquipmentCategory.Gloves);
+    private bool _isUpdatingEquipmentChoice;
+
     public LocalizedEquipment? ActiveDraftUniformChoice
     {
         get => _customUniformSelected || !string.IsNullOrWhiteSpace(ActiveDraft?.Models?.UniformModelPath)
@@ -1817,29 +1793,51 @@ public sealed class MainWindowViewModel : ObservableObject
             : FindAppearanceEquipment(EquipmentCategory.Uniform, ActiveDraft?.Models?.UniformModel);
         set
         {
-            if (value is null) return;
-            if (value.IsCustomOption)
+            if (_isUpdatingEquipmentChoice || value is null || value == ActiveDraftUniformChoice) return;
+            _isUpdatingEquipmentChoice = true;
+            try
             {
-                _customUniformSelected = true;
-                OnPropertyChanged(nameof(ActiveDraftUniformChoice));
+                if (value.IsCustomOption)
+                {
+                    _customUniformSelected = true;
+                    OnPropertyChanged(nameof(ActiveDraftUniformChoice));
+                    OnPropertyChanged(nameof(CanSelectCustomUniform));
+                    OnPropertyChanged(nameof(ActiveDraftUniformModelDisplayPath));
+                    return;
+                }
+                _customUniformSelected = false;
                 OnPropertyChanged(nameof(CanSelectCustomUniform));
-                OnPropertyChanged(nameof(ActiveDraftUniformModelDisplayPath));
-                return;
+                ActiveDraftUniformModelPath = null;
+                ActiveDraftUniformModel = value.Id;
+                OnPropertyChanged(nameof(AppearanceUniformOptions));
             }
-            _customUniformSelected = false;
-            OnPropertyChanged(nameof(CanSelectCustomUniform));
-            ActiveDraftUniformModel = value.Id;
-            ActiveDraftUniformModelPath = null;
+            finally { _isUpdatingEquipmentChoice = false; }
         }
     }
     public LocalizedEquipment? ActiveDraftShoesChoice
     {
-        get => FindAppearanceEquipment(EquipmentCategory.Shoes, ActiveDraft?.Models?.ShoesModel);
+        get => _customShoesSelected || !string.IsNullOrWhiteSpace(ActiveDraftShoesModelPath)
+            ? AppearanceShoesOptions.FirstOrDefault(option => option.IsCustomOption)
+            : FindAppearanceEquipment(EquipmentCategory.Shoes, ActiveDraft?.Models?.ShoesModel);
         set
         {
-            if (value is null) return;
-            ActiveDraftShoesModel = value.Id;
-            ActiveDraftShoesModelPath = null;
+            if (_isUpdatingEquipmentChoice || value is null || value == ActiveDraftShoesChoice) return;
+            _isUpdatingEquipmentChoice = true;
+            try
+            {
+                if (value.IsCustomOption)
+                {
+                    _customShoesSelected = true;
+                    OnPropertyChanged(nameof(ActiveDraftShoesChoice));
+                    OnPropertyChanged(nameof(CanSelectCustomShoes));
+                    return;
+                }
+                _customShoesSelected = false;
+                OnPropertyChanged(nameof(CanSelectCustomShoes));
+                ActiveDraftShoesModelPath = null;
+                ActiveDraftShoesModel = value.Id;
+            }
+            finally { _isUpdatingEquipmentChoice = false; }
         }
     }
     public string? ActiveDraftShoesModelPath
@@ -1870,7 +1868,8 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
     public string ActiveDraftUniformModelDisplayPath => FormatPathForDisplay(ActiveDraftUniformModelPath ?? string.Empty);
-    public bool CanSelectCustomUniform => ActiveDraftForceKit && (_customUniformSelected || !string.IsNullOrWhiteSpace(ActiveDraftUniformModelPath));
+    public bool CanSelectCustomUniform => _customUniformSelected || !string.IsNullOrWhiteSpace(ActiveDraftUniformModelPath);
+    public bool CanSelectCustomShoes => _customShoesSelected || !string.IsNullOrWhiteSpace(ActiveDraftShoesModelPath);
     public int? ActiveDraftShoesModel { get => ActiveDraft?.Models?.ShoesModel; set { if (value != ActiveDraft?.Models?.ShoesModel) UpdateActiveDraftField("Models.ShoesModel", value?.ToString(CultureInfo.InvariantCulture)); } }
     public int? ActiveDraftGloveModel { get => ActiveDraft?.Models?.GloveModel; set { if (value != ActiveDraft?.Models?.GloveModel) UpdateActiveDraftField("Models.GloveModel", value?.ToString(CultureInfo.InvariantCulture)); } }
     public bool ActiveDraftForceKit
@@ -1900,7 +1899,11 @@ public sealed class MainWindowViewModel : ObservableObject
         var key = (category, SelectedLanguageCode);
         if (!_appearanceEquipmentOptions.TryGetValue(key, out var options))
         {
-            options = _gameTaxonomy?.GetEquipment(SelectedLanguageCode, category) ?? [];
+            options = new ObservableCollection<LocalizedEquipment>(_gameTaxonomy?.GetEquipment(SelectedLanguageCode, category) ?? []);
+            if (!options.Any(option => option.Id == 0))
+                options.Insert(0, new LocalizedEquipment(0, category, BuildEquipmentFallbackName(category, 0), "0x00000000"));
+            if (category is EquipmentCategory.Shoes or EquipmentCategory.Uniform)
+                options.Add(new LocalizedEquipment(int.MinValue, category, WizardText.CustomUniform, "custom", IsCustomOption: true));
             _appearanceEquipmentOptions[key] = options;
         }
         var current = category switch
@@ -1910,22 +1913,9 @@ public sealed class MainWindowViewModel : ObservableObject
             EquipmentCategory.Gloves => ActiveDraft?.Models?.GloveModel,
             _ => null,
         };
-        var result = options.ToArray();
-        if (current is { } currentValue && !options.Any(option => option.Id == currentValue))
-            result = result.Append(new LocalizedEquipment(
-                    currentValue,
-                    category,
-                    BuildEquipmentFallbackName(category, currentValue),
-                    $"0x{unchecked((uint)currentValue):X8}"))
-                .ToArray();
-        if (category == EquipmentCategory.Uniform && ActiveDraftForceKit)
-            result = result.Append(new LocalizedEquipment(
-                int.MinValue,
-                category,
-                WizardText.CustomUniform,
-                "custom",
-                IsCustomOption: true)).ToArray();
-        return result;
+        if (current is { } id && !options.Any(option => option.Id == id))
+            options.Add(new LocalizedEquipment(id, category, BuildEquipmentFallbackName(category, id), $"0x{unchecked((uint)id):X8}"));
+        return options;
     }
 
     private LocalizedEquipment? FindAppearanceEquipment(EquipmentCategory category, int? id) =>
@@ -1934,12 +1924,14 @@ public sealed class MainWindowViewModel : ObservableObject
             : null;
 
     private string BuildEquipmentFallbackName(EquipmentCategory category, int id) => id == 0
-        ? (SelectedLanguageCode == "es" ? "Sin equipar" : "Unequipped")
+        ? category == EquipmentCategory.Shoes
+            ? Workflow("Default")
+            : Workflow("Unequipped")
         : $"{category switch
         {
-            EquipmentCategory.Uniform => SelectedLanguageCode == "es" ? "Uniforme" : "Uniform",
-            EquipmentCategory.Shoes => SelectedLanguageCode == "es" ? "Zapatillas" : "Shoes",
-            _ => SelectedLanguageCode == "es" ? "Guantes" : "Gloves",
+            EquipmentCategory.Uniform => Workflow("Uniform"),
+            EquipmentCategory.Shoes => Workflow("Shoes"),
+            _ => Workflow("Gloves"),
         }} (0x{unchecked((uint)id):X8})";
 
     public string ActiveDraftStandardPortraitPath
@@ -2015,7 +2007,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 Project.UpdateDraft(draftId, ActiveDraft);
                 UpdateDraftRosterItem(draftId, ActiveDraft);
             }
-            if (field == "Identity.BodyType")
+            if (field is "Identity.BodyType" or "Identity.Gender" or "Models.UniformModel" or "Models.ChestSize" or "Models.SkinColorRgba")
             {
                 NotifyPlayerCardChanged();
                 SchedulePlayerCardAssetLoad(SelectedCharacter, SelectedVariant);
@@ -2129,6 +2121,16 @@ public sealed class MainWindowViewModel : ObservableObject
                 && File.Exists(path))
             ?? candidates.FirstOrDefault(path => IsOperationalPath(path) && Path.IsPathRooted(path))
             ?? candidates.FirstOrDefault(IsOperationalPath);
+    }
+
+    private CharacterPortraitMetadata? ResolveDraftPortraitMetadata(CharacterDraft draft)
+    {
+        var source = Characters.FirstOrDefault(character => character.Id == draft.SourceCharacterId);
+        return source is not null
+            && string.Equals(ResolveDraftPortraitPath(draft), source.PortraitResourcePath, StringComparison.Ordinal)
+            && string.Equals(ResolveDraftUniformPortraitPath(draft), source.PortraitResourcePath, StringComparison.Ordinal)
+            ? source.PortraitMetadata
+            : null;
     }
 
     private static string? ResolveDraftStandardPortraitPath(CharacterDraft draft) =>
@@ -2246,9 +2248,14 @@ public sealed class MainWindowViewModel : ObservableObject
         IReadOnlyList<CharacterVariantSummary> variants,
         CharacterVariantSummary? selected = null)
     {
-        _techniqueVariantChoices = variants
-            .Select((variant, index) => new CharacterVariantChoice(variant, BuildTechniqueVariantLabel(variant, index + 1)))
-            .ToArray();
+        var occurrences = new Dictionary<string, int>(StringComparer.Ordinal);
+        _techniqueVariantChoices = variants.Select(variant =>
+        {
+            var rarity = (_gameTaxonomy ?? GameTaxonomyIndex.Empty).ResolveSpecialRarity(variant.SpecialRarity, SelectedLanguageCode);
+            var count = occurrences.GetValueOrDefault(rarity) + 1;
+            occurrences[rarity] = count;
+            return new CharacterVariantChoice(variant, count == 1 ? rarity : $"{rarity} ({count})");
+        }).ToArray();
         OnPropertyChanged(nameof(TechniqueVariantChoices));
         var selectedVariant = selected ?? variants.FirstOrDefault();
         var choice = _techniqueVariantChoices.FirstOrDefault(item =>
@@ -2298,32 +2305,24 @@ public sealed class MainWindowViewModel : ObservableObject
         SetTechniqueVariantChoices(summaries, summaries.FirstOrDefault());
     }
 
-    private string BuildTechniqueVariantLabel(CharacterVariantSummary variant, int number)
+    private string ResolveAffinityName(CharacterAffinity affinity) => Workflow(affinity switch
     {
-        var rarity = SelectedLanguageCode == "es" ? "Rareza" : "Rarity";
-        var position = ResolvePositionName(variant.MainPosition);
-        var variantName = SelectedLanguageCode == "es" ? "Variante" : "Variant";
-        return $"{variantName} {number} · {ResolveAffinityName(variant.Affinity)} · {position} · {rarity} {variant.SpecialRarity}";
-    }
+        CharacterAffinity.Neutral => "Neutral",
+        CharacterAffinity.Wind => "Wind",
+        CharacterAffinity.Forest => "Forest",
+        CharacterAffinity.Fire => "Fire",
+        CharacterAffinity.Earth => "Earth",
+        _ => "Unknown",
+    });
 
-    private string ResolveAffinityName(CharacterAffinity affinity) => affinity switch
+    private string ResolvePositionName(int position) => Workflow(CharacterPositionCatalog.Resolve(position) switch
     {
-        CharacterAffinity.Neutral => SelectedLanguageCode == "es" ? "Neutral" : "Neutral",
-        CharacterAffinity.Wind => SelectedLanguageCode == "es" ? "Viento" : "Wind",
-        CharacterAffinity.Forest => SelectedLanguageCode == "es" ? "Bosque" : "Forest",
-        CharacterAffinity.Fire => SelectedLanguageCode == "es" ? "Fuego" : "Fire",
-        CharacterAffinity.Earth => SelectedLanguageCode == "es" ? "Tierra" : "Earth",
-        _ => SelectedLanguageCode == "es" ? "Desconocida" : "Unknown",
-    };
-
-    private string ResolvePositionName(int position) => CharacterPositionCatalog.Resolve(position) switch
-    {
-        CharacterPosition.Goalkeeper => SelectedLanguageCode == "es" ? "Portero" : "Goalkeeper",
-        CharacterPosition.Forward => SelectedLanguageCode == "es" ? "Delantero" : "Forward",
-        CharacterPosition.Midfielder => SelectedLanguageCode == "es" ? "Centrocampista" : "Midfielder",
-        CharacterPosition.Defender => SelectedLanguageCode == "es" ? "Defensa" : "Defender",
-        _ => SelectedLanguageCode == "es" ? "Desconocida" : "Unknown",
-    };
+        CharacterPosition.Goalkeeper => "Goalkeeper",
+        CharacterPosition.Forward => "Forward",
+        CharacterPosition.Midfielder => "Midfielder",
+        CharacterPosition.Defender => "Defender",
+        _ => "Unknown",
+    });
 
     private string ResolvePositionName(string? position) => position?.ToLowerInvariant() switch
     {
@@ -2461,9 +2460,7 @@ public sealed class MainWindowViewModel : ObservableObject
         RefreshTechniqueVariantChoicesFromDraft();
         RebuildSkillEditorRows();
         NotifyReviewChanged();
-        StatusMessage = SelectedLanguageCode == "es"
-            ? "La plantilla de técnicas se ha aplicado a todas las variantes."
-            : "The technique template was applied to every variant.";
+        SetWorkflowStatus("The technique template was applied to every variant.");
     }
 
     private void RebuildSkillEditorRows()
@@ -2528,6 +2525,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ActiveDraftGloveChoice));
         OnPropertyChanged(nameof(ActiveDraftForceKit));
         OnPropertyChanged(nameof(CanSelectCustomUniform));
+        OnPropertyChanged(nameof(CanSelectCustomShoes));
         OnPropertyChanged(nameof(ActiveDraftUniformCollarOpen));
         OnPropertyChanged(nameof(ActiveDraftChestSize));
         OnPropertyChanged(nameof(ActiveDraftStandardPortraitPath));
@@ -2544,42 +2542,12 @@ public sealed class MainWindowViewModel : ObservableObject
     private void NotifyReviewChanged()
     {
         OnPropertyChanged(nameof(ReviewDisplayName));
+        OnPropertyChanged(nameof(ReviewDisplayNameDocument));
+        OnPropertyChanged(nameof(HasReviewSeries));
         OnPropertyChanged(nameof(ReviewSeries));
         OnPropertyChanged(nameof(ReviewOriginGame));
         OnPropertyChanged(nameof(ReviewAffinity));
         OnPropertyChanged(nameof(ReviewMainPosition));
-    }
-
-    private void RefreshAppearancePortrait()
-    {
-        var assets = ActiveDraft?.Assets;
-        var path = new[] { assets?.StandardPortraitPath, assets?.UniformPortraitPath }
-            .FirstOrDefault(candidate => IsOperationalPath(candidate)
-                && candidate!.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
-                && File.Exists(candidate));
-        if (!string.Equals(path, _appearancePortraitPath, StringComparison.OrdinalIgnoreCase))
-        {
-            var previous = _appearancePortrait;
-            _appearancePortrait = null;
-            _appearancePortraitPath = path;
-            if (!string.IsNullOrWhiteSpace(path)
-                && path.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
-                && File.Exists(path))
-            {
-                try
-                {
-                    _appearancePortrait = new Bitmap(path);
-                }
-                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
-                {
-                    _appearancePortraitPath = null;
-                }
-            }
-            previous?.Dispose();
-        }
-        OnPropertyChanged(nameof(AppearancePortrait));
-        OnPropertyChanged(nameof(HasLayeredAppearance));
-        OnPropertyChanged(nameof(ShowAppearancePortrait));
     }
 
     private string? GetActiveDraftDiagnostic(string field) => ActiveDraft?.Diagnostics
@@ -2628,8 +2596,10 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _generateChrAnimations;
         set
         {
-            if (SetProperty(ref _generateChrAnimations, value))
-                InvalidateExportPlan();
+            if (!SetProperty(ref _generateChrAnimations, value)) return;
+            OnPropertyChanged(nameof(GenerateBothAnimations));
+            OnPropertyChanged(nameof(AnimationTypesLabel));
+            InvalidateExportPlan();
         }
     }
 
@@ -2638,10 +2608,26 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _generateEventAnimations;
         set
         {
-            if (SetProperty(ref _generateEventAnimations, value))
-                InvalidateExportPlan();
+            if (!SetProperty(ref _generateEventAnimations, value)) return;
+            OnPropertyChanged(nameof(GenerateBothAnimations));
+            OnPropertyChanged(nameof(AnimationTypesLabel));
+            InvalidateExportPlan();
         }
     }
+
+    public bool GenerateBothAnimations
+    {
+        get => GenerateChrAnimations && GenerateEventAnimations;
+        set
+        {
+            GenerateChrAnimations = value;
+            GenerateEventAnimations = value;
+        }
+    }
+
+    public string BothAnimationsLabel => Workflow("Both");
+    public string AnimationTypesLabel => GenerateBothAnimations ? Workflow("Both")
+        : GenerateChrAnimations ? "CHR" : GenerateEventAnimations ? "EVENT" : Workflow("None");
 
     public string ExportOutputPath
     {
@@ -2675,6 +2661,9 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void InvalidateExportPlan()
     {
+        _exportPlanRevision++;
+        _planningCancellation?.Cancel();
+        NotifyReadinessChanged();
         if (_currentExportPlan is null) return;
         CurrentExportPlan = null;
         Diagnostics.ReplaceWith(_catalogDiagnostics);
@@ -2750,13 +2739,9 @@ public sealed class MainWindowViewModel : ObservableObject
     public bool HasSelectedBatchEntry => SelectedBatchEntry is not null;
     public bool HasBatchEntries => Batch.Count != 0;
     public bool HasDiagnostics => Diagnostics.Count != 0;
-    public string DiagnosticReport => Diagnostics.Count == 0
-        ? string.Empty
-        : string.Join("\n", Diagnostics.Select(diagnostic =>
-            $"[{diagnostic.Severity}] {diagnostic.Code}: {diagnostic.Message}" +
-            (string.IsNullOrWhiteSpace(diagnostic.RecoveryAction)
-                ? string.Empty
-                : $" Acción: {diagnostic.RecoveryAction}")));
+    public string DiagnosticReport => string.Join("\n", Diagnostics.Select(diagnostic =>
+        $"[{Workflow(diagnostic.Severity.ToString())}] {diagnostic.Code}: {DiagnosticMessage(diagnostic)}" +
+        DiagnosticRecoveryAction(diagnostic)));
 
     public string DraftPackagePath
     {
@@ -2773,6 +2758,13 @@ public sealed class MainWindowViewModel : ObservableObject
     }
 
     public IReadOnlyList<string> LanguageCodes => GameLocaleCatalog.SupportedCharacterLocales;
+    public IReadOnlyList<IdentityChoice> LanguageChoices { get; } = GameLocaleCatalog.SupportedCharacterLocales
+        .Select(locale => new IdentityChoice(locale, CharacterLocalizationEditorRow.LanguageLabel(locale, locale))).ToArray();
+    public IdentityChoice? SelectedLanguageChoice
+    {
+        get => LanguageChoices.First(choice => choice.Value == SelectedLanguageCode);
+        set { if (value is not null) SelectedLanguageCode = value.Value; }
+    }
 
     public string SelectedLanguageCode
     {
@@ -2783,7 +2775,21 @@ public sealed class MainWindowViewModel : ObservableObject
                 value, StringComparer.OrdinalIgnoreCase) ? value.ToLowerInvariant() : "en";
             if (!SetProperty(ref _selectedLanguageCode, normalized)) return;
             Text = UiText.ForLocale(normalized);
+            OnPropertyChanged(nameof(SelectedLanguageChoice));
+            OnPropertyChanged(nameof(BothAnimationsLabel));
+            OnPropertyChanged(nameof(AnimationTypesLabel));
+            NotifyRosterFilterChoicesChanged();
+            OnPropertyChanged(nameof(CharacterSortChoices));
+            OnPropertyChanged(nameof(SelectedCharacterSortChoice));
+            OnPropertyChanged(nameof(CharacterAffinityFilterChoices));
+            OnPropertyChanged(nameof(SelectedAffinityFilterChoice));
             WizardText = WizardText.ForLocale(normalized);
+            RefreshWorkflowLocalization();
+            NotifyPortraitPreviewChanged();
+            NotifyOperationStateChanged();
+            OnPropertyChanged(nameof(UnsavedChangesMessage));
+            OnPropertyChanged(nameof(DiscardChangesLabel));
+            OnPropertyChanged(nameof(CancelNavigationLabel));
             OnPropertyChanged(nameof(LogButtonLabel));
             OnPropertyChanged(nameof(CancelExportLabel));
             foreach (var row in LocalizationEditorRows) row.SetApplicationLanguage(normalized);
@@ -2818,6 +2824,8 @@ public sealed class MainWindowViewModel : ObservableObject
             OnPropertyChanged(nameof(TeamAssociationOptions));
             OnPropertyChanged(nameof(ActiveDraftTeamAssociationChoice));
             OnPropertyChanged(nameof(LanguageCode));
+            foreach (var row in RosterRows) row.SetLanguage(normalized);
+            if (Characters.Count > 0) ApplySearchNow();
             NotifyPlayerCardChanged();
             NotifyReviewChanged();
             _ = SaveSettingsAsync();
@@ -2974,6 +2982,7 @@ public sealed class MainWindowViewModel : ObservableObject
             {
                 ["reason"] = "store_unavailable",
             });
+            await RestoreLatestRecoveryAsync();
             return;
         }
         GlobalLog.Info("settings_restore_started");
@@ -2992,6 +3001,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 GameDumpInput = settings.GameDumpRoot;
                 await LoadGameDumpAsync();
             }
+            await RestoreLatestRecoveryAsync();
             GlobalLog.Info("settings_restore_completed", new Dictionary<string, object?>
             {
                 ["hasDumpRoot"] = !string.IsNullOrWhiteSpace(settings.GameDumpRoot),
@@ -3001,7 +3011,7 @@ public sealed class MainWindowViewModel : ObservableObject
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             GlobalLog.Error("settings_restore_failed", exception);
-            StatusMessage = $"Application settings could not be restored: {exception.Message}";
+            SetWorkflowErrorStatus("Application settings could not be restored: {0}", exception.Message);
         }
     }
 
@@ -3023,6 +3033,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _indexCancellation?.Dispose();
         _indexCancellation = new CancellationTokenSource();
         IsIndexing = true;
+        var recoveredEditor = _recoveredProjectAwaitingDump ? CaptureRecoverySnapshot().EditorState : null;
         try
         {
             ReportIndexProgress(new IndexProgress(IndexStage.Validation, 0, 1, "Validating selected game dump."));
@@ -3077,8 +3088,11 @@ public sealed class MainWindowViewModel : ObservableObject
             RecalculatePlayerCardStatistics();
             ApplySearchNow();
             InvalidateExportPlan();
-            Project.ClearBatch();
-            PackagePaths.Clear();
+            if (!_recoveredProjectAwaitingDump)
+            {
+                Project.ClearBatch();
+                PackagePaths.Clear();
+            }
             SelectedBatchEntry = null;
             RefreshBatch();
             ActiveGameDumpPath = workspace.RootPath;
@@ -3086,7 +3100,13 @@ public sealed class MainWindowViewModel : ObservableObject
             IsWorkspaceReady = true;
             ActiveWorkspace = WorkspaceKind.Project;
             WizardStep = WizardStep.Setup;
-            StatusMessage = "Game dump loaded.";
+            if (_recoveredProjectAwaitingDump)
+            {
+                _recoveredProjectAwaitingDump = false;
+                if (recoveredEditor is not null)
+                    ApplyRecoveredEditor(recoveredEditor);
+            }
+            SetWorkflowStatus("Game dump loaded.");
             GlobalLog.Info("dump_load_completed", new Dictionary<string, object?>
             {
                 ["characterCount"] = Characters.Count,
@@ -3098,15 +3118,14 @@ public sealed class MainWindowViewModel : ObservableObject
         catch (OperationCanceledException)
         {
             GlobalLog.Warn("dump_load_cancelled");
-            StatusMessage = "Game dump indexing was cancelled.";
+            SetWorkflowStatus("Game dump indexing was cancelled.");
         }
         catch (Exception exception) when (
             exception is ArgumentException or IOException or GameDumpValidationException)
         {
             GlobalLog.Error("dump_load_failed", exception);
-            StatusMessage = IsWorkspaceReady
-                ? $"The replacement dump could not be loaded. {exception.Message}"
-                : exception.Message;
+            if (IsWorkspaceReady) SetWorkflowErrorStatus("The replacement dump could not be loaded. {0}", exception.Message);
+            else SetUserErrorStatusMessage(exception.Message);
         }
         finally
         {
@@ -3116,8 +3135,8 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void ReportIndexProgress(IndexProgress progress)
     {
-        IndexProgressMessage = progress.Message;
-        StatusMessage = progress.Message;
+        IndexProgressMessage = Workflow(progress.Message);
+        StatusMessage = IndexProgressMessage;
         GlobalLog.Debug("dump_index_progress", new Dictionary<string, object?>
         {
             ["stage"] = progress.Stage,
@@ -3128,8 +3147,23 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public void CancelIndexing() => _indexCancellation?.Cancel();
 
+    public bool HasRosterCharacters => RosterRows.Count > 0;
+    public string EmptyRosterMessage => Characters.Count == 0
+        ? Workflow("No characters were found. Check the selected game dump.")
+        : Workflow("No characters match the current search or filters.");
+    public string ResetCharacterSearchLabel => Workflow("Reset search and filters");
+    private ICommand? _resetCharacterSearchCommand;
+    public ICommand ResetCharacterSearchCommand => _resetCharacterSearchCommand ??= new DelegateCommand(ResetCharacterSearch);
+    private void ResetCharacterSearch()
+    {
+        _searchCancellation?.Cancel();
+        SearchText = string.Empty;
+        ClearCharacterFilters();
+    }
+
     public void ClearCharacterFilters()
     {
+        _searchCancellation?.Cancel();
         SetProperty(ref _selectedAffinity, null, nameof(SelectedAffinity));
         SetProperty(ref _selectedOrigin, null, nameof(SelectedOrigin));
         SetProperty(ref _selectedSeries, null, nameof(SelectedSeries));
@@ -3140,6 +3174,10 @@ public sealed class MainWindowViewModel : ObservableObject
         SetProperty(ref _selectedPlayStyle, null, nameof(SelectedPlayStyle));
         SetProperty(ref _selectedRank, null, nameof(SelectedRank));
         SetProperty(ref _selectedSpecialRarity, null, nameof(SelectedSpecialRarity));
+        _selectedRosterOriginGame = null;
+        _selectedRosterTeams.Clear();
+        TeamFilterSearch = string.Empty;
+        NotifyRosterFilterChoicesChanged();
         ApplySearchNow();
     }
 
@@ -3148,7 +3186,7 @@ public sealed class MainWindowViewModel : ObservableObject
         using var operation = GlobalLog.BeginOperation("ui_package_add");
         if (!IsWorkspaceReady)
         {
-            StatusMessage = "Load a game dump before adding character packages.";
+            SetWorkflowErrorStatus("Load a game dump before adding character packages.");
             return;
         }
 
@@ -3158,7 +3196,7 @@ public sealed class MainWindowViewModel : ObservableObject
             AcquisitionMode = AcquisitionMode.Delivery;
             if (Project.ContainsPackagePath(PackageInput))
             {
-                StatusMessage = "The character package is already in the batch.";
+                SetWorkflowStatus("The character package is already in the batch.");
                 ActiveWorkspace = WorkspaceKind.Batch;
                 WizardStep = WizardStep.Setup;
                 GlobalLog.Debug("batch_package_add_skipped", new Dictionary<string, object?>
@@ -3176,7 +3214,7 @@ public sealed class MainWindowViewModel : ObservableObject
             OnPropertyChanged(nameof(HasBatchEntries));
             ActiveWorkspace = WorkspaceKind.Batch;
             WizardStep = WizardStep.Setup;
-            StatusMessage = "Character package added to the batch.";
+            SetWorkflowStatus("Character package added to the batch.");
             GlobalLog.Info("batch_package_add_completed", new Dictionary<string, object?>
             {
                 ["batchCount"] = Batch.Count,
@@ -3186,15 +3224,17 @@ public sealed class MainWindowViewModel : ObservableObject
         catch (ArgumentException exception)
         {
             GlobalLog.Error("batch_package_add_failed", exception);
-            StatusMessage = exception.Message;
+            SetUserErrorStatusMessage(exception.Message);
         }
     }
 
     public void CloneSelectedCharacter()
     {
+        if (IsBusy || !ConfirmEditorReplacement(CloneSelectedCharacter)) return;
+        ResetModificationContext();
         if (SelectedCharacter is null)
         {
-            StatusMessage = "Select a character before cloning.";
+            SetWorkflowErrorStatus("Select a character before cloning.");
             return;
         }
 
@@ -3213,7 +3253,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 SetTechniqueVariantChoicesFromDraft(ActiveDraft);
                 ActiveWorkspace = WorkspaceKind.Characters;
                 WizardStep = WizardStep.Character;
-                StatusMessage = "Character draft created from the complete custom draft.";
+                SetWorkflowStatus("Character draft created from the complete custom draft.");
                 QueueRecoverySave();
                 return;
             }
@@ -3235,6 +3275,7 @@ public sealed class MainWindowViewModel : ObservableObject
             fields["Assets.StandardPortraitEntry"] = portrait.StandardPortraitEntryName;
             fields["Assets.UniformPortraitEntry"] = portrait.UniformPortraitEntryName;
             fields["Assets.PortraitPayloadFormat"] = portrait.PayloadFormat;
+            fields["Assets.PortraitIncludesUniform"] = portrait.IncludesUniform.ToString();
         }
         if (SelectedCharacter.BaseMetadata is { } characterBase)
         {
@@ -3326,18 +3367,20 @@ public sealed class MainWindowViewModel : ObservableObject
             SetTechniqueVariantChoices(sourceVariants, SelectedVariant);
         ActiveWorkspace = WorkspaceKind.Characters;
         WizardStep = WizardStep.Character;
-        StatusMessage = "Character draft created from the immutable dump snapshot.";
+        SetWorkflowStatus("Character draft created from the immutable dump snapshot.");
     }
 
     public void CreateBlankDraft()
     {
+        if (IsBusy || !ConfirmEditorReplacement(CreateBlankDraft)) return;
+        ResetModificationContext();
         ActiveDraft = _draftService.CreateBlank();
         var entry = Project.AddDraft(ActiveDraft);
         _activeDraftId = entry.Id;
         AddDraftToRoster(entry, select: true);
         ActiveWorkspace = WorkspaceKind.Characters;
         WizardStep = WizardStep.Character;
-        StatusMessage = "A neutral custom character draft was created.";
+        SetWorkflowStatus("A neutral custom character draft was created.");
         QueueRecoverySave();
     }
 
@@ -3351,7 +3394,7 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         if (!CanDeleteSelectedCharacter)
         {
-            StatusMessage = "Original Victory Road characters cannot be deleted.";
+            SetWorkflowErrorStatus("Original Victory Road characters cannot be deleted.");
             return;
         }
         RequestRemoveActiveDraft();
@@ -3359,6 +3402,8 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public void DuplicateSelectedCharacter()
     {
+        if (IsBusy || !ConfirmEditorReplacement(DuplicateSelectedCharacter)) return;
+        ResetModificationContext();
         if (SelectedCharacter is null) return;
         if (SelectedCharacter.Origin == CharacterOrigin.Original)
         {
@@ -3372,7 +3417,7 @@ public sealed class MainWindowViewModel : ObservableObject
         ActiveDraft = duplicate;
         _activeDraftId = entry.Id;
         AddDraftToRoster(entry, select: true);
-        StatusMessage = "Custom character duplicated in the project.";
+        SetWorkflowStatus("Custom character duplicated in the project.");
         QueueRecoverySave();
     }
 
@@ -3393,7 +3438,7 @@ public sealed class MainWindowViewModel : ObservableObject
         ActiveDraft = null;
         ApplySearchNow();
         IsRemoveDraftConfirmationVisible = false;
-        StatusMessage = "Custom character draft unlinked from the project.";
+        SetWorkflowStatus("Custom character draft unlinked from the project.");
         QueueRecoverySave();
     }
 
@@ -3401,6 +3446,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void SelectProjectDraft(CharacterCatalogItem? character)
     {
+        ResetModificationContext();
         if (character is not null
             && _draftIdsByRosterId.TryGetValue(character.Id, out var draftId))
         {
@@ -3431,6 +3477,7 @@ public sealed class MainWindowViewModel : ObservableObject
             portraitPath,
             affinity,
             Origin: entry.Draft.Origin,
+            PortraitMetadata: ResolveDraftPortraitMetadata(entry.Draft),
             Variants: DraftVariantSummaries(entry.Draft),
             StandardPortraitResourcePath: ResolveDraftStandardPortraitPath(entry.Draft),
             UniformPortraitResourcePath: ResolveDraftUniformPortraitPath(entry.Draft));
@@ -3453,6 +3500,7 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             DisplayName = draft.DisplayName,
             PortraitResourcePath = ResolveDraftPortraitPath(draft) ?? row.Character.PortraitResourcePath,
+            PortraitMetadata = ResolveDraftPortraitMetadata(draft),
             Origin = draft.Origin,
             Variants = DraftVariantSummaries(draft),
             StandardPortraitResourcePath = ResolveDraftStandardPortraitPath(draft),
@@ -3468,67 +3516,14 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
-    public async Task SaveDraftAsync()
-    {
-        using var operation = GlobalLog.BeginOperation("ui_draft_save");
-        if (ActiveDraft is null)
-        {
-            StatusMessage = "Clone a character before saving a package.";
-            return;
-        }
-
-        if (_packageService is null)
-        {
-            StatusMessage = "The .vrchara package service is not configured.";
-            return;
-        }
-
-        try
-        {
-            GlobalLog.Info("draft_save_started", new Dictionary<string, object?>
-            {
-                ["isModification"] = HasModificationSource,
-            });
-            if (!await ApplyEditedLocalesAsync())
-                return;
-
-            if (string.IsNullOrWhiteSpace(ActiveDraft.Acquisition?.Method))
-            {
-                ActiveDraft = ActiveDraft with
-                {
-                    Acquisition = (ActiveDraft.Acquisition ?? new CharacterDraftAcquisition(null, null)) with
-                    {
-                        Method = "Delivery",
-                    },
-                };
-                PersistActiveDraft();
-            }
-            var targetPath = _modificationSourcePath ?? DraftPackagePath;
-            await _packageService.SaveAsync(targetPath, ActiveDraft, CancellationToken.None);
-            _lastSavedPackagePath = targetPath;
-            IsPostSavePromptVisible = true;
-            StatusMessage = "Character package saved.";
-            GlobalLog.Info("draft_save_completed", new Dictionary<string, object?>
-            {
-                ["hasModificationSource"] = HasModificationSource,
-            });
-            QueueRecoverySave();
-        }
-        catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException)
-        {
-            GlobalLog.Error("draft_save_failed", exception);
-            StatusMessage = exception.Message;
-        }
-    }
+    public Task SaveDraftAsync() => SaveDraftWithPickerAsync(_ => Task.FromResult<string?>(DraftPackagePath));
 
     public async Task OpenLocalesJsonAsync()
     {
         using var operation = GlobalLog.BeginOperation("ui_locales_open");
         if (ActiveDraft is null)
         {
-            StatusMessage = SelectedLanguageCode == "es"
-                ? "Selecciona o crea un personaje antes de editar los locales."
-                : "Select or create a character before editing locales.";
+            SetWorkflowErrorStatus("Select or create a character before editing locales.");
             return;
         }
 
@@ -3552,16 +3547,14 @@ public sealed class MainWindowViewModel : ObservableObject
                 FileName = _localesJsonPath,
                 UseShellExecute = true,
             });
-            StatusMessage = SelectedLanguageCode == "es"
-                ? "Edita el JSON de locales y pulsa Guardar cuando termines."
-                : "Edit the locales JSON and press Save when you are finished.";
+            SetWorkflowStatus("Edit the locales JSON and press Save when you are finished.");
             GlobalLog.Info("locales_editor_open_completed");
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             GlobalLog.Error("locales_editor_open_failed", exception);
-            StatusMessage = exception.Message;
+            SetUserErrorStatusMessage(exception.Message);
         }
     }
 
@@ -3574,9 +3567,7 @@ public sealed class MainWindowViewModel : ObservableObject
             {
                 ["reason"] = "log_unavailable",
             });
-            StatusMessage = SelectedLanguageCode == "es"
-                ? "El registro no está disponible en esta sesión."
-                : "The log is unavailable in this session.";
+            SetWorkflowErrorStatus("The log is unavailable in this session.");
             return;
         }
 
@@ -3588,17 +3579,13 @@ public sealed class MainWindowViewModel : ObservableObject
                 FileName = path,
                 UseShellExecute = true,
             });
-            StatusMessage = SelectedLanguageCode == "es"
-                ? "Registro abierto. Se limpia automáticamente al iniciar la aplicación."
-                : "Log opened. It is cleared automatically when the application starts.";
+            SetWorkflowStatus("Log opened. It is cleared automatically when the application starts.");
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             GlobalLog.Error("log_open_failed", exception);
-            StatusMessage = SelectedLanguageCode == "es"
-                ? "No se pudo abrir el registro."
-                : "The log could not be opened.";
+            SetWorkflowErrorStatus("The log could not be opened.");
         }
     }
 
@@ -3607,17 +3594,17 @@ public sealed class MainWindowViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(_localesJsonPath)) return true;
         if (!File.Exists(_localesJsonPath))
         {
-            StatusMessage = SelectedLanguageCode == "es"
-                ? "No se encuentra el JSON de locales temporal; vuelve a abrirlo antes de guardar."
-                : "The temporary locales JSON cannot be found; open it again before saving.";
+            SetWorkflowErrorStatus("The temporary locales JSON cannot be found; open it again before saving.");
             return false;
         }
 
+        var draft = ActiveDraft;
         try
         {
             var json = await File.ReadAllTextAsync(_localesJsonPath, CancellationToken.None);
+            if (!ReferenceEquals(draft, ActiveDraft)) return false;
             var localization = CharacterLocalizationJson.Deserialize(json);
-            ActiveDraft = ActiveDraft! with { Localization = localization };
+            ActiveDraft = draft! with { Localization = localization };
             if (_activeDraftId is { } draftId)
             {
                 Project.UpdateDraft(draftId, ActiveDraft);
@@ -3632,9 +3619,7 @@ public sealed class MainWindowViewModel : ObservableObject
             exception is IOException or UnauthorizedAccessException or JsonException)
         {
             GlobalLog.Warn("locales_editor_apply_failed", exception: exception);
-            StatusMessage = SelectedLanguageCode == "es"
-                ? $"El JSON de locales no es válido: {exception.Message}"
-                : $"The locales JSON is invalid: {exception.Message}";
+            SetWorkflowErrorStatus("The locales JSON is invalid: {0}", exception.Message);
             return false;
         }
     }
@@ -3666,63 +3651,19 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public async Task PreviewExportAsync()
     {
-        using var operation = GlobalLog.BeginOperation("ui_export_preview");
-        GlobalLog.Info("export_preview_started", new Dictionary<string, object?>
-        {
-            ["batchCount"] = Batch.Count,
-            ["acquisitionMode"] = AcquisitionMode,
-        });
-        try
-        {
-            if (_exportOutputPathGenerated
-                && (Directory.Exists(ExportOutputPath) || File.Exists(ExportOutputPath)))
-                SetGeneratedExportOutputPath(GetNextExportPath(ExportOutputPath));
-            if (AcquisitionMode is AcquisitionMode.Shop or AcquisitionMode.Both)
-                EnsureShopAcquisitionDefaults();
-            CurrentExportPlan = _playerCardAssetProfile is { } profile
-                ? await _exportPlanner.CreatePlanAsync(
-                    Project,
-                    profile,
-                    ExportPlatform,
-                    AcquisitionMode,
-                    ExportOutputPath,
-                    CancellationToken.None,
-                    new AnimationGenerationSelection(
-                        GenerateAnimationsEnabled,
-                        GenerateChrAnimations,
-                        GenerateEventAnimations))
-                : _exportPlanner.CreatePlan(
-                    Project,
-                    ExportPlatform,
-                    AcquisitionMode,
-                    ExportOutputPath);
-            Diagnostics.ReplaceWith(CurrentExportPlan.Diagnostics);
-            OnPropertyChanged(nameof(HasDiagnostics));
-            OnPropertyChanged(nameof(DiagnosticReport));
-            StatusMessage = CurrentExportPlan.CanExport
-                ? "Export plan is ready."
-                : BuildDiagnosticStatus(CurrentExportPlan.Diagnostics);
-            GlobalLog.Info("export_preview_completed", new Dictionary<string, object?>
-            {
-                ["canExport"] = CurrentExportPlan.CanExport,
-                ["diagnosticCount"] = CurrentExportPlan.Diagnostics.Count,
-            });
-        }
-        catch (Exception exception)
-        {
-            ReportExportFailure(exception, preview: true);
-        }
+        if (IsBusy) return;
+        SetOperation(DesktopOperation.Planning);
+        try { await PrepareExportPlanAsync(); }
+        finally { SetOperation(DesktopOperation.None); }
     }
 
-    private static string BuildDiagnosticStatus(IReadOnlyList<Diagnostic> diagnostics)
+    private string BuildDiagnosticStatus(IReadOnlyList<Diagnostic> diagnostics)
     {
         var blocking = diagnostics.Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error).ToArray();
-        if (blocking.Length == 0) return "Export plan contains warnings. Review diagnostics before exporting.";
+        if (blocking.Length == 0) return Workflow("Export plan contains warnings. Review diagnostics before exporting.");
         var first = blocking[0];
-        var suffix = string.IsNullOrWhiteSpace(first.RecoveryAction)
-            ? string.Empty
-            : $" Acción: {first.RecoveryAction}";
-        return $"{blocking.Length} error(es) de exportación. {first.Code}: {first.Message}{suffix}";
+        return Workflow("{0} export error(s). {1}: {2}{3}", blocking.Length,
+            first.Code, DiagnosticMessage(first), DiagnosticRecoveryAction(first));
     }
 
     private void EnsureShopAcquisitionDefaults()
@@ -3737,10 +3678,10 @@ public sealed class MainWindowViewModel : ObservableObject
     public async Task ExecuteExportAsync()
     {
         using var operation = GlobalLog.BeginOperation("ui_export_execute");
-        if (IsExporting) return;
+        if (IsBusy) return;
         if (CurrentExportPlan?.CanExport != true)
         {
-            StatusMessage = "Preview and resolve every blocking diagnostic before exporting.";
+            SetWorkflowErrorStatus("Preview and resolve every blocking diagnostic before exporting.");
             return;
         }
 
@@ -3750,16 +3691,19 @@ public sealed class MainWindowViewModel : ObservableObject
             using var cancellation = new CancellationTokenSource();
             _exportCancellation = cancellation;
             IsExporting = true;
-            ExportProgressMessage = SelectedLanguageCode == "es" ? "Preparando la exportación…" : "Preparing export…";
+            ExportProgressMessage = Workflow("Preparing export…");
             var progress = new Progress<ExportProgress>(UpdateExportProgress);
-            var result = await _exportExecutor.ExecuteAsync(CurrentExportPlan, cancellation.Token, progress);
-            StatusMessage = $"Export published to {result.OutputPath}.";
+            var completedPlan = CurrentExportPlan;
+            var result = await Task.Run(
+                () => _exportExecutor.ExecuteAsync(completedPlan, cancellation.Token, progress), cancellation.Token);
+            SetWorkflowStatus("Export published to {0}.", result.OutputPath);
             SetGeneratedExportOutputPath(GetNextExportPath(result.OutputPath));
+            CurrentExportPlan = completedPlan with { OutputPath = ExportOutputPath };
             GlobalLog.Info("export_execution_completed");
         }
         catch (OperationCanceledException) when (_exportCancellation?.IsCancellationRequested == true)
         {
-            StatusMessage = SelectedLanguageCode == "es" ? "Exportación cancelada." : "Export cancelled.";
+            SetWorkflowStatus("Export cancelled.");
         }
         catch (Exception exception)
         {
@@ -3770,34 +3714,44 @@ public sealed class MainWindowViewModel : ObservableObject
             _exportCancellation = null;
             IsExporting = false;
             ExportProgressMessage = string.Empty;
+            _lastExportLogStage = null;
         }
     }
 
+    private string? _lastExportLogStage;
+
     private void UpdateExportProgress(ExportProgress progress)
     {
-        var spanish = SelectedLanguageCode == "es";
+        if (!IsExporting || _exportCancellation?.IsCancellationRequested == true) return;
+        if (_lastExportLogStage != progress.Stage)
+        {
+            _lastExportLogStage = progress.Stage;
+            GlobalLog.Info("phase", new Dictionary<string, object?> { ["name"] = progress.Stage });
+        }
         var label = progress.Stage switch
         {
-            "starting" => spanish ? "Preparando la exportación…" : "Preparing export…",
-            "files" => spanish ? "Copiando archivos" : "Copying files",
-            "model_dependencies" => spanish ? "Copiando dependencias del modelo" : "Copying model dependencies",
-            "animation_package" => spanish ? "Abriendo los recursos de animación" : "Opening animation resources",
-            "animation" => spanish ? "Generando animación" : "Generating animation",
-            "motion_table" => spanish ? "Registrando la familia de animación" : "Registering animation family",
-            "references" => spanish ? "Copiando referencias del juego" : "Copying game references",
-            "loading_package" => spanish ? "Abriendo paquete de personaje" : "Opening character package",
-            "package_resources" => spanish ? "Preparando recursos del personaje" : "Preparing character resources",
-            "portraits" => spanish ? "Convirtiendo retratos" : "Converting portraits",
-            "localization" => spanish ? "Escribiendo textos" : "Writing localizations",
-            "body" => spanish ? "Escribiendo modelos de cuerpo" : "Writing body models",
-            "clothes" => spanish ? "Escribiendo ropa y calzado" : "Writing clothes and shoes",
-            "models" => spanish ? "Escribiendo modelos" : "Writing models",
-            "character_data" => spanish ? "Escribiendo datos del personaje" : "Writing character data",
-            "shop" => spanish ? "Escribiendo datos de tienda" : "Writing shop data",
-            "delivery" => spanish ? "Escribiendo datos de entrega" : "Writing delivery data",
-            "delivery_localization" => spanish ? "Escribiendo textos de entrega" : "Writing delivery text",
-            "integrity" => spanish ? "Verificando archivos" : "Verifying files",
-            "publishing" => spanish ? "Publicando la exportación" : "Publishing export",
+            "starting" => Workflow("Preparing export…"),
+            "files" => Workflow("Copying files"),
+            "model_dependencies" => Workflow("Copying model dependencies"),
+            "animation_package" => Workflow("Opening animation resources"),
+            "animation" => Workflow("Generating animation"),
+            "motion_table" => Workflow("Registering animation family"),
+            "references" => Workflow("Copying game references"),
+            "loading_package" => Workflow("Opening character package"),
+            "package_resources" => Workflow("Preparing character resources"),
+            "portraits" => Workflow("Converting portraits"),
+            "localization" => Workflow("Writing localizations"),
+            "body" => Workflow("Writing body models"),
+            "clothes" => Workflow("Writing clothes and shoes"),
+            "models" => Workflow("Writing models"),
+            "character_data" => Workflow("Writing character data"),
+            "config_read" => Workflow("Reading configuration table"),
+            "config_write" => Workflow("Saving configuration table"),
+            "shop" => Workflow("Writing shop data"),
+            "delivery" => Workflow("Writing delivery data"),
+            "delivery_localization" => Workflow("Writing delivery text"),
+            "integrity" => Workflow("Verifying files"),
+            "publishing" => Workflow("Publishing export"),
             _ => progress.Stage,
         };
         ExportProgressMessage = string.IsNullOrWhiteSpace(progress.Item)
@@ -3808,13 +3762,9 @@ public sealed class MainWindowViewModel : ObservableObject
     private void ReportExportFailure(Exception exception, bool preview)
     {
         GlobalLog.Error(preview ? "export_preview_failed" : "export_execution_failed", exception);
-        StatusMessage = SelectedLanguageCode == "es"
-            ? preview
-                ? "No se pudo preparar la exportación. Consulta el registro para ver el error."
-                : "No se pudo completar la exportación. Consulta el registro para ver el error."
-            : preview
-                ? "Could not prepare the export. Check the log for details."
-                : "Could not complete the export. Check the log for details.";
+        SetWorkflowErrorStatus(preview
+            ? "Could not prepare the export. Check the log for details."
+            : "Could not complete the export. Check the log for details.");
     }
 
     private static string GetNextExportPath(string previousPath)
@@ -3848,7 +3798,7 @@ public sealed class MainWindowViewModel : ObservableObject
         SelectedBatchEntry = Project.Duplicate(SelectedBatchEntry.Id);
         InvalidateExportPlan();
         RefreshBatch();
-        StatusMessage = "Character package duplicated in the batch.";
+        SetWorkflowStatus("Character package duplicated in the batch.");
         QueueRecoverySave();
     }
 
@@ -3859,7 +3809,7 @@ public sealed class MainWindowViewModel : ObservableObject
         Project.SetEnabled(id, !SelectedBatchEntry.IsEnabled);
         InvalidateExportPlan();
         RefreshBatch(id);
-        StatusMessage = "Character package state updated.";
+        SetWorkflowStatus("Character package state updated.");
         QueueRecoverySave();
     }
 
@@ -3878,7 +3828,7 @@ public sealed class MainWindowViewModel : ObservableObject
         if (SelectedBatchEntry?.Id == entry.Id)
             SelectedBatchEntry = null;
         RefreshBatch();
-        StatusMessage = "Character package removed from the batch.";
+        SetWorkflowStatus("Character package removed from the batch.");
         QueueRecoverySave();
     }
 
@@ -3944,6 +3894,7 @@ public sealed class MainWindowViewModel : ObservableObject
             foreach (var row in RosterRows)
                 row.Dispose();
             rows = characters.Select(character => new CharacterRosterRow(character)).ToArray();
+            foreach (var row in rows) row.SetLanguage(SelectedLanguageCode);
             RosterRows.ReplaceWith(rows);
 
             selectedRow = selectedCharacterId is null
@@ -3965,6 +3916,8 @@ public sealed class MainWindowViewModel : ObservableObject
         if (selectedCharacterId is not null && selectedRow is null)
             SelectedCharacter = null;
 
+        OnPropertyChanged(nameof(HasRosterCharacters));
+        OnPropertyChanged(nameof(EmptyRosterMessage));
         ScheduleRosterPortraitLoads();
     }
 
@@ -4012,9 +3965,28 @@ public sealed class MainWindowViewModel : ObservableObject
         CharacterPortraitLoadResult? result = null;
         try
         {
-            result = await _portraitLoader!.LoadAsync(
-                new CharacterPortraitRequest(row.Character, CharacterPortraitKind.RosterThumbnail),
-                cancellationToken);
+            if (_rosterUniformResolver is not null && _playerCardAssetProfile is not null
+                && row.Character.PortraitMetadata?.IncludesUniform != true
+                && row.Character.BaseMetadata is { } metadata)
+            {
+                using var back = await _portraitLoader!.LoadAsync(
+                    new CharacterPortraitRequest(row.Character, CharacterPortraitKind.Standard), cancellationToken);
+                using var front = await _portraitLoader.LoadAsync(
+                    new CharacterPortraitRequest(row.Character, CharacterPortraitKind.UniformCompatible), cancellationToken);
+                var uniform = await _rosterUniformResolver.ResolveAsync(_playerCardAssetProfile,
+                    new UniformPreviewRequest(metadata.Gender, metadata.BodyType,
+                        metadata.SkinColorRgba == 0 ? 0xFFFFE4D0 : (metadata.SkinColorRgba >> 8) | (metadata.SkinColorRgba << 24),
+                        SelectedLanguageCode, row.Character.UniformPreviewAsset,
+                        ChestSize: metadata.ChestSize, UniformModel: metadata.UniformModel), cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (back.Bitmap is not null && front.Bitmap is not null && uniform.Texture is not null)
+                {
+                    using var shirt = DecodedTextureBitmapFactory.Create(uniform.Texture);
+                    result = new CharacterPortraitLoadResult(PortraitBitmapComposer.Compose(back.Bitmap, shirt, front.Bitmap, 48), uniform.DiagnosticCode);
+                }
+            }
+            result ??= await _portraitLoader!.LoadAsync(
+                new CharacterPortraitRequest(row.Character, CharacterPortraitKind.RosterThumbnail), cancellationToken);
             if (cancellationToken.IsCancellationRequested || !RosterRows.Contains(row))
                 return;
 
@@ -4058,8 +4030,10 @@ public sealed class MainWindowViewModel : ObservableObject
             Positions: SelectedPosition is { } position ? [position] : null,
             PlayStyles: SelectedPlayStyle is { } playStyle ? [playStyle] : null,
             Ranks: SelectedRank is { } rank ? [rank] : null,
-            SpecialRarities: SelectedSpecialRarity is { } rarity ? [rarity] : null),
-        SelectedCharacterSort);
+            SpecialRarities: SelectedSpecialRarity is { } rarity ? [rarity] : null,
+            OriginGames: _selectedRosterOriginGame is { } game ? [game] : null,
+            Teams: _selectedRosterTeams.ToArray()),
+        SelectedCharacterSort) { Locale = SelectedLanguageCode, Descending = _rosterSortDescending };
 
     private IReadOnlyList<int> DistinctBaseValues(Func<CharacterBaseMetadata, int> selector) => Characters
         .Where(character => character.BaseMetadata is not null)
@@ -4077,6 +4051,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void NotifyFilterOptionsChanged()
     {
+        NotifyRosterFilterChoicesChanged();
         OnPropertyChanged(nameof(SeriesOptions));
         OnPropertyChanged(nameof(AcademicYearOptions));
         OnPropertyChanged(nameof(GenderOptions));
@@ -4130,31 +4105,14 @@ public sealed class MainWindowViewModel : ObservableObject
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            StatusMessage = $"Application settings could not be saved: {exception.Message}";
+            SetWorkflowErrorStatus("Application settings could not be saved: {0}", exception.Message);
         }
     }
 
     private static double NormalizePaneWidth(double value, double fallback) =>
         double.IsFinite(value) ? Math.Max(280, value) : fallback;
 
-    private void QueueRecoverySave()
-    {
-        if (_projectStore is null || string.IsNullOrWhiteSpace(_recoveryRoot)) return;
-        _ = SaveRecoveryAsync();
-    }
 
-    private async Task SaveRecoveryAsync()
-    {
-        try
-        {
-            var basePath = Path.Combine(_recoveryRoot!, $"{Project.Id:N}.vrproject");
-            await _projectStore!.SaveRecoveryAsync(basePath, Project, CancellationToken.None);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            StatusMessage = $"Project recovery could not be saved: {exception.Message}";
-        }
-    }
 }
 
 internal static class ObservableCollectionExtensions

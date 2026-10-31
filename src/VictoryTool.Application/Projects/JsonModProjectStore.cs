@@ -25,6 +25,12 @@ public sealed class JsonModProjectStore : IModProjectStore
         await using var stream = File.OpenRead(fullPath);
         var data = await JsonSerializer.DeserializeAsync<ProjectData>(stream, Options, cancellationToken)
             ?? throw new InvalidDataException("The project file is empty.");
+        if (data.SchemaVersion != ModProjectDocument.CurrentSchemaVersion)
+            throw new InvalidDataException("Unsupported project schema version.");
+        if (data.Id == Guid.Empty || string.IsNullOrWhiteSpace(data.Name) || data.Batch is null
+            || data.Batch.Any(entry => entry is null || string.IsNullOrWhiteSpace(entry.PackagePath))
+            || data.Drafts?.Any(entry => entry?.Draft?.Fields is null) == true)
+            throw new InvalidDataException("The project is missing required identity, batch or draft data.");
         var projectDirectory = Path.GetDirectoryName(fullPath)!;
         var batch = data.Batch.Select(entry => entry with
         {
@@ -47,7 +53,8 @@ public sealed class JsonModProjectStore : IModProjectStore
             data.Id, data.Name, data.SchemaVersion, batch, drafts,
             data.FunctionalBankReferenceDataRoot is null
                 ? null
-                : ResolveProjectPath(projectDirectory, data.FunctionalBankReferenceDataRoot));
+                : ResolveProjectPath(projectDirectory, data.FunctionalBankReferenceDataRoot),
+            MapEditorPaths(data.EditorState, value => ResolveProjectPath(projectDirectory, value)));
         GlobalLog.Info("project_loaded", new Dictionary<string, object?>
         {
             ["schemaVersion"] = project.SchemaVersion,
@@ -92,7 +99,8 @@ public sealed class JsonModProjectStore : IModProjectStore
             project.Id, project.Name, project.SchemaVersion, portableBatch, portableDrafts,
             project.FunctionalBankReferenceDataRoot is null
                 ? null
-                : MakePortablePath(projectDirectory, project.FunctionalBankReferenceDataRoot));
+                : MakePortablePath(projectDirectory, project.FunctionalBankReferenceDataRoot),
+            MapEditorPaths(project.EditorState, value => MakePortablePath(projectDirectory, value)));
 
         try
         {
@@ -120,11 +128,33 @@ public sealed class JsonModProjectStore : IModProjectStore
             ? Path.GetFullPath(path)
             : Path.GetFullPath(Path.Combine(projectDirectory, path));
 
+    private static ProjectEditorState? MapEditorPaths(ProjectEditorState? editor, Func<string, string> map)
+    {
+        if (editor is null) return null;
+        if (editor.Version != 1) throw new InvalidDataException("Unsupported editor recovery version.");
+        if (editor.SavedDrafts is null || editor.SavedDrafts.Any(item => item.Value?.Fields is null || item.Key != item.Value.SymbolicId)
+            || editor.ActiveDraft is { Fields: null })
+            throw new InvalidDataException("Editor recovery contains an invalid draft.");
+        if (editor.SavedOrigins?.Any(pair => pair.Value is null || string.IsNullOrWhiteSpace(pair.Value.PackagePath)
+                || pair.Value.Length < 0 || pair.Value.WriteTimeUtcTicks < 0
+                || pair.Value.Sha256 is { } hash && (hash.Length != 64 || !hash.All(Uri.IsHexDigit))) == true)
+            throw new InvalidDataException("Editor recovery contains an invalid saved origin.");
+        return editor with
+        {
+            SourcePackagePath = string.IsNullOrWhiteSpace(editor.SourcePackagePath) ? null : map(editor.SourcePackagePath),
+            LastSavedPackagePath = string.IsNullOrWhiteSpace(editor.LastSavedPackagePath) ? null : map(editor.LastSavedPackagePath),
+            GameDumpRoot = string.IsNullOrWhiteSpace(editor.GameDumpRoot) ? null : map(editor.GameDumpRoot),
+            SavedOrigins = (editor.SavedOrigins ?? new Dictionary<string, SavedDraftOrigin>())
+                .ToDictionary(pair => pair.Key, pair => pair.Value with { PackagePath = map(pair.Value.PackagePath) }),
+        };
+    }
+
     private sealed record ProjectData(
         Guid Id,
         string Name,
         int SchemaVersion,
         BatchEntry[] Batch,
         ProjectDraftEntry[]? Drafts = null,
-        string? FunctionalBankReferenceDataRoot = null);
+        string? FunctionalBankReferenceDataRoot = null,
+        ProjectEditorState? EditorState = null);
 }

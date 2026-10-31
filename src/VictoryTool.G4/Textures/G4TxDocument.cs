@@ -290,10 +290,17 @@ public sealed class G4TxDocument
         var names = renamed.Textures.Select(texture => texture.Name)
             .Concat(renamed.SubTextures.Select(texture => texture.Name))
             .ToArray();
+        if (names.Length != TotalCount || names.Length > byte.MaxValue + 1)
+            throw new InvalidDataException("The G4TX lookup cannot represent all renamed texture entries.");
+        var hashes = names.Select(ComputeCrc32).ToArray();
         for (var index = 0; index < names.Length; index++)
             BinaryPrimitives.WriteUInt32LittleEndian(
                 result.AsSpan(hashTableOffset + index * sizeof(uint), sizeof(uint)),
-                ComputeCrc32(names[index]));
+                hashes[index]);
+        var idTableOffset = hashTableOffset + TotalCount * sizeof(uint);
+        var order = Enumerable.Range(0, names.Length).OrderBy(index => hashes[index]).ToArray();
+        for (var index = 0; index < order.Length; index++)
+            result[idTableOffset + index] = checked((byte)order[index]);
         return result;
     }
 

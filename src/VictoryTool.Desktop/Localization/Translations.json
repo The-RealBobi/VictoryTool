@@ -1,0 +1,2868 @@
+{
+  "Neutral": {
+    "de": "Neutral",
+    "es": "Neutral",
+    "fr": "Neutre",
+    "it": "Neutro",
+    "ja": "無属性",
+    "pt": "Neutro",
+    "zh_hans": "无属性",
+    "zh_hant": "無屬性"
+  },
+  "Wind": {
+    "de": "Wind",
+    "es": "Viento",
+    "fr": "Air",
+    "it": "Vento",
+    "ja": "風",
+    "pt": "Vento",
+    "zh_hans": "风",
+    "zh_hant": "風"
+  },
+  "Forest": {
+    "de": "Wald",
+    "es": "Bosque",
+    "fr": "Bois",
+    "it": "Foresta",
+    "ja": "林",
+    "pt": "Floresta",
+    "zh_hans": "林",
+    "zh_hant": "林"
+  },
+  "Fire": {
+    "de": "Feuer",
+    "es": "Fuego",
+    "fr": "Feu",
+    "it": "Fuoco",
+    "ja": "火",
+    "pt": "Fogo",
+    "zh_hans": "火",
+    "zh_hant": "火"
+  },
+  "Earth": {
+    "de": "Erde",
+    "es": "Tierra",
+    "fr": "Terre",
+    "it": "Terra",
+    "ja": "山",
+    "pt": "Terra",
+    "zh_hans": "山",
+    "zh_hant": "山"
+  },
+  "Unknown": {
+    "de": "Unbekannt",
+    "es": "Desconocido",
+    "fr": "Inconnu",
+    "it": "Sconosciuto",
+    "ja": "不明",
+    "pt": "Desconhecido",
+    "zh_hans": "未知",
+    "zh_hant": "未知"
+  },
+  "Goalkeeper": {
+    "de": "Torwart",
+    "es": "Portero",
+    "fr": "Gardien",
+    "it": "Portiere",
+    "ja": "ゴールキーパー",
+    "pt": "Guarda-redes",
+    "zh_hans": "守门员",
+    "zh_hant": "守門員"
+  },
+  "Forward": {
+    "de": "Stürmer",
+    "es": "Delantero",
+    "fr": "Attaquant",
+    "it": "Attaccante",
+    "ja": "フォワード",
+    "pt": "Avançado",
+    "zh_hans": "前锋",
+    "zh_hant": "前鋒"
+  },
+  "Midfielder": {
+    "de": "Mittelfeldspieler",
+    "es": "Centrocampista",
+    "fr": "Milieu",
+    "it": "Centrocampista",
+    "ja": "ミッドフィルダー",
+    "pt": "Médio",
+    "zh_hans": "中场",
+    "zh_hant": "中場"
+  },
+  "Defender": {
+    "de": "Verteidiger",
+    "es": "Defensa",
+    "fr": "Défenseur",
+    "it": "Difensore",
+    "ja": "ディフェンダー",
+    "pt": "Defesa",
+    "zh_hans": "后卫",
+    "zh_hant": "後衛"
+  },
+  "Browse": {
+    "de": "Durchsuchen",
+    "es": "Examinar",
+    "fr": "Parcourir",
+    "it": "Sfoglia",
+    "ja": "参照",
+    "pt": "Procurar",
+    "zh_hans": "浏览",
+    "zh_hant": "瀏覽"
+  },
+  "Back": {
+    "de": "Zurück",
+    "es": "Atrás",
+    "fr": "Retour",
+    "it": "Indietro",
+    "ja": "戻る",
+    "pt": "Voltar",
+    "zh_hans": "返回",
+    "zh_hant": "返回"
+  },
+  "Next": {
+    "de": "Weiter",
+    "es": "Siguiente",
+    "fr": "Suivant",
+    "it": "Avanti",
+    "ja": "次へ",
+    "pt": "Seguinte",
+    "zh_hans": "下一步",
+    "zh_hant": "下一步"
+  },
+  "Identity & Gameplay": {
+    "de": "Identität und Spielwerte",
+    "es": "Identidad y gameplay",
+    "fr": "Identité et jeu",
+    "it": "Identità e gioco",
+    "ja": "基本情報・能力",
+    "pt": "Identidade e jogo",
+    "zh_hans": "基本信息与能力",
+    "zh_hant": "基本資訊與能力"
+  },
+  "Appearance": {
+    "de": "Aussehen",
+    "es": "Aspecto",
+    "fr": "Apparence",
+    "it": "Aspetto",
+    "ja": "外見",
+    "pt": "Aparência",
+    "zh_hans": "外观",
+    "zh_hant": "外觀"
+  },
+  "Acquisition": {
+    "de": "Erhalt",
+    "es": "Obtención",
+    "fr": "Obtention",
+    "it": "Ottenimento",
+    "ja": "入手方法",
+    "pt": "Obtenção",
+    "zh_hans": "获取方式",
+    "zh_hant": "取得方式"
+  },
+  "Review": {
+    "de": "Prüfen",
+    "es": "Revisión",
+    "fr": "Vérification",
+    "it": "Riepilogo",
+    "ja": "確認",
+    "pt": "Revisão",
+    "zh_hans": "确认",
+    "zh_hant": "確認"
+  },
+  "Choose readable values. Internal identifiers stay hidden.": {
+    "de": "Wähle die gewünschten Werte. Interne Kennungen bleiben verborgen.",
+    "es": "Elige valores legibles. Los identificadores internos quedan ocultos.",
+    "fr": "Choisissez les valeurs souhaitées. Les identifiants internes restent masqués.",
+    "it": "Scegli i valori desiderati. Gli identificatori interni restano nascosti.",
+    "ja": "項目を選択してください。内部IDは表示されません。",
+    "pt": "Escolha os valores pretendidos. Os identificadores internos ficam ocultos.",
+    "zh_hans": "请选择所需的值。内部标识符不会显示。",
+    "zh_hant": "請選擇所需的值。內部識別碼不會顯示。"
+  },
+  "Use the Characters step to select or duplicate a player, then continue here.": {
+    "de": "Wähle oder dupliziere zuerst einen Spieler im Schritt Personen.",
+    "es": "Usa el paso Personajes para seleccionar o duplicar un jugador y continúa aquí.",
+    "fr": "Sélectionnez ou dupliquez un joueur dans Personnages avant de continuer.",
+    "it": "Seleziona o duplica un giocatore nella sezione Personaggi prima di continuare.",
+    "ja": "キャラクター画面で選手を選ぶか複製してから進んでください。",
+    "pt": "Selecione ou duplique um jogador em Personagens antes de continuar.",
+    "zh_hans": "请先在角色页面选择或复制一名球员。",
+    "zh_hant": "請先在角色頁面選擇或複製一名球員。"
+  },
+  "Icon with rear hair": {
+    "de": "Symbol mit hinterem Haar",
+    "es": "Icono con pelo trasero",
+    "fr": "Icône avec cheveux arrière",
+    "it": "Icona con capelli posteriori",
+    "ja": "後ろ髪ありのアイコン",
+    "pt": "Ícone com cabelo traseiro",
+    "zh_hans": "带后发的图标",
+    "zh_hant": "含後髮的圖示"
+  },
+  "Icon without rear hair": {
+    "de": "Symbol ohne hinteres Haar",
+    "es": "Icono sin pelo trasero",
+    "fr": "Icône sans cheveux arrière",
+    "it": "Icona senza capelli posteriori",
+    "ja": "後ろ髪なしのアイコン",
+    "pt": "Ícone sem cabelo traseiro",
+    "zh_hans": "不带后发的图标",
+    "zh_hant": "不含後髮的圖示"
+  },
+  "Portrait variant 1": {
+    "de": "Porträtvariante 1",
+    "es": "Variante de retrato 1",
+    "fr": "Variante de portrait 1",
+    "it": "Variante ritratto 1",
+    "ja": "ポートレート1",
+    "pt": "Variante de retrato 1",
+    "zh_hans": "立绘版本1",
+    "zh_hant": "立繪版本1"
+  },
+  "Portrait variant 2": {
+    "de": "Porträtvariante 2",
+    "es": "Variante de retrato 2",
+    "fr": "Variante de portrait 2",
+    "it": "Variante ritratto 2",
+    "ja": "ポートレート2",
+    "pt": "Variante de retrato 2",
+    "zh_hans": "立绘版本2",
+    "zh_hant": "立繪版本2"
+  },
+  "Delivery is selected by default. Shop is optional.": {
+    "de": "Geschenk ist voreingestellt. Der Shop ist optional.",
+    "es": "Delivery está seleccionado por defecto. Tienda es opcional.",
+    "fr": "Le cadeau est sélectionné par défaut. La boutique est facultative.",
+    "it": "Il regalo è selezionato per impostazione predefinita. Il negozio è facoltativo.",
+    "ja": "初期設定はプレゼントです。ショップは任意です。",
+    "pt": "A oferta está selecionada por predefinição. A loja é opcional.",
+    "zh_hans": "默认以礼物形式发放，也可选择商店。",
+    "zh_hant": "預設以禮物形式發放，也可選擇商店。"
+  },
+  "Save mod": {
+    "de": "Mod speichern",
+    "es": "Guardar mod",
+    "fr": "Enregistrer le mod",
+    "it": "Salva mod",
+    "ja": "MODを保存",
+    "pt": "Guardar mod",
+    "zh_hans": "保存模组",
+    "zh_hant": "儲存模組"
+  },
+  "Preview the export to review the mod.": {
+    "de": "Prüfe die Mod in der Exportvorschau.",
+    "es": "Previsualiza la exportación para revisar el mod.",
+    "fr": "Prévisualisez l'export pour vérifier le mod.",
+    "it": "Visualizza l'anteprima dell'esportazione per verificare la mod.",
+    "ja": "エクスポート内容を確認してください。",
+    "pt": "Pré-visualize a exportação para verificar o mod.",
+    "zh_hans": "请预览导出内容以检查模组。",
+    "zh_hant": "請預覽匯出內容以檢查模組。"
+  },
+  "Internal identifiers stay hidden.": {
+    "de": "Interne Kennungen bleiben verborgen.",
+    "es": "Los identificadores internos quedan ocultos.",
+    "fr": "Les identifiants internes restent masqués.",
+    "it": "Gli identificatori interni restano nascosti.",
+    "ja": "内部IDは表示されません。",
+    "pt": "Os identificadores internos ficam ocultos.",
+    "zh_hans": "内部标识符不会显示。",
+    "zh_hant": "內部識別碼不會顯示。"
+  },
+  "Delivery IDs are generated automatically and stay stable when the same character is exported again.": {
+    "de": "Geschenk-IDs werden automatisch erzeugt und bei erneutem Export beibehalten.",
+    "es": "Los IDs de Delivery se generan automáticamente y se mantienen al volver a exportar el mismo personaje.",
+    "fr": "Les identifiants de cadeau sont générés automatiquement et conservés lors d'un nouvel export.",
+    "it": "Gli ID dei regali vengono generati automaticamente e mantenuti nelle esportazioni successive.",
+    "ja": "プレゼントIDは自動生成され、同じキャラクターの再エクスポートでも維持されます。",
+    "pt": "Os IDs de oferta são gerados automaticamente e mantidos nas exportações seguintes.",
+    "zh_hans": "礼物ID自动生成，再次导出同一角色时保持不变。",
+    "zh_hant": "禮物ID自動產生，再次匯出同一角色時維持不變。"
+  },
+  "What would you like to do?": {
+    "de": "Was möchtest du tun?",
+    "es": "¿Qué quieres hacer?",
+    "fr": "Que souhaitez-vous faire ?",
+    "it": "Cosa vuoi fare?",
+    "ja": "何をしますか？",
+    "pt": "O que pretende fazer?",
+    "zh_hans": "你想做什么？",
+    "zh_hant": "你想做什麼？"
+  },
+  "Create a new character": {
+    "de": "Neuen Charakter erstellen",
+    "es": "Crear un personaje",
+    "fr": "Créer un personnage",
+    "it": "Crea un personaggio",
+    "ja": "キャラクターを作成",
+    "pt": "Criar uma personagem",
+    "zh_hans": "创建角色",
+    "zh_hant": "建立角色"
+  },
+  "Modify a new character": {
+    "de": "Charakter bearbeiten",
+    "es": "Modificar un personaje",
+    "fr": "Modifier un personnage",
+    "it": "Modifica un personaggio",
+    "ja": "キャラクターを編集",
+    "pt": "Modificar uma personagem",
+    "zh_hans": "编辑角色",
+    "zh_hant": "編輯角色"
+  },
+  "Import a character into Victory Road": {
+    "de": "Charakter in Victory Road einfügen",
+    "es": "Introducir un personaje",
+    "fr": "Ajouter un personnage à Victory Road",
+    "it": "Aggiungi un personaggio a Victory Road",
+    "ja": "Victory Roadにキャラクターを追加",
+    "pt": "Adicionar uma personagem ao Victory Road",
+    "zh_hans": "向Victory Road添加角色",
+    "zh_hant": "向Victory Road新增角色"
+  },
+  "How would you like to create it?": {
+    "de": "Wie möchtest du ihn erstellen?",
+    "es": "¿Cómo quieres crearlo?",
+    "fr": "Comment souhaitez-vous le créer ?",
+    "it": "Come vuoi crearlo?",
+    "ja": "作成方法を選んでください",
+    "pt": "Como pretende criá-la?",
+    "zh_hans": "请选择创建方式",
+    "zh_hant": "請選擇建立方式"
+  },
+  "From scratch": {
+    "de": "Neu beginnen",
+    "es": "Desde cero",
+    "fr": "À partir de zéro",
+    "it": "Da zero",
+    "ja": "最初から作成",
+    "pt": "De raiz",
+    "zh_hans": "从零开始",
+    "zh_hant": "從零開始"
+  },
+  "Duplicate an existing character": {
+    "de": "Vorhandenen Charakter duplizieren",
+    "es": "Duplicando a uno preexistente",
+    "fr": "Dupliquer un personnage existant",
+    "it": "Duplica un personaggio esistente",
+    "ja": "既存のキャラクターを複製",
+    "pt": "Duplicar uma personagem existente",
+    "zh_hans": "复制已有角色",
+    "zh_hant": "複製現有角色"
+  },
+  "Select a character": {
+    "de": "Charakter auswählen",
+    "es": "Selecciona al personaje",
+    "fr": "Sélectionnez un personnage",
+    "it": "Seleziona un personaggio",
+    "ja": "キャラクターを選択",
+    "pt": "Selecione uma personagem",
+    "zh_hans": "选择角色",
+    "zh_hant": "選擇角色"
+  },
+  "Choose the base for your new character. You can edit it afterwards.": {
+    "de": "Wähle die Vorlage für deinen neuen Charakter. Du kannst sie danach bearbeiten.",
+    "es": "Elige la base para tu personaje nuevo. Podrás cambiar sus datos después.",
+    "fr": "Choisissez la base du nouveau personnage. Vous pourrez ensuite la modifier.",
+    "it": "Scegli la base del nuovo personaggio. Potrai modificarla in seguito.",
+    "ja": "新しいキャラクターのベースを選んでください。後から編集できます。",
+    "pt": "Escolha a base da nova personagem. Poderá editá-la depois.",
+    "zh_hans": "选择新角色的基础角色，之后可以编辑。",
+    "zh_hant": "選擇新角色的基礎角色，之後可以編輯。"
+  },
+  "Search": {
+    "de": "Suchen",
+    "es": "Buscar",
+    "fr": "Rechercher",
+    "it": "Cerca",
+    "ja": "検索",
+    "pt": "Pesquisar",
+    "zh_hans": "搜索",
+    "zh_hant": "搜尋"
+  },
+  "Clear": {
+    "de": "Leeren",
+    "es": "Limpiar",
+    "fr": "Effacer",
+    "it": "Cancella",
+    "ja": "クリア",
+    "pt": "Limpar",
+    "zh_hans": "清除",
+    "zh_hant": "清除"
+  },
+  "Preview": {
+    "de": "Vorschau",
+    "es": "Vista previa",
+    "fr": "Aperçu",
+    "it": "Anteprima",
+    "ja": "プレビュー",
+    "pt": "Pré-visualização",
+    "zh_hans": "预览",
+    "zh_hant": "預覽"
+  },
+  "Selected character data": {
+    "de": "Ausgewählter Charakter",
+    "es": "Datos del personaje seleccionado",
+    "fr": "Données du personnage sélectionné",
+    "it": "Dati del personaggio selezionato",
+    "ja": "選択中のキャラクター情報",
+    "pt": "Dados da personagem selecionada",
+    "zh_hans": "所选角色信息",
+    "zh_hant": "所選角色資訊"
+  },
+  "Affinity": {
+    "de": "Element",
+    "es": "Afinidad",
+    "fr": "Élément",
+    "it": "Elemento",
+    "ja": "属性",
+    "pt": "Afinidade",
+    "zh_hans": "属性",
+    "zh_hant": "屬性"
+  },
+  "Position": {
+    "de": "Position",
+    "es": "Posición",
+    "fr": "Poste",
+    "it": "Ruolo",
+    "ja": "ポジション",
+    "pt": "Posição",
+    "zh_hans": "位置",
+    "zh_hant": "位置"
+  },
+  "Select a character from the list.": {
+    "de": "Wähle einen Charakter aus der Liste.",
+    "es": "Selecciona un personaje de la lista.",
+    "fr": "Sélectionnez un personnage dans la liste.",
+    "it": "Seleziona un personaggio dall'elenco.",
+    "ja": "一覧からキャラクターを選択してください。",
+    "pt": "Selecione uma personagem da lista.",
+    "zh_hans": "请从列表中选择角色。",
+    "zh_hant": "請從清單中選擇角色。"
+  },
+  "Use this character": {
+    "de": "Diesen Charakter verwenden",
+    "es": "Usar este personaje",
+    "fr": "Utiliser ce personnage",
+    "it": "Usa questo personaggio",
+    "ja": "このキャラクターを使用",
+    "pt": "Usar esta personagem",
+    "zh_hans": "使用此角色",
+    "zh_hant": "使用此角色"
+  },
+  "What is the character's name?": {
+    "de": "Wie heißt der Charakter?",
+    "es": "¿Cómo se llama el personaje?",
+    "fr": "Comment s'appelle le personnage ?",
+    "it": "Come si chiama il personaggio?",
+    "ja": "キャラクターの名前は？",
+    "pt": "Como se chama a personagem?",
+    "zh_hans": "角色叫什么名字？",
+    "zh_hant": "角色叫什麼名字？"
+  },
+  "Game language": {
+    "de": "Spielsprache",
+    "es": "Idioma del juego",
+    "fr": "Langue du jeu",
+    "it": "Lingua del gioco",
+    "ja": "ゲームの言語",
+    "pt": "Idioma do jogo",
+    "zh_hans": "游戏语言",
+    "zh_hant": "遊戲語言"
+  },
+  "Western name": {
+    "de": "Westlicher Name",
+    "es": "Nombre occidental",
+    "fr": "Nom occidental",
+    "it": "Nome occidentale",
+    "ja": "海外版の名前",
+    "pt": "Nome ocidental",
+    "zh_hans": "海外版姓名",
+    "zh_hant": "海外版姓名"
+  },
+  "Japanese name": {
+    "de": "Japanischer Name",
+    "es": "Nombre en japonés",
+    "fr": "Nom japonais",
+    "it": "Nome giapponese",
+    "ja": "日本語の名前",
+    "pt": "Nome japonês",
+    "zh_hans": "日文姓名",
+    "zh_hant": "日文姓名"
+  },
+  "Given name": {
+    "de": "Vorname",
+    "es": "Nombre",
+    "fr": "Prénom",
+    "it": "Nome",
+    "ja": "名前",
+    "pt": "Nome próprio",
+    "zh_hans": "名",
+    "zh_hant": "名"
+  },
+  "Family name": {
+    "de": "Nachname",
+    "es": "Apellido",
+    "fr": "Nom de famille",
+    "it": "Cognome",
+    "ja": "名字",
+    "pt": "Apelido",
+    "zh_hans": "姓",
+    "zh_hant": "姓"
+  },
+  "Short name": {
+    "de": "Kurzname",
+    "es": "Nombre abreviado",
+    "fr": "Nom abrégé",
+    "it": "Nome breve",
+    "ja": "短い名前",
+    "pt": "Nome abreviado",
+    "zh_hans": "简称",
+    "zh_hant": "簡稱"
+  },
+  "Shirt name": {
+    "de": "Trikotname",
+    "es": "Nombre de camiseta",
+    "fr": "Nom sur le maillot",
+    "it": "Nome sulla maglia",
+    "ja": "ユニフォームの名前",
+    "pt": "Nome na camisola",
+    "zh_hans": "球衣姓名",
+    "zh_hant": "球衣姓名"
+  },
+  "Description": {
+    "de": "Beschreibung",
+    "es": "Descripción",
+    "fr": "Description",
+    "it": "Descrizione",
+    "ja": "説明",
+    "pt": "Descrição",
+    "zh_hans": "说明",
+    "zh_hant": "說明"
+  },
+  "Choose character attributes": {
+    "de": "Charaktereigenschaften wählen",
+    "es": "Selecciona sus atributos",
+    "fr": "Choisissez les attributs",
+    "it": "Scegli gli attributi",
+    "ja": "キャラクターの情報を設定",
+    "pt": "Escolha os atributos",
+    "zh_hans": "设置角色属性",
+    "zh_hant": "設定角色屬性"
+  },
+  "Gender": {
+    "de": "Geschlecht",
+    "es": "Género",
+    "fr": "Genre",
+    "it": "Genere",
+    "ja": "性別",
+    "pt": "Gênero",
+    "zh_hans": "性别",
+    "zh_hant": "性別"
+  },
+  "Origin game": {
+    "de": "Herkunftsspiel",
+    "es": "Juego de origen",
+    "fr": "Jeu d’origine",
+    "it": "Gioco di origine",
+    "ja": "登場作品",
+    "pt": "Jogo de origem",
+    "zh_hans": "来源作品",
+    "zh_hant": "來源作品"
+  },
+  "Academic year": {
+    "de": "Schuljahr",
+    "es": "Año",
+    "fr": "Année scolaire",
+    "it": "Anno scolastico",
+    "ja": "学年",
+    "pt": "Ano escolar",
+    "zh_hans": "学年",
+    "zh_hant": "學年"
+  },
+  "Team affiliation": {
+    "de": "Teamzugehörigkeit",
+    "es": "Pertenencia de equipo",
+    "fr": "Équipe",
+    "it": "Squadra",
+    "ja": "所属チーム",
+    "pt": "Equipa",
+    "zh_hans": "所属球队",
+    "zh_hant": "所屬球隊"
+  },
+  "Main position": {
+    "de": "Hauptposition",
+    "es": "Posición principal",
+    "fr": "Poste principal",
+    "it": "Ruolo principale",
+    "ja": "メインポジション",
+    "pt": "Posição principal",
+    "zh_hans": "主要位置",
+    "zh_hant": "主要位置"
+  },
+  "Secondary position": {
+    "de": "Nebenposition",
+    "es": "Posición secundaria",
+    "fr": "Poste secondaire",
+    "it": "Ruolo secondario",
+    "ja": "サブポジション",
+    "pt": "Posição secundária",
+    "zh_hans": "次要位置",
+    "zh_hant": "次要位置"
+  },
+  "Which skills does the character have?": {
+    "de": "Welche Techniken hat der Charakter?",
+    "es": "¿Qué habilidades tiene?",
+    "fr": "Quelles sont ses techniques ?",
+    "it": "Quali tecniche possiede?",
+    "ja": "どの必殺技を使いますか？",
+    "pt": "Que técnicas tem a personagem?",
+    "zh_hans": "角色拥有哪些技能？",
+    "zh_hant": "角色擁有哪些技能？"
+  },
+  "Technique variant": {
+    "de": "Technikvariante",
+    "es": "Variante de técnicas",
+    "fr": "Variante de techniques",
+    "it": "Variante tecniche",
+    "ja": "必殺技のパターン",
+    "pt": "Variante de técnicas",
+    "zh_hans": "技能组合",
+    "zh_hant": "技能組合"
+  },
+  "Apply this template to all variants": {
+    "de": "Auf alle Varianten anwenden",
+    "es": "Aplicar esta plantilla a todas las variantes",
+    "fr": "Appliquer à toutes les variantes",
+    "it": "Applica a tutte le varianti",
+    "ja": "全パターンに適用",
+    "pt": "Aplicar a todas as variantes",
+    "zh_hans": "应用到所有组合",
+    "zh_hant": "套用至所有組合"
+  },
+  "Main": {
+    "de": "Normal",
+    "es": "Normal",
+    "fr": "Normal",
+    "it": "Normale",
+    "ja": "通常",
+    "pt": "Normal",
+    "zh_hans": "通常",
+    "zh_hant": "通常"
+  },
+  "Alternate": {
+    "de": "Alternativ",
+    "es": "Alternativo",
+    "fr": "Alternatif",
+    "it": "Alternativo",
+    "ja": "別パターン",
+    "pt": "Alternativo",
+    "zh_hans": "替代",
+    "zh_hant": "替代"
+  },
+  "Unlock level": {
+    "de": "Freischaltlevel",
+    "es": "Nivel de desbloqueo",
+    "fr": "Niveau requis",
+    "it": "Livello richiesto",
+    "ja": "習得レベル",
+    "pt": "Nível de desbloqueio",
+    "zh_hans": "解锁等级",
+    "zh_hant": "解鎖等級"
+  },
+  "What does the character look like?": {
+    "de": "Wie sieht der Charakter aus?",
+    "es": "¿Y qué aspecto tiene?",
+    "fr": "Quelle est son apparence ?",
+    "it": "Che aspetto ha?",
+    "ja": "外見を設定してください",
+    "pt": "Qual é a sua aparência?",
+    "zh_hans": "设置角色外观",
+    "zh_hant": "設定角色外觀"
+  },
+  "Normal face": {
+    "de": "Normales Gesicht",
+    "es": "Cara normal",
+    "fr": "Visage normal",
+    "it": "Volto normale",
+    "ja": "通常の顔",
+    "pt": "Rosto normal",
+    "zh_hans": "普通头像",
+    "zh_hant": "一般頭像"
+  },
+  "Face without rear hair": {
+    "de": "Gesicht ohne hinteres Haar",
+    "es": "Cara sin pelo trasero",
+    "fr": "Visage sans cheveux arrière",
+    "it": "Volto senza capelli posteriori",
+    "ja": "後ろ髪なしの顔",
+    "pt": "Rosto sem cabelo traseiro",
+    "zh_hans": "不带后发的头像",
+    "zh_hant": "不含後髮的頭像"
+  },
+  "3D model": {
+    "de": "3D-Modell",
+    "es": "Modelo 3D",
+    "fr": "Modèle 3D",
+    "it": "Modello 3D",
+    "ja": "3Dモデル",
+    "pt": "Modelo 3D",
+    "zh_hans": "3D模型",
+    "zh_hant": "3D模型"
+  },
+  "Browse…": {
+    "de": "Durchsuchen…",
+    "es": "Examinar…",
+    "fr": "Parcourir…",
+    "it": "Sfoglia…",
+    "ja": "参照…",
+    "pt": "Procurar…",
+    "zh_hans": "浏览…",
+    "zh_hant": "瀏覽…"
+  },
+  "Skin color": {
+    "de": "Hautfarbe",
+    "es": "Color de piel",
+    "fr": "Couleur de peau",
+    "it": "Colore della pelle",
+    "ja": "肌の色",
+    "pt": "Cor da pele",
+    "zh_hans": "肤色",
+    "zh_hant": "膚色"
+  },
+  "Is everything okay?": {
+    "de": "Ist alles richtig?",
+    "es": "¿Está todo bien?",
+    "fr": "Tout est correct ?",
+    "it": "È tutto corretto?",
+    "ja": "内容を確認してください",
+    "pt": "Está tudo correto?",
+    "zh_hans": "请确认内容",
+    "zh_hant": "請確認內容"
+  },
+  "Skill list": {
+    "de": "Technikliste",
+    "es": "Lista de técnicas",
+    "fr": "Liste des techniques",
+    "it": "Elenco tecniche",
+    "ja": "必殺技一覧",
+    "pt": "Lista de técnicas",
+    "zh_hans": "技能列表",
+    "zh_hant": "技能清單"
+  },
+  "Save": {
+    "de": "Speichern",
+    "es": "Guardar",
+    "fr": "Enregistrer",
+    "it": "Salva",
+    "ja": "保存",
+    "pt": "Guardar",
+    "zh_hans": "保存",
+    "zh_hant": "儲存"
+  },
+  "Add characters to the game": {
+    "de": "Charaktere zum Spiel hinzufügen",
+    "es": "Incorpora personajes al juego",
+    "fr": "Ajouter des personnages au jeu",
+    "it": "Aggiungi personaggi al gioco",
+    "ja": "ゲームにキャラクターを追加",
+    "pt": "Adicionar personagens ao jogo",
+    "zh_hans": "向游戏添加角色",
+    "zh_hant": "向遊戲新增角色"
+  },
+  "Add package": {
+    "de": "Paket hinzufügen",
+    "es": "Añadir paquete",
+    "fr": "Ajouter un paquet",
+    "it": "Aggiungi pacchetto",
+    "ja": "パッケージを追加",
+    "pt": "Adicionar pacote",
+    "zh_hans": "添加包",
+    "zh_hant": "新增套件"
+  },
+  "Drop a .vrchara here": {
+    "de": ".vrchara hier ablegen",
+    "es": "Suelta aquí un .vrchara",
+    "fr": "Déposez un .vrchara ici",
+    "it": "Trascina qui un .vrchara",
+    "ja": ".vrcharaをここにドロップ",
+    "pt": "Largue um .vrchara aqui",
+    "zh_hans": "将.vrchara拖到此处",
+    "zh_hant": "將.vrchara拖至此處"
+  },
+  "Add this character to the incorporation list?": {
+    "de": "Diesen Charakter zur Importliste hinzufügen?",
+    "es": "¿Quieres añadir este personaje a la lista de incorporaciones?",
+    "fr": "Ajouter ce personnage à la liste d'importation ?",
+    "it": "Aggiungere questo personaggio all'elenco di importazione?",
+    "ja": "このキャラクターを追加リストに入れますか？",
+    "pt": "Adicionar esta personagem à lista de incorporação?",
+    "zh_hans": "将此角色加入导入列表？",
+    "zh_hant": "將此角色加入匯入清單？"
+  },
+  "Yes": {
+    "de": "Ja",
+    "es": "Sí",
+    "fr": "Oui",
+    "it": "Sì",
+    "ja": "はい",
+    "pt": "Sim",
+    "zh_hans": "是",
+    "zh_hant": "是"
+  },
+  "No": {
+    "de": "Nein",
+    "es": "No",
+    "fr": "Non",
+    "it": "No",
+    "ja": "いいえ",
+    "pt": "Não",
+    "zh_hans": "否",
+    "zh_hant": "否"
+  },
+  "Export": {
+    "de": "Exportieren",
+    "es": "Exportar",
+    "fr": "Exporter",
+    "it": "Esporta",
+    "ja": "エクスポート",
+    "pt": "Exportar",
+    "zh_hans": "导出",
+    "zh_hant": "匯出"
+  },
+  "Generate animations": {
+    "de": "Animationen erzeugen",
+    "es": "Generar animaciones",
+    "fr": "Générer les animations",
+    "it": "Genera animazioni",
+    "ja": "アニメーションを生成",
+    "pt": "Gerar animações",
+    "zh_hans": "生成动画",
+    "zh_hant": "產生動畫"
+  },
+  "CHR animations": {
+    "de": "CHR-Animationen",
+    "es": "Animaciones CHR",
+    "fr": "Animations CHR",
+    "it": "Animazioni CHR",
+    "ja": "CHRアニメーション",
+    "pt": "Animações CHR",
+    "zh_hans": "CHR动画",
+    "zh_hant": "CHR動畫"
+  },
+  "EVENT animations": {
+    "de": "EVENT-Animationen",
+    "es": "Animaciones EVENT",
+    "fr": "Animations EVENT",
+    "it": "Animazioni EVENT",
+    "ja": "EVENTアニメーション",
+    "pt": "Animações EVENT",
+    "zh_hans": "EVENT动画",
+    "zh_hant": "EVENT動畫"
+  },
+  "Uniform": {
+    "de": "Trikot",
+    "es": "Uniforme",
+    "fr": "Tenue",
+    "it": "Divisa",
+    "ja": "ユニフォーム",
+    "pt": "Equipamento",
+    "zh_hans": "队服",
+    "zh_hant": "隊服"
+  },
+  "Shoes": {
+    "de": "Schuhe",
+    "es": "Zapatillas",
+    "fr": "Chaussures",
+    "it": "Scarpe",
+    "ja": "シューズ",
+    "pt": "Chuteiras",
+    "zh_hans": "球鞋",
+    "zh_hant": "球鞋"
+  },
+  "Gloves": {
+    "de": "Handschuhe",
+    "es": "Guantes",
+    "fr": "Gants",
+    "it": "Guanti",
+    "ja": "グローブ",
+    "pt": "Luvas",
+    "zh_hans": "手套",
+    "zh_hant": "手套"
+  },
+  "Force uniform": {
+    "de": "Trikot erzwingen",
+    "es": "Forzar uniforme",
+    "fr": "Imposer la tenue",
+    "it": "Forza divisa",
+    "ja": "ユニフォームを固定",
+    "pt": "Forçar equipamento",
+    "zh_hans": "固定队服",
+    "zh_hant": "固定隊服"
+  },
+  "Force equipment": {
+    "de": "Ausrüstung erzwingen",
+    "es": "Forzar equipamiento",
+    "fr": "Imposer l'équipement",
+    "it": "Forza equipaggiamento",
+    "ja": "装備を固定",
+    "pt": "Forçar acessórios",
+    "zh_hans": "固定装备",
+    "zh_hant": "固定裝備"
+  },
+  "Chest size": {
+    "de": "Brustgröße",
+    "es": "Tamaño del pecho",
+    "fr": "Taille de poitrine",
+    "it": "Dimensione del petto",
+    "ja": "胸のサイズ",
+    "pt": "Tamanho do peito",
+    "zh_hans": "胸部大小",
+    "zh_hant": "胸部大小"
+  },
+  "Open collar": {
+    "de": "Offener Kragen",
+    "es": "Cuello abierto",
+    "fr": "Col ouvert",
+    "it": "Colletto aperto",
+    "ja": "襟を開く",
+    "pt": "Gola aberta",
+    "zh_hans": "敞开衣领",
+    "zh_hant": "敞開衣領"
+  },
+  "Extracted from package": {
+    "de": "Aus dem Paket extrahiert",
+    "es": "Extraído del paquete",
+    "fr": "Extrait du paquet",
+    "it": "Estratto dal pacchetto",
+    "ja": "パッケージから展開",
+    "pt": "Extraído do pacote",
+    "zh_hans": "从包中提取",
+    "zh_hant": "從套件中擷取"
+  },
+  "Body type": {
+    "de": "Körperbau",
+    "es": "Tipo corporal",
+    "fr": "Morphologie",
+    "it": "Corporatura",
+    "ja": "体型",
+    "pt": "Tipo de corpo",
+    "zh_hans": "体型",
+    "zh_hant": "體型"
+  },
+  "Remove": {
+    "de": "Entfernen",
+    "es": "Eliminar",
+    "fr": "Retirer",
+    "it": "Rimuovi",
+    "ja": "削除",
+    "pt": "Remover",
+    "zh_hans": "移除",
+    "zh_hant": "移除"
+  },
+  "Edit locales JSON": {
+    "de": "Sprach-JSON bearbeiten",
+    "es": "Editar JSON de locales",
+    "fr": "Modifier le JSON des langues",
+    "it": "Modifica JSON delle lingue",
+    "ja": "言語JSONを編集",
+    "pt": "Editar JSON de idiomas",
+    "zh_hans": "编辑语言JSON",
+    "zh_hant": "編輯語言JSON"
+  },
+  "--NEW": {
+    "de": "--NEU",
+    "es": "--NUEVO",
+    "fr": "--NOUVEAU",
+    "it": "--NUOVO",
+    "ja": "--新規",
+    "pt": "--NOVO",
+    "zh_hans": "--新建",
+    "zh_hant": "--新增"
+  },
+  "Male": {
+    "de": "Männlich",
+    "es": "Chico",
+    "fr": "Garçon",
+    "it": "Ragazzo",
+    "ja": "男",
+    "pt": "Rapaz",
+    "zh_hans": "男",
+    "zh_hant": "男"
+  },
+  "Female": {
+    "de": "Weiblich",
+    "es": "Chica",
+    "fr": "Fille",
+    "it": "Ragazza",
+    "ja": "女",
+    "pt": "Rapariga",
+    "zh_hans": "女",
+    "zh_hant": "女"
+  },
+  "Variant": {
+    "de": "Variante",
+    "es": "Variante",
+    "fr": "Variante",
+    "it": "Variante",
+    "ja": "パターン",
+    "pt": "Variante",
+    "zh_hans": "组合",
+    "zh_hant": "組合"
+  },
+  "Rarity": {
+    "de": "Seltenheit",
+    "es": "Rareza",
+    "fr": "Rareté",
+    "it": "Rarità",
+    "ja": "レアリティ",
+    "pt": "Raridade",
+    "zh_hans": "稀有度",
+    "zh_hant": "稀有度"
+  },
+  "No characters were found. Check the selected game dump.": {
+    "de": "Keine Charaktere gefunden. Prüfe den Spiel-Dump.",
+    "fr": "Aucun personnage trouvé. Vérifiez le dump du jeu.",
+    "it": "Nessun personaggio trovato. Controlla il dump del gioco.",
+    "ja": "キャラクターが見つかりません。ゲームダンプを確認してください。",
+    "pt": "Não foram encontradas personagens. Verifique o dump do jogo.",
+    "zh_hans": "未找到角色，请检查游戏转储。",
+    "zh_hant": "找不到角色，請檢查遊戲傾印。",
+    "es": "No se encontraron personajes. Comprueba los datos del juego seleccionados."
+  },
+  "No characters match the current search or filters.": {
+    "de": "Keine Charaktere entsprechen der Suche oder den Filtern.",
+    "fr": "Aucun personnage ne correspond à la recherche ou aux filtres.",
+    "it": "Nessun personaggio corrisponde alla ricerca o ai filtri.",
+    "ja": "検索条件に一致するキャラクターがいません。",
+    "pt": "Nenhuma personagem corresponde à pesquisa ou aos filtros.",
+    "zh_hans": "没有符合搜索或筛选条件的角色。",
+    "zh_hant": "沒有符合搜尋或篩選條件的角色。",
+    "es": "No hay personajes que coincidan con la búsqueda o los filtros actuales."
+  },
+  "Reset search and filters": {
+    "de": "Suche und Filter zurücksetzen",
+    "fr": "Réinitialiser la recherche et les filtres",
+    "it": "Reimposta ricerca e filtri",
+    "ja": "検索と絞り込みをリセット",
+    "pt": "Repor pesquisa e filtros",
+    "zh_hans": "重置搜索和筛选",
+    "zh_hant": "重設搜尋與篩選",
+    "es": "Restablecer búsqueda y filtros"
+  },
+  "Refresh packages": {
+    "de": "Pakete aktualisieren",
+    "fr": "Actualiser les paquets",
+    "it": "Aggiorna pacchetti",
+    "ja": "パッケージを再読み込み",
+    "pt": "Atualizar pacotes",
+    "zh_hans": "刷新角色包",
+    "zh_hant": "重新整理角色套件",
+    "es": "Actualizar paquetes"
+  },
+  "Previous session recovered.": {
+    "de": "Vorherige Sitzung wiederhergestellt.",
+    "fr": "Session précédente restaurée.",
+    "it": "Sessione precedente ripristinata.",
+    "ja": "前回のセッションを復元しました。",
+    "pt": "Sessão anterior recuperada.",
+    "zh_hans": "已恢复上次会话。",
+    "zh_hant": "已還原上次工作階段。",
+    "es": "Sesión anterior recuperada."
+  },
+  "Retry": {
+    "de": "Erneut versuchen",
+    "fr": "Réessayer",
+    "it": "Riprova",
+    "ja": "再試行",
+    "pt": "Tentar novamente",
+    "zh_hans": "重试",
+    "zh_hant": "重試",
+    "es": "Reintentar"
+  },
+  "Close without saving the session": {
+    "de": "Ohne Sitzungsspeicherung schließen",
+    "fr": "Fermer sans enregistrer la session",
+    "it": "Chiudi senza salvare la sessione",
+    "ja": "セッションを保存せずに終了",
+    "pt": "Fechar sem guardar a sessão",
+    "zh_hans": "不保存会话并关闭",
+    "zh_hant": "不儲存工作階段並關閉",
+    "es": "Cerrar sin guardar la sesión"
+  },
+  "Game dump loaded.": {
+    "de": "Spiel-Dump geladen.",
+    "fr": "Dump du jeu chargé.",
+    "it": "Dump del gioco caricato.",
+    "ja": "ゲームダンプを読み込みました。",
+    "pt": "Dump do jogo carregado.",
+    "zh_hans": "游戏转储已加载。",
+    "zh_hant": "遊戲傾印已載入。",
+    "es": "Datos del juego cargados."
+  },
+  "Game dump indexing was cancelled.": {
+    "de": "Indizierung des Spiel-Dumps abgebrochen.",
+    "fr": "Indexation du dump annulée.",
+    "it": "Indicizzazione del dump annullata.",
+    "ja": "ダンプの読み込みをキャンセルしました。",
+    "pt": "Indexação do dump cancelada.",
+    "zh_hans": "已取消游戏转储索引。",
+    "zh_hant": "已取消遊戲傾印索引。",
+    "es": "Se ha cancelado la indexación de los datos del juego."
+  },
+  "Load a game dump before adding character packages.": {
+    "de": "Lade zuerst einen Spiel-Dump.",
+    "fr": "Chargez un dump avant d'ajouter des personnages.",
+    "it": "Carica un dump prima di aggiungere personaggi.",
+    "ja": "パッケージを追加する前にゲームダンプを読み込んでください。",
+    "pt": "Carregue um dump antes de adicionar personagens.",
+    "zh_hans": "添加角色包之前请先加载游戏转储。",
+    "zh_hant": "新增角色套件前請先載入遊戲傾印。",
+    "es": "Carga los datos del juego antes de añadir paquetes de personajes."
+  },
+  "The character package is already in the batch.": {
+    "de": "Das Charakterpaket ist bereits in der Liste.",
+    "fr": "Le paquet est déjà dans la liste.",
+    "it": "Il pacchetto è già nell'elenco.",
+    "ja": "このパッケージはすでにリストにあります。",
+    "pt": "O pacote já está na lista.",
+    "zh_hans": "该角色包已在列表中。",
+    "zh_hant": "此角色套件已在清單中。",
+    "es": "El paquete de personaje ya está en la lista de incorporación."
+  },
+  "Character package added to the batch.": {
+    "de": "Charakterpaket zur Liste hinzugefügt.",
+    "fr": "Paquet ajouté à la liste.",
+    "it": "Pacchetto aggiunto all'elenco.",
+    "ja": "パッケージをリストに追加しました。",
+    "pt": "Pacote adicionado à lista.",
+    "zh_hans": "已将角色包添加到列表。",
+    "zh_hant": "已將角色套件新增至清單。",
+    "es": "Paquete de personaje añadido a la lista de incorporación."
+  },
+  "Select a character before cloning.": {
+    "de": "Wähle zuerst einen Charakter.",
+    "fr": "Sélectionnez un personnage avant de le dupliquer.",
+    "it": "Seleziona un personaggio prima di duplicarlo.",
+    "ja": "複製するキャラクターを選択してください。",
+    "pt": "Selecione uma personagem antes de duplicar.",
+    "zh_hans": "请先选择要复制的角色。",
+    "zh_hant": "請先選擇要複製的角色。",
+    "es": "Selecciona un personaje antes de duplicarlo."
+  },
+  "Character draft created from the complete custom draft.": {
+    "de": "Charakterentwurf aus der benutzerdefinierten Vorlage erstellt.",
+    "fr": "Brouillon créé depuis le personnage personnalisé.",
+    "it": "Bozza creata dal personaggio personalizzato.",
+    "ja": "カスタムキャラクターから下書きを作成しました。",
+    "pt": "Rascunho criado a partir da personagem personalizada.",
+    "zh_hans": "已从自定义角色创建草稿。",
+    "zh_hant": "已從自訂角色建立草稿。",
+    "es": "Borrador de personaje creado a partir del borrador personalizado completo."
+  },
+  "Character draft created from the immutable dump snapshot.": {
+    "de": "Charakterentwurf aus den Originaldaten erstellt.",
+    "fr": "Brouillon créé depuis les données originales du jeu.",
+    "it": "Bozza creata dai dati originali del gioco.",
+    "ja": "ゲームの元データから下書きを作成しました。",
+    "pt": "Rascunho criado a partir dos dados originais do jogo.",
+    "zh_hans": "已从游戏原始数据创建角色草稿。",
+    "zh_hant": "已從遊戲原始資料建立角色草稿。",
+    "es": "Borrador de personaje creado a partir de los datos originales del juego."
+  },
+  "A neutral custom character draft was created.": {
+    "de": "Neutraler benutzerdefinierter Charakterentwurf erstellt.",
+    "fr": "Brouillon de personnage personnalisé neutre créé.",
+    "it": "Bozza di personaggio personalizzato neutro creata.",
+    "ja": "新しいカスタムキャラクターの下書きを作成しました。",
+    "pt": "Foi criado um rascunho de personagem neutra.",
+    "zh_hans": "已创建无属性自定义角色草稿。",
+    "zh_hant": "已建立無屬性自訂角色草稿。",
+    "es": "Se ha creado un borrador de personaje personalizado neutro."
+  },
+  "Original Victory Road characters cannot be deleted.": {
+    "de": "Originalcharaktere können nicht gelöscht werden.",
+    "fr": "Les personnages originaux ne peuvent pas être supprimés.",
+    "it": "Non puoi eliminare i personaggi originali.",
+    "ja": "ゲームの元キャラクターは削除できません。",
+    "pt": "Não é possível eliminar as personagens originais.",
+    "zh_hans": "无法删除游戏原始角色。",
+    "zh_hant": "無法刪除遊戲原始角色。",
+    "es": "Los personajes originales de Victory Road no se pueden eliminar."
+  },
+  "Custom character duplicated in the project.": {
+    "de": "Benutzerdefinierten Charakter dupliziert.",
+    "fr": "Personnage personnalisé dupliqué.",
+    "it": "Personaggio personalizzato duplicato.",
+    "ja": "カスタムキャラクターを複製しました。",
+    "pt": "Personagem personalizada duplicada.",
+    "zh_hans": "已复制自定义角色。",
+    "zh_hant": "已複製自訂角色。",
+    "es": "Personaje personalizado duplicado en el proyecto."
+  },
+  "Custom character draft unlinked from the project.": {
+    "de": "Charakterentwurf aus dem Projekt entfernt.",
+    "fr": "Brouillon retiré du projet.",
+    "it": "Bozza rimossa dal progetto.",
+    "ja": "プロジェクトから下書きを外しました。",
+    "pt": "Rascunho removido do projeto.",
+    "zh_hans": "已从项目移除角色草稿。",
+    "zh_hant": "已從專案移除角色草稿。",
+    "es": "Borrador de personaje personalizado desvinculado del proyecto."
+  },
+  "Character package duplicated in the batch.": {
+    "de": "Charakterpaket dupliziert.",
+    "fr": "Paquet de personnage dupliqué.",
+    "it": "Pacchetto personaggio duplicato.",
+    "ja": "パッケージを複製しました。",
+    "pt": "Pacote de personagem duplicado.",
+    "zh_hans": "已复制角色包。",
+    "zh_hant": "已複製角色套件。",
+    "es": "Paquete de personaje duplicado en la lista de incorporación."
+  },
+  "Character package state updated.": {
+    "de": "Paketstatus aktualisiert.",
+    "fr": "État du paquet mis à jour.",
+    "it": "Stato del pacchetto aggiornato.",
+    "ja": "パッケージの状態を更新しました。",
+    "pt": "Estado do pacote atualizado.",
+    "zh_hans": "已更新角色包状态。",
+    "zh_hant": "已更新角色套件狀態。",
+    "es": "Estado del paquete de personaje actualizado."
+  },
+  "Character package removed from the batch.": {
+    "de": "Charakterpaket aus der Liste entfernt.",
+    "fr": "Paquet retiré de la liste.",
+    "it": "Pacchetto rimosso dall'elenco.",
+    "ja": "リストからパッケージを外しました。",
+    "pt": "Pacote removido da lista.",
+    "zh_hans": "已从列表移除角色包。",
+    "zh_hant": "已從清單移除角色套件。",
+    "es": "Paquete de personaje eliminado de la lista de incorporación."
+  },
+  "Export plan is ready.": {
+    "de": "Export ist vorbereitet.",
+    "fr": "L'export est prêt.",
+    "it": "Esportazione pronta.",
+    "ja": "エクスポートの準備ができました。",
+    "pt": "A exportação está preparada.",
+    "zh_hans": "导出已准备就绪。",
+    "zh_hant": "匯出已準備就緒。",
+    "es": "La exportación está preparada."
+  },
+  "Preview and resolve every blocking diagnostic before exporting.": {
+    "de": "Prüfe die Vorschau und behebe die Fehler vor dem Export.",
+    "fr": "Vérifiez l'aperçu et corrigez les erreurs avant l'export.",
+    "it": "Controlla l'anteprima e risolvi gli errori prima di esportare.",
+    "ja": "エクスポート前に内容を確認し、エラーを解消してください。",
+    "pt": "Verifique a pré-visualização e resolva os erros antes de exportar.",
+    "zh_hans": "导出前请检查预览并解决所有阻止导出的错误。",
+    "zh_hant": "匯出前請檢查預覽並解決所有阻止匯出的錯誤。",
+    "es": "Prepara la exportación y resuelve todos los errores que la bloquean antes de exportar."
+  },
+  "Export cancelled.": {
+    "de": "Export abgebrochen.",
+    "fr": "Export annulé.",
+    "it": "Esportazione annullata.",
+    "ja": "エクスポートをキャンセルしました。",
+    "pt": "Exportação cancelada.",
+    "zh_hans": "已取消导出。",
+    "zh_hant": "已取消匯出。",
+    "es": "Exportación cancelada."
+  },
+  "The character changed. Save again.": {
+    "de": "Der Charakter wurde geändert. Speichere erneut.",
+    "fr": "Le personnage a changé. Enregistrez à nouveau.",
+    "it": "Il personaggio è cambiato. Salva di nuovo.",
+    "ja": "キャラクターが変更されました。もう一度保存してください。",
+    "pt": "A personagem mudou. Guarde novamente.",
+    "zh_hans": "角色已更改，请重新保存。",
+    "zh_hant": "角色已變更，請重新儲存。",
+    "es": "El personaje ha cambiado. Vuelve a guardar."
+  },
+  "Character opened for modification.": {
+    "de": "Charakter zur Bearbeitung geöffnet.",
+    "fr": "Personnage ouvert pour modification.",
+    "it": "Personaggio aperto per la modifica.",
+    "ja": "編集するキャラクターを開きました。",
+    "pt": "Personagem aberta para edição.",
+    "zh_hans": "已打开角色进行编辑。",
+    "zh_hant": "已開啟角色進行編輯。",
+    "es": "Personaje abierto para modificar."
+  },
+  "Preparation cancelled; prepare the export again.": {
+    "de": "Vorbereitung abgebrochen. Bereite den Export erneut vor.",
+    "fr": "Préparation annulée ; préparez à nouveau l'export.",
+    "it": "Preparazione annullata; prepara di nuovo l'esportazione.",
+    "ja": "準備をキャンセルしました。エクスポートを再準備してください。",
+    "pt": "Preparação cancelada; prepare novamente a exportação.",
+    "zh_hans": "准备已取消，请重新准备导出。",
+    "zh_hant": "準備已取消，請重新準備匯出。",
+    "es": "Preparación cancelada; vuelve a preparar la exportación."
+  },
+  "The technique template was applied to every variant.": {
+    "de": "Technikvorlage auf alle Varianten angewendet.",
+    "fr": "Modèle de techniques appliqué à toutes les variantes.",
+    "it": "Modello delle tecniche applicato a tutte le varianti.",
+    "ja": "全パターンに必殺技の設定を適用しました。",
+    "pt": "Modelo de técnicas aplicado a todas as variantes.",
+    "zh_hans": "已将技能模板应用到所有组合。",
+    "zh_hant": "已將技能範本套用至所有組合。",
+    "es": "La plantilla de técnicas se ha aplicado a todas las variantes."
+  },
+  "Select or create a character before editing locales.": {
+    "de": "Wähle oder erstelle zuerst einen Charakter.",
+    "fr": "Sélectionnez ou créez d'abord un personnage.",
+    "it": "Seleziona o crea prima un personaggio.",
+    "ja": "言語を編集する前にキャラクターを選択または作成してください。",
+    "pt": "Selecione ou crie uma personagem antes de editar os idiomas.",
+    "zh_hans": "编辑语言前请先选择或创建角色。",
+    "zh_hant": "編輯語言前請先選擇或建立角色。",
+    "es": "Selecciona o crea un personaje antes de editar los locales."
+  },
+  "Edit the locales JSON and press Save when you are finished.": {
+    "de": "Bearbeite die Sprach-JSON und speichere anschließend.",
+    "fr": "Modifiez le JSON des langues puis enregistrez.",
+    "it": "Modifica il JSON delle lingue e poi salva.",
+    "ja": "言語JSONを編集し、完了したら保存してください。",
+    "pt": "Edite o JSON de idiomas e guarde quando terminar.",
+    "zh_hans": "请编辑语言JSON，完成后点击保存。",
+    "zh_hant": "請編輯語言JSON，完成後按儲存。",
+    "es": "Edita el JSON de locales y pulsa Guardar cuando termines."
+  },
+  "The log is unavailable in this session.": {
+    "de": "Für diese Sitzung ist kein Protokoll verfügbar.",
+    "fr": "Le journal n'est pas disponible pour cette session.",
+    "it": "Il registro non è disponibile per questa sessione.",
+    "ja": "このセッションのログは利用できません。",
+    "pt": "O registo não está disponível nesta sessão.",
+    "zh_hans": "本次会话的日志不可用。",
+    "zh_hant": "本次工作階段的記錄無法使用。",
+    "es": "El registro no está disponible en esta sesión."
+  },
+  "Log opened. It is cleared automatically when the application starts.": {
+    "de": "Protokoll geöffnet. Es wird beim Programmstart geleert.",
+    "fr": "Journal ouvert. Il est effacé au démarrage de l'application.",
+    "it": "Registro aperto. Viene svuotato all'avvio dell'applicazione.",
+    "ja": "ログを開きました。アプリの起動時に自動でクリアされます。",
+    "pt": "Registo aberto. É limpo automaticamente ao iniciar a aplicação.",
+    "zh_hans": "日志已打开，应用启动时会自动清空。",
+    "zh_hant": "記錄已開啟，應用程式啟動時會自動清空。",
+    "es": "Registro abierto. Se limpia automáticamente al iniciar la aplicación."
+  },
+  "The log could not be opened.": {
+    "de": "Protokoll konnte nicht geöffnet werden.",
+    "fr": "Impossible d'ouvrir le journal.",
+    "it": "Impossibile aprire il registro.",
+    "ja": "ログを開けませんでした。",
+    "pt": "Não foi possível abrir o registo.",
+    "zh_hans": "无法打开日志。",
+    "zh_hant": "無法開啟記錄。",
+    "es": "No se pudo abrir el registro."
+  },
+  "Cancel": {
+    "de": "Abbrechen",
+    "fr": "Annuler",
+    "it": "Annulla",
+    "ja": "キャンセル",
+    "pt": "Cancelar",
+    "zh_hans": "取消",
+    "zh_hant": "取消",
+    "es": "Cancelar"
+  },
+  "Cancelling…": {
+    "de": "Wird abgebrochen…",
+    "fr": "Annulation…",
+    "it": "Annullamento…",
+    "ja": "キャンセル中…",
+    "pt": "A cancelar…",
+    "zh_hans": "正在取消…",
+    "zh_hant": "正在取消…",
+    "es": "Cancelando…"
+  },
+  "Open log": {
+    "de": "Protokoll öffnen",
+    "fr": "Ouvrir le journal",
+    "it": "Apri registro",
+    "ja": "ログを開く",
+    "pt": "Abrir registo",
+    "zh_hans": "打开日志",
+    "zh_hant": "開啟記錄",
+    "es": "Abrir registro"
+  },
+  "Default": {
+    "de": "Standard",
+    "fr": "Par défaut",
+    "it": "Predefinito",
+    "ja": "標準",
+    "pt": "Predefinido",
+    "zh_hans": "默认",
+    "zh_hant": "預設",
+    "es": "Predeterminadas"
+  },
+  "Unequipped": {
+    "de": "Nicht ausgerüstet",
+    "fr": "Sans équipement",
+    "it": "Non equipaggiato",
+    "ja": "装備なし",
+    "pt": "Sem equipamento",
+    "zh_hans": "未装备",
+    "zh_hant": "未裝備",
+    "es": "Sin equipar"
+  },
+  "Armor": {
+    "de": "Rüstung",
+    "fr": "Armure",
+    "it": "Armatura",
+    "ja": "アームド",
+    "pt": "Armadura",
+    "zh_hans": "武装",
+    "zh_hant": "武裝",
+    "es": "Armadura"
+  },
+  "Preparing export…": {
+    "de": "Export wird vorbereitet…",
+    "fr": "Préparation de l'export…",
+    "it": "Preparazione esportazione…",
+    "ja": "エクスポートを準備中…",
+    "pt": "A preparar a exportação…",
+    "zh_hans": "正在准备导出…",
+    "zh_hant": "正在準備匯出…",
+    "es": "Preparando la exportación…"
+  },
+  "Copying files": {
+    "de": "Dateien werden kopiert",
+    "fr": "Copie des fichiers",
+    "it": "Copia dei file",
+    "ja": "ファイルをコピー中",
+    "pt": "A copiar ficheiros",
+    "zh_hans": "正在复制文件",
+    "zh_hant": "正在複製檔案",
+    "es": "Copiando archivos"
+  },
+  "Copying model dependencies": {
+    "de": "Modellabhängigkeiten werden kopiert",
+    "fr": "Copie des dépendances du modèle",
+    "it": "Copia delle dipendenze del modello",
+    "ja": "モデルの関連ファイルをコピー中",
+    "pt": "A copiar dependências do modelo",
+    "zh_hans": "正在复制模型依赖文件",
+    "zh_hant": "正在複製模型相依檔案",
+    "es": "Copiando dependencias del modelo"
+  },
+  "Opening animation resources": {
+    "de": "Animationsressourcen werden geöffnet",
+    "fr": "Ouverture des ressources d'animation",
+    "it": "Apertura risorse animazione",
+    "ja": "アニメーション素材を読み込み中",
+    "pt": "A abrir recursos de animação",
+    "zh_hans": "正在打开动画资源",
+    "zh_hant": "正在開啟動畫資源",
+    "es": "Abriendo los recursos de animación"
+  },
+  "Generating animation": {
+    "de": "Animation wird erzeugt",
+    "fr": "Génération de l'animation",
+    "it": "Generazione animazione",
+    "ja": "アニメーションを生成中",
+    "pt": "A gerar animação",
+    "zh_hans": "正在生成动画",
+    "zh_hant": "正在產生動畫",
+    "es": "Generando animación"
+  },
+  "Registering animation family": {
+    "de": "Animationsfamilie wird registriert",
+    "fr": "Enregistrement de la famille d'animations",
+    "it": "Registrazione famiglia animazioni",
+    "ja": "アニメーションを登録中",
+    "pt": "A registar família de animações",
+    "zh_hans": "正在注册动画组",
+    "zh_hant": "正在註冊動畫組",
+    "es": "Registrando la familia de animación"
+  },
+  "Copying game references": {
+    "de": "Spielreferenzen werden kopiert",
+    "fr": "Copie des références du jeu",
+    "it": "Copia riferimenti del gioco",
+    "ja": "ゲームの参照ファイルをコピー中",
+    "pt": "A copiar referências do jogo",
+    "zh_hans": "正在复制游戏引用",
+    "zh_hant": "正在複製遊戲參照",
+    "es": "Copiando referencias del juego"
+  },
+  "Opening character package": {
+    "de": "Charakterpaket wird geöffnet",
+    "fr": "Ouverture du paquet",
+    "it": "Apertura pacchetto personaggio",
+    "ja": "キャラクターパッケージを読み込み中",
+    "pt": "A abrir pacote de personagem",
+    "zh_hans": "正在打开角色包",
+    "zh_hant": "正在開啟角色套件",
+    "es": "Abriendo paquete de personaje"
+  },
+  "Preparing character resources": {
+    "de": "Charakterressourcen werden vorbereitet",
+    "fr": "Préparation des ressources du personnage",
+    "it": "Preparazione risorse personaggio",
+    "ja": "キャラクター素材を準備中",
+    "pt": "A preparar recursos da personagem",
+    "zh_hans": "正在准备角色资源",
+    "zh_hant": "正在準備角色資源",
+    "es": "Preparando recursos del personaje"
+  },
+  "Converting portraits": {
+    "de": "Porträts werden konvertiert",
+    "fr": "Conversion des portraits",
+    "it": "Conversione ritratti",
+    "ja": "ポートレートを変換中",
+    "pt": "A converter retratos",
+    "zh_hans": "正在转换立绘",
+    "zh_hant": "正在轉換立繪",
+    "es": "Convirtiendo retratos"
+  },
+  "Writing localizations": {
+    "de": "Texte werden geschrieben",
+    "fr": "Écriture des traductions",
+    "it": "Scrittura traduzioni",
+    "ja": "言語データを書き込み中",
+    "pt": "A escrever traduções",
+    "zh_hans": "正在写入本地化文本",
+    "zh_hant": "正在寫入本地化文字",
+    "es": "Escribiendo textos"
+  },
+  "Writing body models": {
+    "de": "Körpermodelle werden geschrieben",
+    "fr": "Écriture des modèles de corps",
+    "it": "Scrittura modelli del corpo",
+    "ja": "体のモデルを書き込み中",
+    "pt": "A escrever modelos de corpo",
+    "zh_hans": "正在写入身体模型",
+    "zh_hant": "正在寫入身體模型",
+    "es": "Escribiendo modelos de cuerpo"
+  },
+  "Writing clothes and shoes": {
+    "de": "Kleidung und Schuhe werden geschrieben",
+    "fr": "Écriture des vêtements et chaussures",
+    "it": "Scrittura abiti e scarpe",
+    "ja": "服とシューズを書き込み中",
+    "pt": "A escrever roupa e calçado",
+    "zh_hans": "正在写入服装和球鞋",
+    "zh_hant": "正在寫入服裝與球鞋",
+    "es": "Escribiendo ropa y calzado"
+  },
+  "Writing models": {
+    "de": "Modelle werden geschrieben",
+    "fr": "Écriture des modèles",
+    "it": "Scrittura modelli",
+    "ja": "モデルを書き込み中",
+    "pt": "A escrever modelos",
+    "zh_hans": "正在写入模型",
+    "zh_hant": "正在寫入模型",
+    "es": "Escribiendo modelos"
+  },
+  "Writing character data": {
+    "de": "Charakterdaten werden geschrieben",
+    "fr": "Écriture des données du personnage",
+    "it": "Scrittura dati personaggio",
+    "ja": "キャラクターデータを書き込み中",
+    "pt": "A escrever dados da personagem",
+    "zh_hans": "正在写入角色数据",
+    "zh_hant": "正在寫入角色資料",
+    "es": "Escribiendo datos del personaje"
+  },
+  "Reading configuration table": {
+    "de": "Konfigurationstabelle wird gelesen",
+    "fr": "Lecture de la table de configuration",
+    "it": "Lettura tabella configurazione",
+    "ja": "設定テーブルを読み込み中",
+    "pt": "A ler tabela de configuração",
+    "zh_hans": "正在读取配置表",
+    "zh_hant": "正在讀取設定表",
+    "es": "Leyendo tabla de configuración"
+  },
+  "Saving configuration table": {
+    "de": "Konfigurationstabelle wird gespeichert",
+    "fr": "Enregistrement de la table de configuration",
+    "it": "Salvataggio tabella configurazione",
+    "ja": "設定テーブルを保存中",
+    "pt": "A guardar tabela de configuração",
+    "zh_hans": "正在保存配置表",
+    "zh_hant": "正在儲存設定表",
+    "es": "Guardando tabla de configuración"
+  },
+  "Writing shop data": {
+    "de": "Shopdaten werden geschrieben",
+    "fr": "Écriture des données de boutique",
+    "it": "Scrittura dati negozio",
+    "ja": "ショップのデータを書き込み中",
+    "pt": "A escrever dados da loja",
+    "zh_hans": "正在写入商店数据",
+    "zh_hant": "正在寫入商店資料",
+    "es": "Escribiendo datos de tienda"
+  },
+  "Writing delivery data": {
+    "de": "Geschenkdaten werden geschrieben",
+    "fr": "Écriture des données de cadeau",
+    "it": "Scrittura dati regalo",
+    "ja": "プレゼントのデータを書き込み中",
+    "pt": "A escrever dados de oferta",
+    "zh_hans": "正在写入礼物数据",
+    "zh_hant": "正在寫入禮物資料",
+    "es": "Escribiendo datos de entrega"
+  },
+  "Writing delivery text": {
+    "de": "Geschenktexte werden geschrieben",
+    "fr": "Écriture du texte des cadeaux",
+    "it": "Scrittura testi regalo",
+    "ja": "プレゼントのテキストを書き込み中",
+    "pt": "A escrever textos de oferta",
+    "zh_hans": "正在写入礼物文本",
+    "zh_hant": "正在寫入禮物文字",
+    "es": "Escribiendo textos de entrega"
+  },
+  "Verifying files": {
+    "de": "Dateien werden geprüft",
+    "fr": "Vérification des fichiers",
+    "it": "Verifica file",
+    "ja": "ファイルを確認中",
+    "pt": "A verificar ficheiros",
+    "zh_hans": "正在验证文件",
+    "zh_hant": "正在驗證檔案",
+    "es": "Verificando archivos"
+  },
+  "Publishing export": {
+    "de": "Export wird veröffentlicht",
+    "fr": "Publication de l'export",
+    "it": "Pubblicazione esportazione",
+    "ja": "エクスポートを書き出し中",
+    "pt": "A publicar a exportação",
+    "zh_hans": "正在发布导出",
+    "zh_hant": "正在發佈匯出",
+    "es": "Publicando la exportación"
+  },
+  "Reading character CFGBIN tables.": {
+    "de": "Charaktertabellen werden gelesen.",
+    "fr": "Lecture des tables de personnages.",
+    "it": "Lettura tabelle personaggi.",
+    "ja": "キャラクターの設定を読み込み中。",
+    "pt": "A ler tabelas de personagens.",
+    "zh_hans": "正在读取角色配置表。",
+    "zh_hant": "正在讀取角色設定表。",
+    "es": "Leyendo tablas CFGBIN de personajes."
+  },
+  "Reading character localization tables.": {
+    "de": "Charaktertexte werden gelesen.",
+    "fr": "Lecture des traductions des personnages.",
+    "it": "Lettura traduzioni personaggi.",
+    "ja": "キャラクターの言語データを読み込み中。",
+    "pt": "A ler traduções de personagens.",
+    "zh_hans": "正在读取角色本地化文本。",
+    "zh_hant": "正在讀取角色本地化文字。",
+    "es": "Leyendo los textos de los personajes."
+  },
+  "Reading character portrait containers.": {
+    "de": "Charakterporträts werden gelesen.",
+    "fr": "Lecture des portraits des personnages.",
+    "it": "Lettura ritratti personaggi.",
+    "ja": "キャラクターのポートレートを読み込み中。",
+    "pt": "A ler retratos de personagens.",
+    "zh_hans": "正在读取角色立绘。",
+    "zh_hant": "正在讀取角色立繪。",
+    "es": "Leyendo los retratos de los personajes."
+  },
+  "Character indexing completed.": {
+    "de": "Charakterindexierung abgeschlossen.",
+    "fr": "Indexation des personnages terminée.",
+    "it": "Indicizzazione personaggi completata.",
+    "ja": "キャラクターの読み込みが完了しました。",
+    "pt": "Indexação de personagens concluída.",
+    "zh_hans": "角色索引已完成。",
+    "zh_hant": "角色索引已完成。",
+    "es": "Indexación de personajes completada."
+  },
+  "No armor portrait is available; showing a compatible uniform.": {
+    "es": "No hay retrato de esta armadura; se muestra un uniforme compatible."
+  },
+  "No matching uniform portrait is available for this body; showing a compatible uniform.": {
+    "es": "No hay retrato de ese uniforme para este cuerpo; se muestra uno compatible."
+  },
+  "An enabled .vrchara package is invalid, unreadable, or incompatible: {0}": {
+    "es": "Un paquete .vrchara activado no es válido, no se puede leer o es incompatible: {0}",
+    "de": "Ein aktiviertes .vrchara-Paket ist ungültig, unlesbar oder inkompatibel: {0}",
+    "fr": "Un paquet .vrchara activé est invalide, illisible ou incompatible : {0}",
+    "it": "Un pacchetto .vrchara attivo non è valido, leggibile o compatibile: {0}",
+    "ja": "有効な.vrcharaパッケージを読み込めないか、形式に対応していません：{0}",
+    "pt": "Um pacote .vrchara ativo é inválido, ilegível ou incompatível: {0}",
+    "zh_hans": "已启用的.vrchara包无效、无法读取或不兼容：{0}",
+    "zh_hant": "已啟用的.vrchara套件無效、無法讀取或不相容：{0}"
+  },
+  "Numeric character IDs could not be assigned: {0}": {
+    "es": "No se pudieron asignar los IDs numéricos de los personajes: {0}",
+    "de": "Charakter-IDs konnten nicht zugewiesen werden: {0}",
+    "fr": "Impossible d'attribuer les identifiants de personnage : {0}",
+    "it": "Impossibile assegnare gli ID dei personaggi: {0}",
+    "ja": "キャラクターIDを割り当てられませんでした：{0}",
+    "pt": "Não foi possível atribuir os IDs das personagens: {0}",
+    "zh_hans": "无法分配角色ID：{0}",
+    "zh_hant": "無法分配角色ID：{0}"
+  },
+  "Verify the active dump before exporting.": {
+    "es": "Comprueba los datos del juego activos antes de exportar.",
+    "de": "Prüfe den aktiven Dump vor dem Export.",
+    "fr": "Vérifiez le dump actif avant l'export.",
+    "it": "Verifica il dump attivo prima di esportare.",
+    "ja": "エクスポート前に選択中のダンプを確認してください。",
+    "pt": "Verifique o dump ativo antes de exportar.",
+    "zh_hans": "导出前请检查当前转储。",
+    "zh_hant": "匯出前請檢查目前的傾印。"
+  },
+  "Upgrade, repair, or disable the incompatible package before exporting.": {
+    "es": "Actualiza, repara o desactiva el paquete incompatible antes de exportar.",
+    "de": "Aktualisiere, repariere oder deaktiviere das inkompatible Paket vor dem Export.",
+    "fr": "Mettez à jour, réparez ou désactivez le paquet incompatible avant l'export.",
+    "it": "Aggiorna, ripara o disattiva il pacchetto incompatibile prima di esportare.",
+    "ja": "エクスポート前に非対応のパッケージを更新、修復、または無効にしてください。",
+    "pt": "Atualize, repare ou desative o pacote incompatível antes de exportar.",
+    "zh_hans": "导出前请更新、修复或禁用不兼容的包。",
+    "zh_hant": "匯出前請更新、修復或停用不相容的套件。"
+  },
+  "The source package changed. Choose a destination for your edited character.": {
+    "es": "El paquete original ha cambiado. Elige un destino para el personaje editado.",
+    "de": "Das Quellpaket wurde geändert. Wähle ein Ziel für den bearbeiteten Charakter.",
+    "fr": "Le paquet source a changé. Choisissez une destination pour le personnage modifié.",
+    "it": "Il pacchetto originale è cambiato. Scegli una destinazione per il personaggio modificato.",
+    "ja": "元のパッケージが変更されました。編集したキャラクターの保存先を選んでください。",
+    "pt": "O pacote original mudou. Escolha um destino para a personagem editada.",
+    "zh_hans": "源包已更改，请为编辑后的角色选择保存位置。",
+    "zh_hant": "來源套件已變更，請為編輯後的角色選擇儲存位置。"
+  },
+  "Session recovered. The original package changed or is unavailable; choose a new save destination.": {
+    "es": "Sesión recuperada. El paquete original cambió o no está disponible; elige un destino nuevo al guardar.",
+    "de": "Sitzung wiederhergestellt. Das Quellpaket wurde geändert oder fehlt. Wähle ein neues Speicherziel.",
+    "fr": "Session restaurée. Le paquet source a changé ou est indisponible ; choisissez une nouvelle destination.",
+    "it": "Sessione ripristinata. Il pacchetto originale è cambiato o non è disponibile; scegli una nuova destinazione.",
+    "ja": "セッションを復元しました。元のパッケージが変更されたか利用できません。新しい保存先を選んでください。",
+    "pt": "Sessão recuperada. O pacote original mudou ou está indisponível; escolha um novo destino.",
+    "zh_hans": "会话已恢复。源包已更改或不可用，请选择新的保存位置。",
+    "zh_hant": "工作階段已還原。來源套件已變更或無法使用，請選擇新的儲存位置。"
+  },
+  "Session recovery could not be saved. Retry, cancel closing, or close without saving the session.": {
+    "es": "No se pudo guardar la recuperación de la sesión. Reintenta, cancela el cierre o cierra sin guardar la sesión.",
+    "de": "Die Sitzung konnte nicht gespeichert werden. Erneut versuchen, Schließen abbrechen oder ohne Sitzungsspeicherung schließen.",
+    "fr": "Impossible d'enregistrer la session. Réessayez, annulez la fermeture ou fermez sans enregistrer.",
+    "it": "Impossibile salvare la sessione. Riprova, annulla la chiusura o chiudi senza salvare.",
+    "ja": "セッションを保存できませんでした。再試行するか、終了をキャンセルするか、保存せずに終了してください。",
+    "pt": "Não foi possível guardar a sessão. Tente novamente, cancele o fecho ou feche sem guardar.",
+    "zh_hans": "无法保存会话。请重试、取消关闭或不保存会话并关闭。",
+    "zh_hant": "無法儲存工作階段。請重試、取消關閉或不儲存工作階段並關閉。"
+  },
+  "The .vrchara package service is not configured.": {
+    "es": "El servicio de paquetes .vrchara no está configurado.",
+    "de": "Der .vrchara-Paketdienst ist nicht eingerichtet.",
+    "fr": "Le service de paquets .vrchara n'est pas configuré.",
+    "it": "Il servizio pacchetti .vrchara non è configurato.",
+    "ja": ".vrcharaパッケージの処理が設定されていません。",
+    "pt": "O serviço de pacotes .vrchara não está configurado.",
+    "zh_hans": "未配置.vrchara包服务。",
+    "zh_hant": "尚未設定.vrchara套件服務。"
+  },
+  "Application settings could not be restored: {0}": {
+    "es": "No se pudo restaurar la configuración de la aplicación: {0}",
+    "de": "Einstellungen konnten nicht wiederhergestellt werden: {0}",
+    "fr": "Impossible de restaurer les paramètres : {0}",
+    "it": "Impossibile ripristinare le impostazioni: {0}",
+    "ja": "設定を復元できませんでした：{0}",
+    "pt": "Não foi possível restaurar as definições: {0}",
+    "zh_hans": "无法恢复应用设置：{0}",
+    "zh_hant": "無法還原應用程式設定：{0}"
+  },
+  "Application settings could not be saved: {0}": {
+    "es": "No se pudo guardar la configuración de la aplicación: {0}",
+    "de": "Einstellungen konnten nicht gespeichert werden: {0}",
+    "fr": "Impossible d'enregistrer les paramètres : {0}",
+    "it": "Impossibile salvare le impostazioni: {0}",
+    "ja": "設定を保存できませんでした：{0}",
+    "pt": "Não foi possível guardar as definições: {0}",
+    "zh_hans": "无法保存应用设置：{0}",
+    "zh_hant": "無法儲存應用程式設定：{0}"
+  },
+  "The replacement dump could not be loaded. {0}": {
+    "es": "No se pudieron cargar los nuevos datos del juego. {0}",
+    "de": "Der neue Dump konnte nicht geladen werden. {0}",
+    "fr": "Impossible de charger le nouveau dump. {0}",
+    "it": "Impossibile caricare il nuovo dump. {0}",
+    "ja": "新しいダンプを読み込めませんでした。{0}",
+    "pt": "Não foi possível carregar o novo dump. {0}",
+    "zh_hans": "无法加载新的转储。{0}",
+    "zh_hant": "無法載入新的傾印。{0}"
+  },
+  "Export published to {0}.": {
+    "es": "Exportación publicada en {0}.",
+    "de": "Export nach {0} geschrieben.",
+    "fr": "Export publié dans {0}.",
+    "it": "Esportazione pubblicata in {0}.",
+    "ja": "{0}にエクスポートしました。",
+    "pt": "Exportação publicada em {0}.",
+    "zh_hans": "已导出至{0}。",
+    "zh_hant": "已匯出至{0}。"
+  },
+  "Character saved to {0}.": {
+    "es": "Personaje guardado en {0}.",
+    "de": "Charakter unter {0} gespeichert.",
+    "fr": "Personnage enregistré dans {0}.",
+    "it": "Personaggio salvato in {0}.",
+    "ja": "{0}にキャラクターを保存しました。",
+    "pt": "Personagem guardada em {0}.",
+    "zh_hans": "角色已保存至{0}。",
+    "zh_hant": "角色已儲存至{0}。"
+  },
+  "The character could not be saved: {0}": {
+    "es": "No se pudo guardar el personaje: {0}",
+    "de": "Charakter konnte nicht gespeichert werden: {0}",
+    "fr": "Impossible d'enregistrer le personnage : {0}",
+    "it": "Impossibile salvare il personaggio: {0}",
+    "ja": "キャラクターを保存できませんでした：{0}",
+    "pt": "Não foi possível guardar a personagem: {0}",
+    "zh_hans": "无法保存角色：{0}",
+    "zh_hant": "無法儲存角色：{0}"
+  },
+  "The locales JSON is invalid: {0}": {
+    "es": "El JSON de locales no es válido: {0}",
+    "de": "Die Sprach-JSON ist ungültig: {0}",
+    "fr": "Le JSON des langues est invalide : {0}",
+    "it": "Il JSON delle lingue non è valido: {0}",
+    "ja": "言語JSONが無効です：{0}",
+    "pt": "O JSON de idiomas é inválido: {0}",
+    "zh_hans": "语言JSON无效：{0}",
+    "zh_hant": "語言JSON無效：{0}"
+  },
+  "Project recovery could not be saved: {0}": {
+    "es": "No se pudo guardar la recuperación del proyecto: {0}",
+    "de": "Projektwiederherstellung konnte nicht gespeichert werden: {0}",
+    "fr": "Impossible d'enregistrer la récupération du projet : {0}",
+    "it": "Impossibile salvare il recupero del progetto: {0}",
+    "ja": "プロジェクトの復元データを保存できませんでした：{0}",
+    "pt": "Não foi possível guardar a recuperação do projeto: {0}",
+    "zh_hans": "无法保存项目恢复数据：{0}",
+    "zh_hant": "無法儲存專案還原資料：{0}"
+  },
+  "The session could not be recovered: {0}": {
+    "es": "No se pudo recuperar la sesión: {0}",
+    "de": "Sitzung konnte nicht wiederhergestellt werden: {0}",
+    "fr": "Impossible de restaurer la session : {0}",
+    "it": "Impossibile ripristinare la sessione: {0}",
+    "ja": "セッションを復元できませんでした：{0}",
+    "pt": "Não foi possível recuperar a sessão: {0}",
+    "zh_hans": "无法恢复会话：{0}",
+    "zh_hant": "無法還原工作階段：{0}"
+  },
+  "Could not prepare the export. Check the log for details.": {
+    "es": "No se pudo preparar la exportación. Consulta el registro para ver el error.",
+    "de": "Export konnte nicht vorbereitet werden. Details stehen im Protokoll.",
+    "fr": "Impossible de préparer l'export. Consultez le journal.",
+    "it": "Impossibile preparare l'esportazione. Consulta il registro.",
+    "ja": "エクスポートを準備できませんでした。ログを確認してください。",
+    "pt": "Não foi possível preparar a exportação. Consulte o registo.",
+    "zh_hans": "无法准备导出，请查看日志。",
+    "zh_hant": "無法準備匯出，請查看記錄。"
+  },
+  "Could not complete the export. Check the log for details.": {
+    "es": "No se pudo completar la exportación. Consulta el registro para ver el error.",
+    "de": "Export konnte nicht abgeschlossen werden. Details stehen im Protokoll.",
+    "fr": "Impossible de terminer l'export. Consultez le journal.",
+    "it": "Impossibile completare l'esportazione. Consulta il registro.",
+    "ja": "エクスポートを完了できませんでした。ログを確認してください。",
+    "pt": "Não foi possível concluir a exportação. Consulte o registo.",
+    "zh_hans": "无法完成导出，请查看日志。",
+    "zh_hant": "無法完成匯出，請查看記錄。"
+  },
+  "Export plan contains warnings. Review diagnostics before exporting.": {
+    "es": "La exportación contiene advertencias. Revisa los diagnósticos antes de exportar.",
+    "de": "Die Exportplanung enthält Warnungen. Prüfe sie vor dem Export.",
+    "fr": "L'export comporte des avertissements. Vérifiez les diagnostics.",
+    "it": "L'esportazione contiene avvisi. Controlla la diagnostica.",
+    "ja": "エクスポートに警告があります。内容を確認してください。",
+    "pt": "A exportação contém avisos. Verifique o diagnóstico.",
+    "zh_hans": "导出包含警告，请先检查诊断信息。",
+    "zh_hant": "匯出包含警告，請先檢查診斷資訊。"
+  },
+  "{0} export error(s). {1}: {2}{3}": {
+    "es": "{0} error(es) de exportación. {1}: {2}{3}",
+    "de": "{0} Exportfehler. {1}: {2}{3}",
+    "fr": "{0} erreur(s) d'export. {1} : {2}{3}",
+    "it": "{0} errori di esportazione. {1}: {2}{3}",
+    "ja": "エクスポートエラー：{0}件。{1}：{2}{3}",
+    "pt": "{0} erro(s) de exportação. {1}: {2}{3}",
+    "zh_hans": "{0}个导出错误。{1}：{2}{3}",
+    "zh_hant": "{0}個匯出錯誤。{1}：{2}{3}"
+  },
+  " Action: {0}": {
+    "es": " Acción: {0}",
+    "de": " Maßnahme: {0}",
+    "fr": " Action : {0}",
+    "it": " Azione: {0}",
+    "ja": " 対処：{0}",
+    "pt": " Ação: {0}",
+    "zh_hans": " 处理方法：{0}",
+    "zh_hant": " 處理方法：{0}"
+  },
+  "Error": {
+    "es": "Error",
+    "de": "Fehler",
+    "fr": "Erreur",
+    "it": "Errore",
+    "ja": "エラー",
+    "pt": "Erro",
+    "zh_hans": "错误",
+    "zh_hant": "錯誤"
+  },
+  "Warning": {
+    "es": "Advertencia",
+    "de": "Warnung",
+    "fr": "Avertissement",
+    "it": "Avviso",
+    "ja": "警告",
+    "pt": "Aviso",
+    "zh_hans": "警告",
+    "zh_hant": "警告"
+  },
+  "Information": {
+    "es": "Información",
+    "de": "Information",
+    "fr": "Information",
+    "it": "Informazione",
+    "ja": "情報",
+    "pt": "Informação",
+    "zh_hans": "信息",
+    "zh_hant": "資訊"
+  },
+  "A custom character needs a display name before export.": {
+    "es": "El personaje personalizado necesita un nombre antes de exportarlo.",
+    "de": "Ein benutzerdefinierter Charakter benötigt vor dem Export einen Namen.",
+    "fr": "Le personnage personnalisé doit avoir un nom avant l'export.",
+    "it": "Il personaggio personalizzato deve avere un nome prima dell'esportazione.",
+    "ja": "エクスポート前にキャラクターの名前を入力してください。",
+    "pt": "A personagem personalizada precisa de um nome antes de exportar.",
+    "zh_hans": "导出前请为自定义角色输入名称。",
+    "zh_hant": "匯出前請為自訂角色輸入名稱。"
+  },
+  "Enter a whole-number game value.": {
+    "es": "Introduce un valor entero del juego.",
+    "de": "Gib einen ganzzahligen Spielwert ein.",
+    "fr": "Saisissez une valeur entière.",
+    "it": "Inserisci un valore intero.",
+    "ja": "整数を入力してください。",
+    "pt": "Introduza um número inteiro.",
+    "zh_hans": "请输入整数。",
+    "zh_hant": "請輸入整數。"
+  },
+  "Model files must use the .g4md or .g4pkm extension.": {
+    "es": "Los modelos deben usar la extensión .g4md o .g4pkm.",
+    "de": "Modelldateien benötigen die Endung .g4md oder .g4pkm.",
+    "fr": "Les modèles doivent avoir l'extension .g4md ou .g4pkm.",
+    "it": "I modelli devono avere estensione .g4md o .g4pkm.",
+    "ja": "モデルの拡張子は.g4mdまたは.g4pkmである必要があります。",
+    "pt": "Os modelos devem ter a extensão .g4md ou .g4pkm.",
+    "zh_hans": "模型文件必须使用.g4md或.g4pkm扩展名。",
+    "zh_hant": "模型檔案必須使用.g4md或.g4pkm副檔名。"
+  },
+  "The batch does not contain an enabled character package.": {
+    "es": "La lista no contiene ningún paquete de personaje activado.",
+    "de": "Die Liste enthält kein aktiviertes Charakterpaket.",
+    "fr": "La liste ne contient aucun paquet activé.",
+    "it": "L'elenco non contiene pacchetti attivi.",
+    "ja": "有効なキャラクターパッケージがありません。",
+    "pt": "A lista não contém pacotes ativos.",
+    "zh_hans": "列表中没有已启用的角色包。",
+    "zh_hant": "清單中沒有已啟用的角色套件。"
+  },
+  "Add or enable at least one .vrchara package.": {
+    "es": "Añade o activa al menos un paquete .vrchara.",
+    "de": "Füge mindestens ein .vrchara-Paket hinzu oder aktiviere es.",
+    "fr": "Ajoutez ou activez au moins un paquet .vrchara.",
+    "it": "Aggiungi o attiva almeno un pacchetto .vrchara.",
+    "ja": ".vrcharaパッケージを1つ以上追加または有効にしてください。",
+    "pt": "Adicione ou ative pelo menos um pacote .vrchara.",
+    "zh_hans": "请添加或启用至少一个.vrchara包。",
+    "zh_hant": "請新增或啟用至少一個.vrchara套件。"
+  },
+  "A game dump must be loaded before VictoryTool can prepare an export.": {
+    "es": "Carga los datos del juego antes de preparar una exportación.",
+    "de": "Lade vor der Exportvorbereitung einen Spiel-Dump.",
+    "fr": "Chargez un dump du jeu avant de préparer l'export.",
+    "it": "Carica un dump del gioco prima di preparare l'esportazione.",
+    "ja": "エクスポートの準備にはゲームダンプの読み込みが必要です。",
+    "pt": "Carregue um dump do jogo antes de preparar a exportação.",
+    "zh_hans": "准备导出前必须加载游戏转储。",
+    "zh_hant": "準備匯出前必須載入遊戲傾印。"
+  },
+  "Load the DUMP from the Project screen, then preview the export again.": {
+    "es": "Carga los datos del juego desde Proyecto y vuelve a preparar la exportación.",
+    "de": "Lade den Dump im Projektbildschirm und prüfe die Exportvorschau erneut.",
+    "fr": "Chargez le dump depuis Projet puis prévisualisez à nouveau l'export.",
+    "it": "Carica il dump dalla schermata Progetto e riapri l'anteprima.",
+    "ja": "プロジェクト画面でダンプを読み込み、もう一度エクスポートを確認してください。",
+    "pt": "Carregue o dump no ecrã Projeto e volte a pré-visualizar a exportação.",
+    "zh_hans": "请在项目页面加载转储，然后重新预览导出。",
+    "zh_hant": "請在專案頁面載入傾印，然後重新預覽匯出。"
+  },
+  "The temporary locales JSON cannot be found; open it again before saving.": {
+    "es": "No se encuentra el JSON de locales temporal; vuelve a abrirlo antes de guardar.",
+    "de": "Die temporäre Sprach-JSON fehlt. Öffne sie vor dem Speichern erneut.",
+    "fr": "Le JSON temporaire est introuvable ; rouvrez-le avant d'enregistrer.",
+    "it": "Il JSON temporaneo non è stato trovato; riaprilo prima di salvare.",
+    "ja": "一時言語JSONが見つかりません。保存前にもう一度開いてください。",
+    "pt": "Não foi encontrado o JSON temporário; abra-o novamente antes de guardar.",
+    "zh_hans": "找不到临时语言JSON，请重新打开后再保存。",
+    "zh_hant": "找不到暫存語言JSON，請重新開啟後再儲存。"
+  },
+  "Add at least one character to incorporate.": {
+    "de": "Füge mindestens einen Charakter hinzu.",
+    "es": "Añade al menos un personaje para incorporar.",
+    "fr": "Ajoutez au moins un personnage.",
+    "it": "Aggiungi almeno un personaggio.",
+    "ja": "追加するキャラクターを1人以上選んでください。",
+    "pt": "Adicione pelo menos uma personagem.",
+    "zh_hans": "请至少添加一个角色。",
+    "zh_hant": "請至少新增一個角色。"
+  },
+  "Already in the incorporation list.": {
+    "de": "Bereits in der Importliste.",
+    "es": "Ya está en la lista de incorporación.",
+    "fr": "Déjà dans la liste d'importation.",
+    "it": "Già nell'elenco di importazione.",
+    "ja": "すでに追加リストにあります。",
+    "pt": "Já está na lista de incorporação.",
+    "zh_hans": "已在导入列表中。",
+    "zh_hant": "已在匯入清單中。"
+  },
+  "Choose a character…": {
+    "de": "Charakter auswählen…",
+    "es": "Elige un personaje…",
+    "fr": "Choisissez un personnage…",
+    "it": "Scegli un personaggio…",
+    "ja": "キャラクターを選択…",
+    "pt": "Escolha uma personagem…",
+    "zh_hans": "选择角色…",
+    "zh_hant": "選擇角色…"
+  },
+  "Continue editing": {
+    "de": "Weiter bearbeiten",
+    "es": "Seguir editando",
+    "fr": "Continuer la modification",
+    "it": "Continua a modificare",
+    "ja": "編集を続ける",
+    "pt": "Continuar a editar",
+    "zh_hans": "继续编辑",
+    "zh_hant": "繼續編輯"
+  },
+  "Discard changes": {
+    "de": "Änderungen verwerfen",
+    "es": "Descartar cambios",
+    "fr": "Ignorer les modifications",
+    "it": "Scarta modifiche",
+    "ja": "変更を破棄",
+    "pt": "Descartar alterações",
+    "zh_hans": "放弃更改",
+    "zh_hant": "捨棄變更"
+  },
+  "Load the game data.": {
+    "de": "Lade die Spieldaten.",
+    "es": "Carga los datos del juego.",
+    "fr": "Chargez les données du jeu.",
+    "it": "Carica i dati del gioco.",
+    "ja": "ゲームデータを読み込んでください。",
+    "pt": "Carregue os dados do jogo.",
+    "zh_hans": "请加载游戏数据。",
+    "zh_hant": "請載入遊戲資料。"
+  },
+  "Opening character…": {
+    "de": "Charakter wird geöffnet…",
+    "es": "Abriendo personaje…",
+    "fr": "Ouverture du personnage…",
+    "it": "Apertura personaggio…",
+    "ja": "キャラクターを読み込み中…",
+    "pt": "A abrir personagem…",
+    "zh_hans": "正在打开角色…",
+    "zh_hant": "正在開啟角色…"
+  },
+  "Reload previews": {
+    "de": "Vorschau neu laden",
+    "es": "Recargar vistas previas",
+    "fr": "Recharger les aperçus",
+    "it": "Ricarica anteprime",
+    "ja": "プレビューを再読み込み",
+    "pt": "Recarregar pré-visualizações",
+    "zh_hans": "重新加载预览",
+    "zh_hant": "重新載入預覽"
+  },
+  "Saved; not yet added to the incorporation list.": {
+    "de": "Gespeichert; noch nicht in der Importliste.",
+    "es": "Guardado; aún no añadido a la lista de incorporación.",
+    "fr": "Enregistré ; pas encore ajouté à la liste d'importation.",
+    "it": "Salvato; non ancora aggiunto all'elenco di importazione.",
+    "ja": "保存しました。まだ追加リストには入っていません。",
+    "pt": "Guardado; ainda não adicionado à lista de incorporação.",
+    "zh_hans": "已保存，尚未加入导入列表。",
+    "zh_hant": "已儲存，尚未加入匯入清單。"
+  },
+  "Saving character…": {
+    "de": "Charakter wird gespeichert…",
+    "es": "Guardando personaje…",
+    "fr": "Enregistrement du personnage…",
+    "it": "Salvataggio personaggio…",
+    "ja": "キャラクターを保存中…",
+    "pt": "A guardar personagem…",
+    "zh_hans": "正在保存角色…",
+    "zh_hant": "正在儲存角色…"
+  },
+  "Select CHR animations, EVENT animations, or both.": {
+    "de": "Wähle CHR-Animationen, EVENT-Animationen oder beides.",
+    "es": "Selecciona animaciones CHR, EVENT o ambas.",
+    "fr": "Sélectionnez les animations CHR, EVENT ou les deux.",
+    "it": "Seleziona animazioni CHR, EVENT o entrambe.",
+    "ja": "CHR、EVENT、または両方のアニメーションを選択してください。",
+    "pt": "Selecione animações CHR, EVENT ou ambas.",
+    "zh_hans": "请选择CHR动画、EVENT动画或两者。",
+    "zh_hant": "請選擇CHR動畫、EVENT動畫或兩者。"
+  },
+  "Select or create a character.": {
+    "de": "Wähle oder erstelle einen Charakter.",
+    "es": "Selecciona o crea un personaje.",
+    "fr": "Sélectionnez ou créez un personnage.",
+    "it": "Seleziona o crea un personaggio.",
+    "ja": "キャラクターを選択または作成してください。",
+    "pt": "Selecione ou crie uma personagem.",
+    "zh_hans": "请选择或创建角色。",
+    "zh_hant": "請選擇或建立角色。"
+  },
+  "Select the custom shoes model file.": {
+    "de": "Wähle das benutzerdefinierte Schuhmodell.",
+    "es": "Selecciona el archivo del modelo de zapatillas personalizadas.",
+    "fr": "Sélectionnez le modèle de chaussures personnalisé.",
+    "it": "Seleziona il modello delle scarpe personalizzate.",
+    "ja": "カスタムシューズのモデルファイルを選択してください。",
+    "pt": "Selecione o modelo das chuteiras personalizadas.",
+    "zh_hans": "请选择自定义球鞋模型文件。",
+    "zh_hant": "請選擇自訂球鞋模型檔案。"
+  },
+  "Select the custom uniform model file.": {
+    "de": "Wähle das benutzerdefinierte Trikotmodell.",
+    "es": "Selecciona el archivo del modelo de uniforme personalizado.",
+    "fr": "Sélectionnez le modèle de tenue personnalisé.",
+    "it": "Seleziona il modello della divisa personalizzata.",
+    "ja": "カスタムユニフォームのモデルファイルを選択してください。",
+    "pt": "Selecione o modelo do equipamento personalizado.",
+    "zh_hans": "请选择自定义队服模型文件。",
+    "zh_hant": "請選擇自訂隊服模型檔案。"
+  },
+  "The locales JSON cannot be found. Open it again before saving.": {
+    "de": "Die Sprach-JSON wurde nicht gefunden. Öffne sie vor dem Speichern erneut.",
+    "es": "No se encuentra el JSON de locales. Vuelve a abrirlo antes de guardar.",
+    "fr": "Le JSON des langues est introuvable. Rouvrez-le avant d'enregistrer.",
+    "it": "Il JSON delle lingue non è stato trovato. Riaprilo prima di salvare.",
+    "ja": "言語JSONが見つかりません。保存前にもう一度開いてください。",
+    "pt": "Não foi encontrado o JSON de idiomas. Abra-o novamente antes de guardar.",
+    "zh_hans": "找不到语言JSON，请重新打开后再保存。",
+    "zh_hant": "找不到語言JSON，請重新開啟後再儲存。"
+  },
+  "You have unsaved changes. Save them before continuing?": {
+    "de": "Es gibt ungespeicherte Änderungen. Vor dem Fortfahren speichern?",
+    "es": "Hay cambios sin guardar. ¿Quieres guardarlos antes de continuar?",
+    "fr": "Des modifications ne sont pas enregistrées. Les enregistrer avant de continuer ?",
+    "it": "Ci sono modifiche non salvate. Salvarle prima di continuare?",
+    "ja": "未保存の変更があります。続行する前に保存しますか？",
+    "pt": "Existem alterações por guardar. Guardar antes de continuar?",
+    "zh_hans": "有未保存的更改，是否先保存再继续？",
+    "zh_hant": "有未儲存的變更，是否先儲存再繼續？"
+  },
+  "The {0} file cannot be found. Select it again.": {
+    "de": "Die Datei für {0} wurde nicht gefunden. Wähle sie erneut.",
+    "es": "No se encuentra el archivo de {0}. Vuelve a seleccionarlo.",
+    "fr": "Le fichier de {0} est introuvable. Sélectionnez-le à nouveau.",
+    "it": "Il file di {0} non è stato trovato. Selezionalo di nuovo.",
+    "ja": "{0}のファイルが見つかりません。もう一度選択してください。",
+    "pt": "O ficheiro de {0} não foi encontrado. Selecione-o novamente.",
+    "zh_hans": "找不到{0}文件，请重新选择。",
+    "zh_hant": "找不到{0}檔案，請重新選擇。"
+  },
+  "Loading preview…": {
+    "de": "Vorschau wird geladen…",
+    "es": "Cargando vista previa…",
+    "fr": "Chargement de l'aperçu…",
+    "it": "Caricamento anteprima…",
+    "ja": "プレビューを読み込み中…",
+    "pt": "A carregar pré-visualização…",
+    "zh_hans": "正在加载预览…",
+    "zh_hant": "正在載入預覽…"
+  },
+  "Preview loaded.": {
+    "de": "Vorschau geladen.",
+    "es": "Vista previa cargada.",
+    "fr": "Aperçu chargé.",
+    "it": "Anteprima caricata.",
+    "ja": "プレビューを読み込みました。",
+    "pt": "Pré-visualização carregada.",
+    "zh_hans": "预览已加载。",
+    "zh_hant": "預覽已載入。"
+  },
+  "Could not load the preview. Check the file and reload it.": {
+    "de": "Vorschau konnte nicht geladen werden. Prüfe die Datei und lade sie erneut.",
+    "es": "No se pudo cargar la vista previa. Comprueba el archivo y vuelve a cargarlo.",
+    "fr": "Impossible de charger l'aperçu. Vérifiez le fichier puis rechargez-le.",
+    "it": "Impossibile caricare l'anteprima. Controlla il file e ricaricalo.",
+    "ja": "プレビューを読み込めませんでした。ファイルを確認して再読み込みしてください。",
+    "pt": "Não foi possível carregar a pré-visualização. Verifique o ficheiro e recarregue-o.",
+    "zh_hans": "无法加载预览，请检查文件并重新加载。",
+    "zh_hant": "無法載入預覽，請檢查檔案並重新載入。"
+  },
+  "German": {
+    "de": "Deutsch",
+    "es": "Alemán",
+    "fr": "Allemand",
+    "it": "Tedesco",
+    "ja": "ドイツ語",
+    "pt": "Alemão",
+    "zh_hans": "德语",
+    "zh_hant": "德語"
+  },
+  "English": {
+    "de": "Englisch",
+    "es": "Inglés",
+    "fr": "Anglais",
+    "it": "Inglese",
+    "ja": "英語",
+    "pt": "Inglês",
+    "zh_hans": "英语",
+    "zh_hant": "英語"
+  },
+  "Spanish": {
+    "de": "Spanisch",
+    "es": "Español",
+    "fr": "Espagnol",
+    "it": "Spagnolo",
+    "ja": "スペイン語",
+    "pt": "Espanhol",
+    "zh_hans": "西班牙语",
+    "zh_hant": "西班牙語"
+  },
+  "French": {
+    "de": "Französisch",
+    "es": "Francés",
+    "fr": "Français",
+    "it": "Francese",
+    "ja": "フランス語",
+    "pt": "Francês",
+    "zh_hans": "法语",
+    "zh_hant": "法語"
+  },
+  "Italian": {
+    "de": "Italienisch",
+    "es": "Italiano",
+    "fr": "Italien",
+    "it": "Italiano",
+    "ja": "イタリア語",
+    "pt": "Italiano",
+    "zh_hans": "意大利语",
+    "zh_hant": "義大利語"
+  },
+  "Japanese": {
+    "de": "Japanisch",
+    "es": "Japonés",
+    "fr": "Japonais",
+    "it": "Giapponese",
+    "ja": "日本語",
+    "pt": "Japonês",
+    "zh_hans": "日语",
+    "zh_hant": "日語"
+  },
+  "Portuguese": {
+    "de": "Portugiesisch",
+    "es": "Portugués",
+    "fr": "Portugais",
+    "it": "Portoghese",
+    "ja": "ポルトガル語",
+    "pt": "Português",
+    "zh_hans": "葡萄牙语",
+    "zh_hant": "葡萄牙語"
+  },
+  "Chinese (Simplified)": {
+    "de": "Chinesisch (vereinfacht)",
+    "es": "Chino simplificado",
+    "fr": "Chinois simplifié",
+    "it": "Cinese semplificato",
+    "ja": "中国語（簡体字）",
+    "pt": "Chinês simplificado",
+    "zh_hans": "简体中文",
+    "zh_hant": "簡體中文"
+  },
+  "Chinese (Traditional)": {
+    "de": "Chinesisch (traditionell)",
+    "es": "Chino tradicional",
+    "fr": "Chinois traditionnel",
+    "it": "Cinese tradizionale",
+    "ja": "中国語（繁体字）",
+    "pt": "Chinês tradicional",
+    "zh_hans": "繁体中文",
+    "zh_hant": "繁體中文"
+  },
+  "Loading package…": {
+    "de": "Paket wird geladen…",
+    "es": "Cargando paquete…",
+    "fr": "Chargement du paquet…",
+    "it": "Caricamento pacchetto…",
+    "ja": "パッケージを読み込み中…",
+    "pt": "A carregar pacote…",
+    "zh_hans": "正在加载角色包…",
+    "zh_hant": "正在載入角色套件…"
+  },
+  "Could not read the package. Check the file and add it again.": {
+    "de": "Paket konnte nicht gelesen werden. Prüfe die Datei und füge sie erneut hinzu.",
+    "es": "No se pudo leer el paquete. Comprueba el archivo y vuelve a añadirlo.",
+    "fr": "Impossible de lire le paquet. Vérifiez le fichier et ajoutez-le à nouveau.",
+    "it": "Impossibile leggere il pacchetto. Controlla il file e aggiungilo di nuovo.",
+    "ja": "パッケージを読み込めませんでした。ファイルを確認して再追加してください。",
+    "pt": "Não foi possível ler o pacote. Verifique o ficheiro e adicione-o novamente.",
+    "zh_hans": "无法读取角色包，请检查文件并重新添加。",
+    "zh_hant": "無法讀取角色套件，請檢查檔案並重新新增。"
+  },
+  "Could not load the thumbnail.": {
+    "de": "Miniatur konnte nicht geladen werden.",
+    "es": "No se pudo cargar la miniatura.",
+    "fr": "Impossible de charger la miniature.",
+    "it": "Impossibile caricare la miniatura.",
+    "ja": "サムネイルを読み込めませんでした。",
+    "pt": "Não foi possível carregar a miniatura.",
+    "zh_hans": "无法加载缩略图。",
+    "zh_hant": "無法載入縮圖。"
+  },
+  "Player card": {
+    "de": "Spielerkarte",
+    "es": "Ficha del personaje",
+    "fr": "Fiche du personnage",
+    "it": "Scheda personaggio",
+    "ja": "選手カード",
+    "pt": "Ficha da personagem",
+    "zh_hans": "角色卡",
+    "zh_hant": "角色卡"
+  },
+  "Series": {
+    "de": "Serie",
+    "es": "Serie",
+    "fr": "Série",
+    "it": "Serie",
+    "ja": "シリーズ",
+    "pt": "Série",
+    "zh_hans": "系列",
+    "zh_hant": "系列"
+  },
+  "Rank": {
+    "de": "Rang",
+    "es": "Rango",
+    "fr": "Rang",
+    "it": "Rango",
+    "ja": "ランク",
+    "pt": "Classificação",
+    "zh_hans": "等级",
+    "zh_hant": "等級"
+  },
+  "Preview level": {
+    "de": "Vorschaulevel",
+    "es": "Nivel de vista previa",
+    "fr": "Niveau de prévisualisation",
+    "it": "Livello anteprima",
+    "ja": "プレビューレベル",
+    "pt": "Nível de pré-visualização",
+    "zh_hans": "预览等级",
+    "zh_hant": "預覽等級"
+  },
+  "Gender / body": {
+    "de": "Geschlecht / Körperbau",
+    "es": "Género / cuerpo",
+    "fr": "Genre / morphologie",
+    "it": "Genere / corporatura",
+    "ja": "性別・体型",
+    "pt": "Género / corpo",
+    "zh_hans": "性别／体型",
+    "zh_hant": "性別／體型"
+  },
+  "standard portrait": {
+    "de": "Standardporträt",
+    "es": "retrato normal",
+    "fr": "portrait normal",
+    "it": "ritratto normale",
+    "ja": "通常のポートレート",
+    "pt": "retrato normal",
+    "zh_hans": "普通立绘",
+    "zh_hant": "一般立繪"
+  },
+  "uniform portrait": {
+    "de": "Trikotporträt",
+    "es": "retrato de uniforme",
+    "fr": "portrait avec tenue",
+    "it": "ritratto con divisa",
+    "ja": "ユニフォーム用ポートレート",
+    "pt": "retrato com equipamento",
+    "zh_hans": "队服立绘",
+    "zh_hant": "隊服立繪"
+  },
+  "character model": {
+    "de": "Charaktermodell",
+    "es": "modelo del personaje",
+    "fr": "modèle du personnage",
+    "it": "modello del personaggio",
+    "ja": "キャラクターモデル",
+    "pt": "modelo da personagem",
+    "zh_hans": "角色模型",
+    "zh_hant": "角色模型"
+  },
+  "uniform": {
+    "de": "Trikot",
+    "es": "uniforme",
+    "fr": "tenue",
+    "it": "divisa",
+    "ja": "ユニフォーム",
+    "pt": "equipamento",
+    "zh_hans": "队服",
+    "zh_hant": "隊服"
+  },
+  "shoes": {
+    "de": "Schuhe",
+    "es": "zapatillas",
+    "fr": "chaussures",
+    "it": "scarpe",
+    "ja": "シューズ",
+    "pt": "chuteiras",
+    "zh_hans": "球鞋",
+    "zh_hant": "球鞋"
+  },
+  "Inazuma Eleven 1": {
+    "de": "Inazuma Eleven 1",
+    "es": "Inazuma Eleven 1",
+    "fr": "Inazuma Eleven 1",
+    "it": "Inazuma Eleven 1",
+    "ja": "イナズマイレブン1",
+    "pt": "Inazuma Eleven 1",
+    "zh_hans": "闪电十一人1",
+    "zh_hant": "閃電十一人1"
+  },
+  "Inazuma Eleven 2": {
+    "de": "Inazuma Eleven 2",
+    "es": "Inazuma Eleven 2",
+    "fr": "Inazuma Eleven 2",
+    "it": "Inazuma Eleven 2",
+    "ja": "イナズマイレブン2",
+    "pt": "Inazuma Eleven 2",
+    "zh_hans": "闪电十一人2",
+    "zh_hant": "閃電十一人2"
+  },
+  "Inazuma Eleven 3": {
+    "de": "Inazuma Eleven 3",
+    "es": "Inazuma Eleven 3",
+    "fr": "Inazuma Eleven 3",
+    "it": "Inazuma Eleven 3",
+    "ja": "イナズマイレブン3",
+    "pt": "Inazuma Eleven 3",
+    "zh_hans": "闪电十一人3",
+    "zh_hant": "閃電十一人3"
+  },
+  "Inazuma Eleven GO 1": {
+    "de": "Inazuma Eleven GO 1",
+    "es": "Inazuma Eleven GO 1",
+    "fr": "Inazuma Eleven GO 1",
+    "it": "Inazuma Eleven GO 1",
+    "ja": "イナズマイレブンGO",
+    "pt": "Inazuma Eleven GO 1",
+    "zh_hans": "Inazuma Eleven GO 1",
+    "zh_hant": "Inazuma Eleven GO 1"
+  },
+  "Inazuma Eleven GO 2": {
+    "de": "Inazuma Eleven GO 2",
+    "es": "Inazuma Eleven GO 2",
+    "fr": "Inazuma Eleven GO 2",
+    "it": "Inazuma Eleven GO 2",
+    "ja": "イナズマイレブンGO2",
+    "pt": "Inazuma Eleven GO 2",
+    "zh_hans": "Inazuma Eleven GO 2",
+    "zh_hant": "Inazuma Eleven GO 2"
+  },
+  "Inazuma Eleven GO 3": {
+    "de": "Inazuma Eleven GO 3",
+    "es": "Inazuma Eleven GO 3",
+    "fr": "Inazuma Eleven GO 3",
+    "it": "Inazuma Eleven GO 3",
+    "ja": "イナズマイレブンGO3",
+    "pt": "Inazuma Eleven GO 3",
+    "zh_hans": "Inazuma Eleven GO 3",
+    "zh_hant": "Inazuma Eleven GO 3"
+  },
+  "Inazuma Eleven ARES": {
+    "de": "Inazuma Eleven ARES",
+    "es": "Inazuma Eleven ARES",
+    "fr": "Inazuma Eleven ARES",
+    "it": "Inazuma Eleven ARES",
+    "ja": "イナズマイレブン アレスの天秤",
+    "pt": "Inazuma Eleven ARES",
+    "zh_hans": "Inazuma Eleven ARES",
+    "zh_hant": "Inazuma Eleven ARES"
+  },
+  "Inazuma Eleven Orion": {
+    "de": "Inazuma Eleven Orion",
+    "es": "Inazuma Eleven Orion",
+    "fr": "Inazuma Eleven Orion",
+    "it": "Inazuma Eleven Orion",
+    "ja": "イナズマイレブン オリオンの刻印",
+    "pt": "Inazuma Eleven Orion",
+    "zh_hans": "Inazuma Eleven Orion",
+    "zh_hant": "Inazuma Eleven Orion"
+  },
+  "Inazuma Eleven Victory Road": {
+    "de": "Inazuma Eleven Victory Road",
+    "es": "Inazuma Eleven Victory Road",
+    "fr": "Inazuma Eleven Victory Road",
+    "it": "Inazuma Eleven Victory Road",
+    "ja": "イナズマイレブン 英雄たちのヴィクトリーロード",
+    "pt": "Inazuma Eleven Victory Road",
+    "zh_hans": "Inazuma Eleven Victory Road",
+    "zh_hant": "Inazuma Eleven Victory Road"
+  },
+  "Name": {
+    "de": "Name",
+    "es": "Nombre",
+    "fr": "Nom",
+    "it": "Nome",
+    "ja": "名前",
+    "pt": "Nome",
+    "zh_hans": "名称",
+    "zh_hant": "名稱"
+  },
+  "Id": {
+    "de": "ID",
+    "es": "ID",
+    "fr": "ID",
+    "it": "ID",
+    "ja": "ID",
+    "pt": "ID",
+    "zh_hans": "ID",
+    "zh_hant": "ID"
+  },
+  "No thumbnail available.": {
+    "de": "Keine Miniatur verfügbar.",
+    "es": "Sin miniatura disponible.",
+    "fr": "Aucune miniature disponible.",
+    "it": "Nessuna miniatura disponibile.",
+    "ja": "サムネイルはありません。",
+    "pt": "Sem miniatura disponível.",
+    "zh_hans": "暂无缩略图。",
+    "zh_hant": "暫無縮圖。"
+  },
+  "Select extracted Victory Road data": {
+    "de": "Entpackte Victory-Road-Daten auswählen",
+    "es": "Selecciona los datos extraídos de Victory Road",
+    "fr": "Sélectionnez les données extraites de Victory Road",
+    "it": "Seleziona i dati estratti di Victory Road",
+    "ja": "展開済みのVictory Roadデータを選択",
+    "pt": "Selecione os dados extraídos do Victory Road",
+    "zh_hans": "选择已提取的Victory Road数据",
+    "zh_hant": "選擇已擷取的Victory Road資料"
+  },
+  "Select the parent folder for a new VictoryTool export": {
+    "de": "Übergeordneten Ordner für den Export auswählen",
+    "es": "Selecciona la carpeta para la nueva exportación",
+    "fr": "Sélectionnez le dossier parent du nouvel export",
+    "it": "Seleziona la cartella per la nuova esportazione",
+    "ja": "新しいエクスポートの保存先フォルダーを選択",
+    "pt": "Selecione a pasta para a nova exportação",
+    "zh_hans": "选择新导出的父文件夹",
+    "zh_hant": "選擇新匯出的父資料夾"
+  },
+  "Select a VictoryTool character package": {
+    "de": "Charakterpaket auswählen",
+    "es": "Selecciona un paquete de personaje",
+    "fr": "Sélectionnez un paquet de personnage",
+    "it": "Seleziona un pacchetto personaggio",
+    "ja": "キャラクターパッケージを選択",
+    "pt": "Selecione um pacote de personagem",
+    "zh_hans": "选择角色包",
+    "zh_hant": "選擇角色套件"
+  },
+  "Select a VictoryTool character package to modify": {
+    "de": "Zu bearbeitendes Charakterpaket auswählen",
+    "es": "Selecciona un paquete de personaje para modificar",
+    "fr": "Sélectionnez un paquet à modifier",
+    "it": "Seleziona un pacchetto da modificare",
+    "ja": "編集するキャラクターパッケージを選択",
+    "pt": "Selecione um pacote para modificar",
+    "zh_hans": "选择要编辑的角色包",
+    "zh_hant": "選擇要編輯的角色套件"
+  },
+  "Select the export destination": {
+    "de": "Exportziel auswählen",
+    "es": "Selecciona el destino de exportación",
+    "fr": "Sélectionnez la destination de l'export",
+    "it": "Seleziona la destinazione dell'esportazione",
+    "ja": "エクスポート先を選択",
+    "pt": "Selecione o destino da exportação",
+    "zh_hans": "选择导出位置",
+    "zh_hant": "選擇匯出位置"
+  },
+  "Save character": {
+    "de": "Charakter speichern",
+    "es": "Guardar personaje",
+    "fr": "Enregistrer le personnage",
+    "it": "Salva personaggio",
+    "ja": "キャラクターを保存",
+    "pt": "Guardar personagem",
+    "zh_hans": "保存角色",
+    "zh_hant": "儲存角色"
+  },
+  "VictoryTool character package": {
+    "de": "VictoryTool-Charakterpaket",
+    "es": "Paquete de personaje de VictoryTool",
+    "fr": "Paquet de personnage VictoryTool",
+    "it": "Pacchetto personaggio VictoryTool",
+    "ja": "VictoryToolキャラクターパッケージ",
+    "pt": "Pacote de personagem VictoryTool",
+    "zh_hans": "VictoryTool角色包",
+    "zh_hant": "VictoryTool角色套件"
+  },
+  "Select a head model": {
+    "de": "Kopfmodell auswählen",
+    "es": "Selecciona un modelo de cabeza",
+    "fr": "Sélectionnez un modèle de tête",
+    "it": "Seleziona un modello della testa",
+    "ja": "頭のモデルを選択",
+    "pt": "Selecione um modelo de cabeça",
+    "zh_hans": "选择头部模型",
+    "zh_hant": "選擇頭部模型"
+  },
+  "Select a body model": {
+    "de": "Körpermodell auswählen",
+    "es": "Selecciona un modelo de cuerpo",
+    "fr": "Sélectionnez un modèle de corps",
+    "it": "Seleziona un modello del corpo",
+    "ja": "体のモデルを選択",
+    "pt": "Selecione um modelo de corpo",
+    "zh_hans": "选择身体模型",
+    "zh_hant": "選擇身體模型"
+  },
+  "Level-5 character models": {
+    "de": "Level-5-Charaktermodelle",
+    "es": "Modelos de personaje de Level-5",
+    "fr": "Modèles de personnage Level-5",
+    "it": "Modelli personaggio Level-5",
+    "ja": "Level-5キャラクターモデル",
+    "pt": "Modelos de personagem Level-5",
+    "zh_hans": "Level-5角色模型",
+    "zh_hant": "Level-5角色模型"
+  },
+  "Save one-character package": {
+    "de": "Einzelcharakterpaket speichern",
+    "es": "Guardar paquete de un personaje",
+    "fr": "Enregistrer le paquet d'un personnage",
+    "it": "Salva pacchetto di un personaggio",
+    "ja": "キャラクター1人分のパッケージを保存",
+    "pt": "Guardar pacote de uma personagem",
+    "zh_hans": "保存单个角色包",
+    "zh_hant": "儲存單一角色套件"
+  },
+  "Screen colour picking is not available on this platform.": {
+    "de": "Die Bildschirmpipette ist auf dieser Plattform nicht verfügbar.",
+    "es": "El cuentagotas de pantalla no está disponible en esta plataforma.",
+    "fr": "La pipette d'écran n'est pas disponible sur cette plateforme.",
+    "it": "Il contagocce schermo non è disponibile su questa piattaforma.",
+    "ja": "この環境では画面から色を取得できません。",
+    "pt": "O conta-gotas de ecrã não está disponível nesta plataforma.",
+    "zh_hans": "此平台不支持屏幕取色。",
+    "zh_hant": "此平台不支援螢幕取色。"
+  },
+  "Click any screen colour to capture it.": {
+    "de": "Klicke auf eine Bildschirmfarbe, um sie zu übernehmen.",
+    "es": "Haz clic sobre cualquier color de la pantalla para capturarlo.",
+    "fr": "Cliquez sur une couleur à l'écran pour la capturer.",
+    "it": "Fai clic su un colore dello schermo per acquisirlo.",
+    "ja": "画面上の色をクリックして取得してください。",
+    "pt": "Clique numa cor do ecrã para a capturar.",
+    "zh_hans": "点击屏幕上的颜色以取色。",
+    "zh_hant": "點擊螢幕上的顏色以取色。"
+  },
+  "Skin colour captured.": {
+    "de": "Hautfarbe übernommen.",
+    "es": "Color de piel capturado.",
+    "fr": "Couleur de peau capturée.",
+    "it": "Colore della pelle acquisito.",
+    "ja": "肌の色を取得しました。",
+    "pt": "Cor da pele capturada.",
+    "zh_hans": "已获取肤色。",
+    "zh_hant": "已取得膚色。"
+  },
+  "The screen colour could not be captured.": {
+    "de": "Bildschirmfarbe konnte nicht erfasst werden.",
+    "es": "No se pudo capturar el color de pantalla.",
+    "fr": "Impossible de capturer la couleur à l'écran.",
+    "it": "Impossibile acquisire il colore dello schermo.",
+    "ja": "画面の色を取得できませんでした。",
+    "pt": "Não foi possível capturar a cor do ecrã.",
+    "zh_hans": "无法获取屏幕颜色。",
+    "zh_hant": "無法取得螢幕顏色。"
+  },
+  "Select a file of this type: {0}.": {
+    "de": "Wähle eine Datei dieses Typs: {0}.",
+    "es": "Selecciona un archivo de este tipo: {0}.",
+    "fr": "Sélectionnez un fichier de ce type : {0}.",
+    "it": "Seleziona un file di questo tipo: {0}.",
+    "ja": "次の形式のファイルを選択してください：{0}。",
+    "pt": "Selecione um ficheiro deste tipo: {0}.",
+    "zh_hans": "请选择以下类型的文件：{0}。",
+    "zh_hant": "請選擇以下類型的檔案：{0}。"
+  },
+  "Choose a base character": {
+    "de": "Basischarakter wählen",
+    "es": "Elige un personaje base",
+    "fr": "Choisissez un personnage de base",
+    "it": "Scegli un personaggio di base",
+    "ja": "ベースキャラクターを選択",
+    "pt": "Escolha um personagem base",
+    "zh_hans": "选择基础角色",
+    "zh_hant": "選擇基礎角色"
+  },
+  "Sort by": {
+    "de": "Sortieren nach",
+    "es": "Ordenar por",
+    "fr": "Trier par",
+    "it": "Ordina per",
+    "ja": "並べ替え",
+    "pt": "Ordenar por",
+    "zh_hans": "排序依据",
+    "zh_hant": "排序依據"
+  },
+  "Sort direction": {
+    "de": "Sortierreihenfolge",
+    "es": "Orden",
+    "fr": "Ordre de tri",
+    "it": "Ordine",
+    "ja": "並び順",
+    "pt": "Ordem",
+    "zh_hans": "排序顺序",
+    "zh_hant": "排序順序"
+  },
+  "Ascending": {
+    "de": "Aufsteigend",
+    "es": "Creciente",
+    "fr": "Croissant",
+    "it": "Crescente",
+    "ja": "昇順",
+    "pt": "Crescente",
+    "zh_hans": "升序",
+    "zh_hant": "升序"
+  },
+  "Descending": {
+    "de": "Absteigend",
+    "es": "Decreciente",
+    "fr": "Décroissant",
+    "it": "Decrescente",
+    "ja": "降順",
+    "pt": "Decrescente",
+    "zh_hans": "降序",
+    "zh_hant": "降序"
+  },
+  "Filters": {
+    "de": "Filter",
+    "es": "Filtros",
+    "fr": "Filtres",
+    "it": "Filtri",
+    "ja": "絞り込み",
+    "pt": "Filtros",
+    "zh_hans": "筛选",
+    "zh_hant": "篩選"
+  },
+  "All": {
+    "de": "Alle",
+    "es": "Todos",
+    "fr": "Tous",
+    "it": "Tutti",
+    "ja": "すべて",
+    "pt": "Todos",
+    "zh_hans": "全部",
+    "zh_hant": "全部"
+  },
+  "Teams": {
+    "de": "Teams",
+    "es": "Equipos",
+    "fr": "Équipes",
+    "it": "Squadre",
+    "ja": "チーム",
+    "pt": "Equipes",
+    "zh_hans": "队伍",
+    "zh_hant": "隊伍"
+  },
+  "Search teams": {
+    "de": "Teams suchen",
+    "es": "Buscar equipos",
+    "fr": "Rechercher des équipes",
+    "it": "Cerca squadre",
+    "ja": "チームを検索",
+    "pt": "Buscar equipes",
+    "zh_hans": "搜索队伍",
+    "zh_hant": "搜尋隊伍"
+  },
+  "Reset filters": {
+    "de": "Filter zurücksetzen",
+    "es": "Restablecer filtros",
+    "fr": "Réinitialiser les filtres",
+    "it": "Reimposta filtri",
+    "ja": "絞り込みを解除",
+    "pt": "Redefinir filtros",
+    "zh_hans": "重置筛选",
+    "zh_hant": "重設篩選"
+  },
+  "Team": {
+    "de": "Team",
+    "es": "Equipo",
+    "fr": "Équipe",
+    "it": "Squadra",
+    "ja": "チーム",
+    "pt": "Equipe",
+    "zh_hans": "队伍",
+    "zh_hant": "隊伍"
+  },
+  "ID": {
+    "de": "ID",
+    "es": "ID",
+    "fr": "ID",
+    "it": "ID",
+    "ja": "ID",
+    "pt": "ID",
+    "zh_hans": "ID",
+    "zh_hant": "ID"
+  },
+  "Both": {
+    "de": "Beide",
+    "es": "Ambas",
+    "fr": "Les deux",
+    "it": "Entrambe",
+    "ja": "両方",
+    "pt": "Ambas",
+    "zh_hans": "两者",
+    "zh_hant": "兩者"
+  },
+  "Choose animation types": {
+    "de": "Animationstypen wählen",
+    "es": "Elige tipos de animación",
+    "fr": "Choisir les types d’animation",
+    "it": "Scegli i tipi di animazione",
+    "ja": "アニメーション種別を選択",
+    "pt": "Escolha os tipos de animação",
+    "zh_hans": "选择动画类型",
+    "zh_hant": "選擇動畫類型"
+  },
+  "None": {
+    "de": "Keine",
+    "es": "Ninguna",
+    "fr": "Aucune",
+    "it": "Nessuna",
+    "ja": "なし",
+    "pt": "Nenhuma",
+    "zh_hans": "无",
+    "zh_hant": "無"
+  }
+}

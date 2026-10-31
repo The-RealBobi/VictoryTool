@@ -11,12 +11,15 @@ public sealed class DefaultUniformCatalog
     private readonly IReadOnlyDictionary<(int Gender, int UniformVariant), UniformAssetDescriptor> _assets;
     private readonly IReadOnlyDictionary<(int UniformModel, int Gender, int UniformVariant), UniformAssetDescriptor> _modelAssets;
     private readonly IReadOnlyDictionary<(uint UniformInfo, bool Goalkeeper), IReadOnlyList<int>> _uniformKitModels;
+    private readonly IReadOnlySet<int> _armorModels;
 
     public DefaultUniformCatalog(
         IReadOnlyDictionary<(int Gender, int UniformVariant), UniformAssetDescriptor> assets,
         IReadOnlyDictionary<(int UniformModel, int Gender, int UniformVariant), UniformAssetDescriptor>? modelAssets = null,
-        IReadOnlyDictionary<(uint UniformInfo, bool Goalkeeper), IReadOnlyList<int>>? uniformKitModels = null)
+        IReadOnlyDictionary<(uint UniformInfo, bool Goalkeeper), IReadOnlyList<int>>? uniformKitModels = null,
+        IReadOnlySet<int>? armorModels = null)
     {
+        _armorModels = armorModels ?? new HashSet<int>();
         _assets = assets ?? throw new ArgumentNullException(nameof(assets));
         _modelAssets = modelAssets ?? new Dictionary<(int UniformModel, int Gender, int UniformVariant), UniformAssetDescriptor>();
         _uniformKitModels = uniformKitModels ?? new Dictionary<(uint, bool), IReadOnlyList<int>>();
@@ -45,10 +48,12 @@ public sealed class DefaultUniformCatalog
             if (TryReadAsset(profile, platform, FamilyName, member.Suffix, cancellationToken, out var asset))
                 assets[(member.Gender, member.Variant)] = asset;
         }
-        var catalog = new DefaultUniformCatalog(
-            assets,
-            LoadModelAssets(profile, platform, cancellationToken),
-            LoadUniformKitModels(profile, cancellationToken));
+        if (!assets.ContainsKey((1, 3))
+            && TryReadAsset(profile, platform, "u010101_10", "01", cancellationToken, out var largeMale))
+            assets[(1, 3)] = largeMale;
+        var models = LoadModelAssets(profile, platform, cancellationToken, out var armorModels);
+        var catalog = new DefaultUniformCatalog(assets, models,
+            LoadUniformKitModels(profile, cancellationToken), armorModels);
         GlobalLog.Info("uniform_catalog_loaded", new Dictionary<string, object?>
         {
             ["assetCount"] = assets.Count,
@@ -56,6 +61,8 @@ public sealed class DefaultUniformCatalog
         });
         return catalog;
     }
+
+    public bool IsArmorModel(int model) => _armorModels.Contains(model);
 
     public bool TryResolve(
         int gender,
@@ -101,8 +108,11 @@ public sealed class DefaultUniformCatalog
     private static IReadOnlyDictionary<(int UniformModel, int Gender, int UniformVariant), UniformAssetDescriptor> LoadModelAssets(
         GameDumpProfile profile,
         string platform,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        out IReadOnlySet<int> armorModels)
     {
+        var armor = new HashSet<int>();
+        armorModels = armor;
         var directory = Path.Combine(profile.GameDataPath, "character");
         if (!Directory.Exists(directory)) return new Dictionary<(int, int, int), UniformAssetDescriptor>();
         CfgBinDocument? selected = null;
@@ -138,6 +148,7 @@ public sealed class DefaultUniformCatalog
                 || entry.Values[1].Value is not string resourceKey)
                 continue;
             var stem = Path.GetFileNameWithoutExtension(resourceKey);
+            if (stem.StartsWith("ka", StringComparison.OrdinalIgnoreCase)) armor.Add(model);
             if (string.IsNullOrWhiteSpace(stem)
                 || !stem.StartsWith("u", StringComparison.OrdinalIgnoreCase))
                 continue;

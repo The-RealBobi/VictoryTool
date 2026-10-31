@@ -24,15 +24,16 @@ public static class GameTextResolver
         foreach (var node in document.Nodes)
         {
             var resolved = node is GameTextCharacterReference reference
-                ? references.Resolve(reference.Kind, reference.Tag, locale) ?? reference.Source
+                ? references.Resolve(reference.Kind, reference.Tag, locale)
                 : null;
             if (resolved is null)
             {
-                Append(nodes, node);
+                Append(nodes, node is GameTextCharacterReference unresolved ? new GameTextLiteral(unresolved.Source) : node);
                 continue;
             }
             resolvedCount++;
-            Append(nodes, new GameTextLiteral(resolved));
+            foreach (var resolvedNode in GameTextParser.Parse(resolved).Nodes)
+                Append(nodes, resolvedNode);
         }
 
         GlobalLog.Debug("game_text_resolved", new Dictionary<string, object?>

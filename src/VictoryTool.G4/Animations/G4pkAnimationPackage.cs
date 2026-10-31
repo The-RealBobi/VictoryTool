@@ -124,12 +124,19 @@ public sealed class G4pkAnimationPackage
             var relative = BinaryPrimitives.ReadInt16LittleEndian(
                 _source.AsSpan(_stringBase + index * 2, 2));
             var otherNameOffset = checked(_stringBase + relative);
-            if (index != resourceIndex && otherNameOffset == targetNameOffset)
+            if (index != resourceIndex && otherNameOffset <= targetNameOffset
+                && otherNameOffset + Encoding.UTF8.GetByteCount(PackageEntries[index].Name) + 1 > targetNameOffset)
                 nameIsShared = true;
             if (otherNameOffset > targetNameOffset && otherNameOffset < nameSlotEnd)
                 nameSlotEnd = otherNameOffset;
         }
 
+        if (!nameIsShared && targetNameOffset >= _stringBase
+            && !string.Equals(target.Name, newName, StringComparison.Ordinal))
+        {
+            var oldNameLength = Math.Min(Encoding.UTF8.GetByteCount(target.Name) + 1, nameSlotEnd - targetNameOffset);
+            CollectionsMarshal.AsSpan(output).Slice(targetNameOffset, oldNameLength).Clear();
+        }
         int newNameOffset;
         if (!nameIsShared && targetNameOffset >= _stringBase && targetNameOffset + encodedName.Length <= nameSlotEnd)
         {

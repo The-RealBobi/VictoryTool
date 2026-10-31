@@ -1,68 +1,36 @@
-using System.Buffers.Binary;
+using CFGBINManager;
 
 namespace VictoryTool.CfgBin;
 
 public sealed class CharaFaceIconConfigWriter
 {
-    private const int HeaderSize = 0x3C;
-    private const int RootRecordSize = 0x20;
-
     public byte[] CloneSceneSettings(ReadOnlySpan<byte> source, uint sourceCharacterId, uint destinationCharacterId)
     {
-        global::System.Diagnostics.Trace.WriteLine(
-            $"face_icon_scene_clone_started bytes={source.Length} sourceId={sourceCharacterId} destinationId={destinationCharacterId}");
-        var document = RdbnpDocument.Read(source);
-        var sceneList = document.Lists.Single(list => list.Name == "m_CharaFaceIconSceneDataList");
-        var infoList = document.Lists.Single(list => list.Name == "m_CharaFaceIconInfoList");
-        ValidateSchema(sceneList, infoList);
-        if (infoList.Rows.Any(row => row.GetUInt32("charaId") == destinationCharacterId))
-            throw new InvalidDataException("The destination character already has face-icon scene settings.");
-        var sourceRow = infoList.Rows.Single(row => row.GetUInt32("charaId") == sourceCharacterId);
-        var sceneReference = sourceRow.GetTuple("sceneDataRef");
-        if (sceneReference.Offset < 0 || sceneReference.Count <= 0
-            || sceneReference.Offset > sceneList.Rows.Count - sceneReference.Count)
-            throw new InvalidDataException("The source face-icon scene range is invalid.");
-
-        var dataBase = checked(ReadInt16(source, 0x0A) * 4);
-        var rootOffset = RelativeWords(source, 0x2C, dataBase);
-        var valueOffset = RelativeWords(source, 0x36, dataBase);
-        var stringOffset = checked(dataBase + ReadInt32(source, 0x38));
-        var sceneRoot = ReadRoot(source, rootOffset);
-        var infoRoot = ReadRoot(source, rootOffset + RootRecordSize);
-        var sceneBytes = checked(sceneReference.Count * sceneRoot.RowSize);
-        var sourceSceneOffset = checked(valueOffset + sceneRoot.RelativeOffset
-            + sceneReference.Offset * sceneRoot.RowSize);
-        var infoEnd = checked(valueOffset + infoRoot.RelativeOffset + infoRoot.RowSize * infoRoot.RowCount);
-        if (infoEnd != stringOffset)
-            throw new InvalidDataException("The face-icon RDBNP has an unsupported value/string layout.");
-
-        var result = new byte[checked(source.Length + sceneBytes + infoRoot.RowSize)];
-        source[..checked(valueOffset + infoRoot.RelativeOffset)].CopyTo(result);
-        source.Slice(sourceSceneOffset, sceneBytes).CopyTo(
-            result.AsSpan(checked(valueOffset + infoRoot.RelativeOffset), sceneBytes));
-        var shiftedInfoOffset = checked(valueOffset + infoRoot.RelativeOffset + sceneBytes);
-        source.Slice(checked(valueOffset + infoRoot.RelativeOffset), infoRoot.RowSize * infoRoot.RowCount)
-            .CopyTo(result.AsSpan(shiftedInfoOffset));
-        var appendedInfoOffset = checked(shiftedInfoOffset + infoRoot.RowSize * infoRoot.RowCount);
-        BinaryPrimitives.WriteUInt32LittleEndian(result.AsSpan(appendedInfoOffset), destinationCharacterId);
-        BinaryPrimitives.WriteInt16LittleEndian(
-            result.AsSpan(appendedInfoOffset + 4), checked((short)sceneRoot.RowCount));
-        BinaryPrimitives.WriteInt16LittleEndian(
-            result.AsSpan(appendedInfoOffset + 6), sceneReference.Count);
-        source[stringOffset..].CopyTo(result.AsSpan(checked(stringOffset + sceneBytes + infoRoot.RowSize)));
-
-        BinaryPrimitives.WriteInt32LittleEndian(
-            result.AsSpan(0x0C), checked(ReadInt32(source, 0x0C) + sceneBytes + infoRoot.RowSize));
-        BinaryPrimitives.WriteInt32LittleEndian(
-            result.AsSpan(0x38), checked(ReadInt32(source, 0x38) + sceneBytes + infoRoot.RowSize));
-        WriteRoot(result, rootOffset, sceneRoot with { RowCount = sceneRoot.RowCount + sceneReference.Count });
-        WriteRoot(result, rootOffset + RootRecordSize, infoRoot with
-        {
-            RelativeOffset = infoRoot.RelativeOffset + sceneBytes,
-            RowCount = infoRoot.RowCount + 1,
-        });
-        global::System.Diagnostics.Trace.WriteLine(
-            $"face_icon_scene_clone_completed bytes={result.Length} sceneRowsAdded={sceneReference.Count}");
+        var document = CfgBinSchema.Read(source);
+        var view = new RdbnpDocument(document);
+        var sceneView = view.Lists.Single(list => list.Name == "m_CharaFaceIconSceneDataList");
+        var infoView = view.Lists.Single(list => list.Name == "m_CharaFaceIconInfoList");
+        ValidateSchema(sceneView, infoView);
+        if (infoView.Rows.Any(row => row.GetUInt32("charaId") == destinationCharacterId)) throw new InvalidDataException("The destination character already has face-icon scene settings.");
+        int sourceIndex = Enumerable.Range(0, infoView.Rows.Count).Single(index => infoView.Rows[index].GetUInt32("charaId") == sourceCharacterId);
+        var range = infoView.Rows[sourceIndex].GetTuple("sceneDataRef");
+        if (range.Offset < 0 || range.Count <= 0 || range.Offset > sceneView.Rows.Count - range.Count) throw new InvalidDataException("The source face-icon scene range is invalid.");
+        var scenes = document.GetList(sceneView.Name);
+        var info = document.GetList(infoView.Name);
+        int start = scenes.Rows.Count;
+        var copies = scenes.Rows.Skip(range.Offset).Take(range.Count).Select(row => row.Clone()).ToArray();
+        foreach (var row in copies) document.InsertListRow(scenes.Name, scenes.Rows.Count, row);
+        var character = info.Rows[sourceIndex].Clone();
+        character.SetValue("charaId", character.GetValue("charaId") with { Bits = destinationCharacterId });
+        character.SetValue("sceneDataRef", CfgValue.Range16(checked((ushort)start), checked((ushort)copies.Length)));
+        document.InsertListRow(info.Name, info.Rows.Count, character);
+        byte[] result = BinCodec.Write(document);
+        var restored = RdbnpDocument.Read(result);
+        var restoredScenes = restored.Lists.Single(list => list.Name == scenes.Name);
+        var restoredInfo = restored.Lists.Single(list => list.Name == info.Name);
+        if (restoredScenes.Rows.Count != start + copies.Length || restoredInfo.Rows.Count != infoView.Rows.Count + 1 ||
+            restoredInfo.Rows.Single(row => row.GetUInt32("charaId") == destinationCharacterId).GetTuple("sceneDataRef") != new RdbnpTuple(checked((short)start), range.Count))
+            throw new InvalidDataException("Cloned face-icon scenes failed read-back validation.");
         return result;
     }
 
@@ -75,21 +43,4 @@ public sealed class CharaFaceIconConfigWriter
             throw new InvalidDataException("The RDBNP is not the verified character face-icon configuration schema.");
     }
 
-    private static Root ReadRoot(ReadOnlySpan<byte> source, int offset) => new(
-        ReadInt32(source, offset + 4), ReadInt32(source, offset + 8), ReadInt32(source, offset + 12));
-
-    private static void WriteRoot(Span<byte> destination, int offset, Root root)
-    {
-        BinaryPrimitives.WriteInt32LittleEndian(destination[(offset + 4)..], root.RelativeOffset);
-        BinaryPrimitives.WriteInt32LittleEndian(destination[(offset + 8)..], root.RowSize);
-        BinaryPrimitives.WriteInt32LittleEndian(destination[(offset + 12)..], root.RowCount);
-    }
-
-    private static int RelativeWords(ReadOnlySpan<byte> source, int offset, int dataBase) =>
-        checked(dataBase + ReadInt16(source, offset) * 4);
-    private static short ReadInt16(ReadOnlySpan<byte> source, int offset) =>
-        BinaryPrimitives.ReadInt16LittleEndian(source[offset..]);
-    private static int ReadInt32(ReadOnlySpan<byte> source, int offset) =>
-        BinaryPrimitives.ReadInt32LittleEndian(source[offset..]);
-    private sealed record Root(int RelativeOffset, int RowSize, int RowCount);
 }

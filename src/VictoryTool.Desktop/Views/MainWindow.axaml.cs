@@ -1,3 +1,5 @@
+using VictoryTool.Desktop.Localization;
+using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -5,6 +7,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using VictoryTool.Application.Projects;
 
 namespace VictoryTool.Desktop.Views;
@@ -13,10 +16,27 @@ public sealed partial class MainWindow : Window
 {
     private DispatcherTimer? _screenColorPickTimer;
     private bool _awaitingColorPickRelease;
+    private bool _closingApproved;
+    private ViewModels.MainWindowViewModel? _observedViewModel;
+
+    private string Ui(string english) => WorkflowText.ForLocale(
+        (DataContext as VictoryTool.Desktop.ViewModels.MainWindowViewModel)?.SelectedLanguageCode ?? "en", english);
 
     public MainWindow()
     {
         AvaloniaXamlLoader.Load(this);
+        DataContextChanged += (_, _) => ObserveViewModel();
+        Opened += (_, _) => RestoreScreenFocus();
+        Closing += HandleClosing;
+        Closed += (_, _) =>
+        {
+            _screenColorPickTimer?.Stop();
+            if (_observedViewModel is not null)
+            {
+                _observedViewModel.PropertyChanged -= ViewModelPropertyChanged;
+                _observedViewModel.Dispose();
+            }
+        };
         SizeChanged += (_, args) =>
         {
             if (DataContext is ViewModels.MainWindowViewModel viewModel)
@@ -26,11 +46,88 @@ public sealed partial class MainWindow : Window
         };
     }
 
+    private void ObserveViewModel()
+    {
+        if (_observedViewModel is not null)
+            _observedViewModel.PropertyChanged -= ViewModelPropertyChanged;
+        _observedViewModel = DataContext as ViewModels.MainWindowViewModel;
+        if (_observedViewModel is not null)
+            _observedViewModel.PropertyChanged += ViewModelPropertyChanged;
+        Dispatcher.UIThread.Post(RestoreScreenFocus);
+    }
+
+    private void ViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName is nameof(ViewModels.MainWindowViewModel.WizardStep)
+            or nameof(ViewModels.MainWindowViewModel.IsOnboardingVisible)
+            or nameof(ViewModels.MainWindowViewModel.IsMainMenuVisible)
+            or nameof(ViewModels.MainWindowViewModel.IsIncorporationVisible)
+            or nameof(ViewModels.MainWindowViewModel.IsUnsavedChangesPromptVisible)
+            or nameof(ViewModels.MainWindowViewModel.IsRecoveryCloseFailureVisible)
+            or nameof(ViewModels.MainWindowViewModel.IsPostSavePromptVisible)
+            or nameof(ViewModels.MainWindowViewModel.CanInteract)
+            or nameof(ViewModels.MainWindowViewModel.IsBusy)
+            or nameof(ViewModels.MainWindowViewModel.CanCancelOperation))
+            Dispatcher.UIThread.Post(RestoreScreenFocus);
+    }
+
+    private void RestoreScreenFocus()
+    {
+        if (!IsVisible || DataContext is not ViewModels.MainWindowViewModel viewModel)
+            return;
+        if (viewModel.IsBusy)
+        {
+            if (viewModel.CanCancelOperation)
+                this.FindControl<Button>("CancelExportButton")?.Focus(NavigationMethod.Tab);
+            else
+                this.FindControl<Border>("BusyOverlay")?.Focus();
+            return;
+        }
+        var screen = viewModel.IsRecoveryCloseFailureVisible ? "RecoveryCloseFailurePrompt"
+            : viewModel.IsUnsavedChangesPromptVisible ? "UnsavedChangesPrompt"
+            : viewModel.IsPostSavePromptVisible ? "PostSavePrompt"
+            : viewModel.IsOnboardingVisible ? "OnboardingScreen"
+            : viewModel.IsMainMenuVisible ? "MainMenuScreen"
+            : viewModel.IsIncorporationVisible ? "IncorporationScreen"
+            : viewModel.IsCharacterStep ? "CharacterScreen"
+            : viewModel.IsDetailsStep ? "DetailsScreen"
+            : viewModel.IsAttributesStep ? "AttributesScreen"
+            : viewModel.IsSkillsStep ? "SkillsScreen"
+            : viewModel.IsAppearanceStep ? "AppearanceScreen"
+            : viewModel.IsAcquisitionStep ? "AcquisitionScreen"
+            : "ReviewScreen";
+        var root = this.FindControl<Control>(screen);
+        if (root is null) return;
+        var focused = FocusManager?.GetFocusedElement();
+        if (root.GetVisualDescendants().Any(control => ReferenceEquals(control, focused)))
+            return;
+        root.GetVisualDescendants().OfType<Control>()
+            .FirstOrDefault(control => control.Focusable && control.IsEffectivelyEnabled && control.IsEffectivelyVisible)
+            ?.Focus(NavigationMethod.Tab);
+    }
+
+    private void HandleClosing(object? sender, WindowClosingEventArgs args)
+    {
+        if (_closingApproved || DataContext is not ViewModels.MainWindowViewModel viewModel)
+            return;
+        args.Cancel = true;
+        var handlingClose = true;
+        viewModel.RequestClose(() =>
+        {
+            _closingApproved = true;
+            if (handlingClose)
+                args.Cancel = false;
+            else
+                Close();
+        });
+        handlingClose = false;
+    }
+
     private async void SelectDumpFolder(object? sender, RoutedEventArgs eventArgs)
     {
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = "Select extracted Victory Road data",
+            Title = Ui("Select extracted Victory Road data"),
             AllowMultiple = false,
         });
 
@@ -42,7 +139,7 @@ public sealed partial class MainWindow : Window
     {
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = "Select the parent folder for a new VictoryTool export",
+            Title = Ui("Select the parent folder for a new VictoryTool export"),
             AllowMultiple = false,
         });
 
@@ -54,11 +151,11 @@ public sealed partial class MainWindow : Window
     {
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Select a VictoryTool character package",
+            Title = Ui("Select a VictoryTool character package"),
             AllowMultiple = false,
             FileTypeFilter =
             [
-                new FilePickerFileType("VictoryTool character package")
+                new FilePickerFileType(Ui("VictoryTool character package"))
                 {
                     Patterns = ["*.vrchara"],
                 },
@@ -73,39 +170,45 @@ public sealed partial class MainWindow : Window
     {
         if (DataContext is not ViewModels.MainWindowViewModel viewModel
             || sender is not Button button
-            || button.DataContext is not BatchEntry entry)
+            || button.DataContext is not ViewModels.BatchPackageRow row)
             return;
-        viewModel.RemoveBatchEntry(entry);
+        viewModel.RemoveBatchEntry(row.Entry);
     }
 
     private async void SelectModificationPackage(object? sender, RoutedEventArgs eventArgs)
     {
-        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        if (DataContext is not ViewModels.MainWindowViewModel viewModel) return;
+        await viewModel.LoadModificationWithPickerAsync(async () =>
         {
-            Title = "Select a VictoryTool character package to modify",
-            AllowMultiple = false,
-            FileTypeFilter = [new FilePickerFileType("VictoryTool character package") { Patterns = ["*.vrchara"] }],
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = Ui("Select a VictoryTool character package to modify"),
+                AllowMultiple = false,
+                FileTypeFilter = [new FilePickerFileType(Ui("VictoryTool character package")) { Patterns = ["*.vrchara"] }],
+            });
+            return files.Count == 1 ? files[0].Path.LocalPath : null;
         });
-        if (files.Count == 1 && DataContext is ViewModels.MainWindowViewModel viewModel)
-            await viewModel.LoadModificationAsync(files[0].Path.LocalPath);
+    }
+
+    private void AdvanceWorkflow(object? sender, RoutedEventArgs eventArgs)
+    {
+        if (DataContext is not ViewModels.MainWindowViewModel viewModel) return;
+        if (viewModel.IsIncorporationVisible) ExportBatch(sender, eventArgs);
+        else viewModel.NextWizardStepCommand.Execute(null);
     }
 
     private async void ExportBatch(object? sender, RoutedEventArgs eventArgs)
     {
         if (DataContext is not ViewModels.MainWindowViewModel viewModel) return;
-        if (string.IsNullOrWhiteSpace(viewModel.ExportOutputPath))
+        await viewModel.ExportBatchAsync(async () =>
         {
             var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
             {
-                Title = "Select the export destination",
+                Title = Ui("Select the export destination"),
                 AllowMultiple = false,
             });
-            if (folders.Count != 1) return;
-            viewModel.SetGeneratedExportOutputPath(GetAvailableExportPath(folders[0].Path.LocalPath));
-        }
-        await viewModel.PreviewExportAsync();
-        if (viewModel.CurrentExportPlan?.CanExport == true)
-            await viewModel.ExecuteExportAsync();
+            return folders.Count == 1 ? GetAvailableExportPath(folders[0].Path.LocalPath) : null;
+        });
     }
 
     private void CancelExport(object? sender, RoutedEventArgs eventArgs)
@@ -145,62 +248,52 @@ public sealed partial class MainWindow : Window
 
     private async void SaveCharacterPackage(object? sender, RoutedEventArgs eventArgs)
     {
-        if (DataContext is not ViewModels.MainWindowViewModel { ActiveDraft: { } draft } viewModel)
-            return;
-
-        if (viewModel.HasModificationSource)
+        if (DataContext is not ViewModels.MainWindowViewModel viewModel) return;
+        await viewModel.SaveDraftWithPickerAsync(async draft =>
         {
-            await viewModel.SaveDraftAsync();
-            return;
-        }
-
-        var language = string.Equals(viewModel.SelectedLanguageCode, "es", StringComparison.OrdinalIgnoreCase)
-            ? "Guardar personaje"
-            : "Save character";
-        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
-        {
-            Title = language,
-            SuggestedFileName = GetSuggestedPackageFileName(draft.DisplayName),
-            DefaultExtension = "vrchara",
-            FileTypeChoices =
-            [
-                new FilePickerFileType("VictoryTool character package")
-                {
-                    Patterns = ["*.vrchara"],
-                },
-            ],
+            var language = Ui("Save character");
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = language,
+                SuggestedFileName = GetSuggestedPackageFileName(draft.DisplayName),
+                DefaultExtension = "vrchara",
+                FileTypeChoices =
+                [
+                    new FilePickerFileType(Ui("VictoryTool character package"))
+                    {
+                        Patterns = ["*.vrchara"],
+                    },
+                ],
+            });
+            return file?.Path.LocalPath;
         });
-
-        if (file is null) return;
-        viewModel.DraftPackagePath = file.Path.LocalPath;
-        await viewModel.SaveDraftAsync();
     }
 
     private async void SelectStandardPortrait(object? sender, RoutedEventArgs eventArgs)
     {
         if (DataContext is ViewModels.MainWindowViewModel viewModel
-            && await SelectAppearanceFileAsync("Select the normal face", "Victory Road portrait", "*.g4tx", "*.png") is { } path)
+            && await SelectAppearanceFileAsync(viewModel.WizardText.NormalFace, viewModel.WizardText.NormalFace, "*.g4tx", "*.png") is { } path)
             viewModel.ActiveDraftStandardPortraitPath = path;
     }
 
     private async void SelectUniformPortrait(object? sender, RoutedEventArgs eventArgs)
     {
         if (DataContext is ViewModels.MainWindowViewModel viewModel
-            && await SelectAppearanceFileAsync("Select the face without rear hair", "Victory Road portrait", "*.g4tx", "*.png") is { } path)
+            && await SelectAppearanceFileAsync(viewModel.WizardText.FaceWithoutRearHair, viewModel.WizardText.FaceWithoutRearHair, "*.g4tx", "*.png") is { } path)
             viewModel.ActiveDraftUniformPortraitPath = path;
     }
 
     private async void SelectHeadModel(object? sender, RoutedEventArgs eventArgs)
     {
         if (DataContext is ViewModels.MainWindowViewModel viewModel
-            && await SelectAppearanceFileAsync("Select the 3D head model", "Victory Road 3D model", "*.g4md") is { } path)
+            && await SelectAppearanceFileAsync(viewModel.WizardText.Model3D, viewModel.WizardText.Model3D, "*.g4md") is { } path)
             viewModel.ActiveDraftHeadModelPath = path;
     }
 
     private async void SelectUniformModel(object? sender, RoutedEventArgs eventArgs)
     {
         if (DataContext is ViewModels.MainWindowViewModel viewModel
-            && await SelectAppearanceFileAsync("Select the custom uniform model", "Victory Road uniform model", "*.g4md") is { } path)
+            && await SelectAppearanceFileAsync(viewModel.WizardText.Uniform, viewModel.WizardText.Model3D, "*.g4md") is { } path)
         {
             viewModel.ActiveDraftUniformModelPath = path;
         }
@@ -209,7 +302,7 @@ public sealed partial class MainWindow : Window
     private async void SelectShoesModel(object? sender, RoutedEventArgs eventArgs)
     {
         if (DataContext is ViewModels.MainWindowViewModel viewModel
-            && await SelectAppearanceFileAsync("Select the custom shoes model", "Victory Road 3D model", "*.g4md") is { } path)
+            && await SelectAppearanceFileAsync(viewModel.WizardText.Shoes, viewModel.WizardText.Model3D, "*.g4md") is { } path)
             viewModel.ActiveDraftShoesModelPath = path;
     }
 
@@ -235,9 +328,7 @@ public sealed partial class MainWindow : Window
         if (DataContext is not ViewModels.MainWindowViewModel viewModel) return;
         if (!ScreenColorSampler.IsSupported)
         {
-            viewModel.SetUserStatusMessage(viewModel.SelectedLanguageCode == "es"
-                ? "El cuentagotas de pantalla no está disponible en esta plataforma."
-                : "Screen colour picking is not available on this platform.");
+            viewModel.SetUserErrorStatusMessage(Ui("Screen colour picking is not available on this platform."));
             return;
         }
 
@@ -246,9 +337,7 @@ public sealed partial class MainWindow : Window
         _screenColorPickTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
         _screenColorPickTimer.Tick += SampleScreenColorOnNextClick;
         _screenColorPickTimer.Start();
-        viewModel.SetUserStatusMessage(viewModel.SelectedLanguageCode == "es"
-            ? "Haz clic sobre cualquier color de la pantalla para capturarlo."
-            : "Click any screen colour to capture it.");
+        viewModel.SetUserStatusMessage(Ui("Click any screen colour to capture it."));
     }
 
     private void SampleScreenColorOnNextClick(object? sender, EventArgs eventArgs)
@@ -267,14 +356,10 @@ public sealed partial class MainWindow : Window
         if (ScreenColorSampler.TrySampleCursor(out var color, out var error))
         {
             viewModel.ActiveDraftSkinColor = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
-            viewModel.SetUserStatusMessage(viewModel.SelectedLanguageCode == "es"
-                ? "Color de piel capturado."
-                : "Skin colour captured.");
+            viewModel.SetUserStatusMessage(Ui("Skin colour captured."));
             return;
         }
-        viewModel.SetUserStatusMessage(error ?? (viewModel.SelectedLanguageCode == "es"
-            ? "No se pudo capturar el color de pantalla."
-            : "The screen colour could not be captured."));
+        viewModel.SetUserErrorStatusMessage(error ?? (Ui("The screen colour could not be captured.")));
     }
 
     private async Task<string?> SelectAppearanceFileAsync(string title, string fileTypeName, params string[] patterns)
@@ -285,7 +370,16 @@ public sealed partial class MainWindow : Window
             AllowMultiple = false,
             FileTypeFilter = [CreateAppearanceFileType(fileTypeName, patterns)],
         });
-        return files.Count == 1 ? files[0].Path.LocalPath : null;
+        if (files.Count != 1) return null;
+        var path = files[0].Path.LocalPath;
+        if (patterns.Any(pattern => Path.GetExtension(path).Equals(pattern[1..], StringComparison.OrdinalIgnoreCase)))
+            return path;
+        if (DataContext is ViewModels.MainWindowViewModel viewModel)
+        {
+            var extensions = string.Join(", ", patterns.Select(pattern => pattern[1..]));
+            viewModel.SetUserErrorStatusMessage(string.Format(Ui("Select a file of this type: {0}."), extensions));
+        }
+        return null;
     }
 
     private static FilePickerFileType CreateAppearanceFileType(string fileTypeName, IReadOnlyList<string> patterns)

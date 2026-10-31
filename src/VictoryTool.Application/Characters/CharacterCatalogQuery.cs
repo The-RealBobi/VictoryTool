@@ -1,3 +1,5 @@
+using VictoryTool.Application.Text;
+
 namespace VictoryTool.Application.Characters;
 
 public enum CharacterSort
@@ -6,6 +8,9 @@ public enum CharacterSort
     Id,
     Affinity,
     Position,
+    OriginGame,
+    Gender,
+    Team,
 }
 
 public sealed record CharacterFilterSet(
@@ -18,7 +23,9 @@ public sealed record CharacterFilterSet(
     IReadOnlyCollection<string>? Positions = null,
     IReadOnlyCollection<int>? PlayStyles = null,
     IReadOnlyCollection<int>? Ranks = null,
-    IReadOnlyCollection<int>? SpecialRarities = null)
+    IReadOnlyCollection<int>? SpecialRarities = null,
+    IReadOnlyCollection<int>? OriginGames = null,
+    IReadOnlyCollection<int>? Teams = null)
 {
     public static CharacterFilterSet Empty { get; } = new();
 }
@@ -28,36 +35,57 @@ public sealed record CharacterCatalogQuery(
     CharacterFilterSet Filters,
     CharacterSort Sort)
 {
+    public string? Locale { get; init; }
+    public bool Descending { get; init; }
+
+    private string SortName(CharacterCatalogItem character) => PlainName(
+        Locale is not null ? CharacterDisplayName.Resolve(character, Locale) : character.DisplayName);
+
+    private static string PlainName(string value) => string.Concat(GameTextParser.Parse(value).Nodes.Select(node => node switch
+    {
+        GameTextLiteral literal => literal.Text,
+        GameTextRuby ruby => ruby.BaseText,
+        _ => string.Empty,
+    }));
+
     public IReadOnlyList<CharacterCatalogItem> Apply(IEnumerable<CharacterCatalogItem> source)
     {
         ArgumentNullException.ThrowIfNull(source);
         var query = SearchText?.Trim() ?? string.Empty;
         var filtered = source.Where(character => Matches(character, query) && MatchesFilters(character));
 
-        return Sort switch
+        var teamNames = Sort == CharacterSort.Team
+            ? filtered.Select(character => character.Taxonomy).FirstOrDefault(taxonomy => taxonomy is not null)
+                ?.GetTeams(Locale ?? "en").ToDictionary(team => team.Id, team => team.Name)
+            : null;
+        IOrderedEnumerable<CharacterCatalogItem> ordered = Sort switch
         {
-            CharacterSort.Id => filtered
-                .OrderBy(character => character.Id, StringComparer.Ordinal)
-                .ToArray(),
-            CharacterSort.Affinity => filtered
-                .OrderBy(character => character.Affinity)
-                .ThenBy(character => character.DisplayName, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(character => character.Id, StringComparer.Ordinal)
-                .ToArray(),
-            CharacterSort.Position => filtered
-                .OrderBy(character => character.Position, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(character => character.DisplayName, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(character => character.Id, StringComparer.Ordinal)
-                .ToArray(),
-            _ => filtered
-                .OrderBy(character => character.DisplayName, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(character => character.Id, StringComparer.Ordinal)
-                .ToArray(),
+            CharacterSort.Id => Order(filtered, character => character.Id, StringComparer.Ordinal),
+            CharacterSort.Affinity => Order(filtered, character => character.Affinity, Comparer<CharacterAffinity>.Default),
+            CharacterSort.Position => Order(filtered, character => character.Position, StringComparer.OrdinalIgnoreCase),
+            CharacterSort.OriginGame => Order(filtered, character => character.BaseMetadata?.OriginGameAssociationIndex, Comparer<int?>.Default),
+            CharacterSort.Gender => Order(filtered, character => character.BaseMetadata?.Gender, Comparer<int?>.Default),
+            CharacterSort.Team => Order(filtered, character => character.BaseMetadata is { } metadata
+                ? teamNames?.GetValueOrDefault(metadata.TeamAssociation1) ?? string.Empty
+                : string.Empty, StringComparer.OrdinalIgnoreCase),
+            _ => Order(filtered, SortName, StringComparer.OrdinalIgnoreCase),
         };
+        return ordered.ThenBy(SortName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(character => character.Id, StringComparer.Ordinal).ToArray();
     }
 
+    private IOrderedEnumerable<CharacterCatalogItem> Order<T>(IEnumerable<CharacterCatalogItem> source,
+        Func<CharacterCatalogItem, T> key, IComparer<T> comparer) => Descending
+        ? source.OrderByDescending(key, comparer)
+        : source.OrderBy(key, comparer);
+
     private bool MatchesFilters(CharacterCatalogItem character) =>
-        (Filters.Affinities is not { Count: > 0 } || Filters.Affinities.Contains(character.Affinity))
+        (Filters.OriginGames is not { Count: > 0 }
+            || character.BaseMetadata?.OriginGameAssociationIndex is { } game && Filters.OriginGames.Contains(game))
+        && (Filters.Teams is not { Count: > 0 }
+            || character.BaseMetadata is { } team && Filters.Teams.Any(id => id != 0
+                && (team.TeamAssociation1 == id || team.TeamAssociation2 == id || team.TeamAssociation3 == id)))
+        && (Filters.Affinities is not { Count: > 0 } || Filters.Affinities.Contains(character.Affinity))
         && (Filters.Origins is not { Count: > 0 } || Filters.Origins.Contains(character.Origin))
         && (Filters.Series is not { Count: > 0 } || Filters.Series.Contains(character.Series, StringComparer.OrdinalIgnoreCase))
         && (Filters.AcademicYears is not { Count: > 0 }
@@ -101,7 +129,11 @@ public sealed record CharacterCatalogQuery(
                     localization.UpperName,
                 })
                 {
-                    if (!string.IsNullOrWhiteSpace(value)) yield return value;
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        yield return value;
+                        yield return PlainName(value);
+                    }
                 }
             }
         }

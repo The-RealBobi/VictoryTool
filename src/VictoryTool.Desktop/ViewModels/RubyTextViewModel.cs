@@ -5,14 +5,35 @@ namespace VictoryTool.Desktop.ViewModels;
 public sealed record RubyTextSegment(string Text, string? Reading)
 {
     public bool HasReading => !string.IsNullOrWhiteSpace(Reading);
+    public bool ReserveReadingSpace { get; init; }
+    public double ReadingHeight => HasReading || ReserveReadingSpace ? 12 : 0;
 }
 
-public sealed record RubyTextLine(IReadOnlyList<RubyTextSegment> Segments);
+public sealed record RubyTextLine(IReadOnlyList<RubyTextSegment> Segments)
+{
+    public IEnumerable<RubyTextSegment> VisualSegments => Segments.SelectMany(segment => segment.HasReading
+        ? [segment]
+        : System.Text.RegularExpressions.Regex.Matches(segment.Text,
+            @"\s+|[\p{IsCJKUnifiedIdeographs}\p{IsHiragana}\p{IsKatakana}]|[^\s\p{IsCJKUnifiedIdeographs}\p{IsHiragana}\p{IsKatakana}]+")
+            .Select(match => new RubyTextSegment(match.Value, null)))
+        .Select(segment => segment with { ReserveReadingSpace = Segments.Any(item => item.HasReading) });
+}
 
 public sealed record RubyTextDocumentViewModel(
     IReadOnlyList<RubyTextLine> Lines,
     string AccessibleText)
 {
+    public string PlainText => string.Join(Environment.NewLine, Lines.Select(line => string.Concat(line.Segments.Select(segment => segment.Text))));
+
+    public static RubyTextDocumentViewModel FromParagraphs(GameTextDocument document)
+    {
+        var nodes = document.Nodes.Select((node, index) => node is GameTextLineBreak
+            && (index == 0 || document.Nodes[index - 1] is not GameTextLineBreak)
+            && (index == document.Nodes.Count - 1 || document.Nodes[index + 1] is not GameTextLineBreak)
+                ? new GameTextLiteral(" ") : node).ToArray();
+        return From(document with { Nodes = nodes });
+    }
+
     public static RubyTextDocumentViewModel From(GameTextDocument document)
     {
         var lines = new List<RubyTextLine>();

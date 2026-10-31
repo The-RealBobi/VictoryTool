@@ -4,9 +4,10 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:characters="using:VictoryTool.Application.Characters"
-    xmlns:vm="using:VictoryTool.Desktop.ViewModels">
+    xmlns:vm="using:VictoryTool.Desktop.ViewModels"
+    xmlns:views="using:VictoryTool.Desktop.Views">
 <Grid RowDefinitions="Auto,*" RowSpacing="12">
-  <TextBlock Classes="section-title" Text="Player card" />
+  <TextBlock Classes="section-title" Text="{Binding WizardText.PlayerCard}" />
   <TextBlock Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Classes="muted" IsVisible="{Binding !HasSelectedCharacter}" Text="{Binding Text.NoCharacterSelected}" TextWrapping="Wrap" />
   <ScrollViewer Grid.Row="1" IsVisible="{Binding HasSelectedCharacter}" VerticalScrollBarVisibility="Auto">
     <StackPanel Spacing="12">
@@ -14,100 +15,54 @@
         <Grid>
           <Image x:Name="BackPortraitLayer" Source="{Binding PlayerCardBackPortrait}" Stretch="Uniform" />
           <Image x:Name="UniformLayer" Source="{Binding PlayerCardUniform}"
-                 Stretch="Uniform"
-                 HorizontalAlignment="Center"
-                 VerticalAlignment="Bottom"
-                 Width="180"
-                 Height="180" />
+                 Stretch="Uniform" />
           <Image x:Name="FrontPortraitLayer" Source="{Binding PlayerCardFrontPortrait}" Stretch="Uniform" />
         </Grid>
       </Border>
-      <TextBlock Classes="muted" FontSize="11" Text="{Binding SelectedPortraitDiagnosticCode}" TextWrapping="Wrap" />
       <StackPanel Spacing="2">
-        <TextBlock FontSize="20" FontWeight="SemiBold" Text="{Binding PlayerCardDisplayName}" TextWrapping="Wrap" />
-        <ItemsControl
-            ItemsSource="{Binding PlayerCardRomanizedNameDocument.Lines}"
-            AutomationProperties.Name="{Binding PlayerCardRomanizedNameDocument.AccessibleText}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="vm:RubyTextLine">
-              <ItemsControl ItemsSource="{Binding Segments}">
-                <ItemsControl.ItemsPanel>
-                  <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:RubyTextSegment">
-                    <Grid RowDefinitions="12,Auto" Margin="0,0,1,0">
-                      <TextBlock Grid.Row="0" Classes="muted" FontSize="9" HorizontalAlignment="Center" Text="{Binding Reading}" />
-                      <TextBlock Grid.Row="1" Classes="muted" Text="{Binding Text}" TextWrapping="Wrap" />
-                    </Grid>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
+        <views:RubyTextView FontSize="20" FontWeight="SemiBold" DataContext="{Binding PlayerCardDisplayNameDocument}" />
         <TextBlock Classes="muted" FontSize="11" Text="{Binding PlayerCardShortName}" />
       </StackPanel>
       <Border Background="{DynamicResource RaisedBlueBrush}" CornerRadius="6" Padding="10,7">
         <Grid ColumnDefinitions="*,Auto">
           <TextBlock FontWeight="SemiBold" Text="{Binding PlayerCardAffinityName}" />
-          <TextBlock Grid.Column="1" Text="{Binding PlayerCardSpecialRarity, StringFormat='Rarity {0}'}" />
+          <TextBlock Grid.Column="1" Text="{Binding PlayerCardRarityName}" />
         </Grid>
       </Border>
-      <ItemsControl
-          ItemsSource="{Binding PlayerCardDescriptionDocument.Lines}"
-          AutomationProperties.Name="{Binding PlayerCardDescriptionDocument.AccessibleText}">
-        <ItemsControl.ItemTemplate>
-          <DataTemplate x:DataType="vm:RubyTextLine">
-            <ItemsControl ItemsSource="{Binding Segments}">
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:RubyTextSegment">
-                  <Grid RowDefinitions="12,Auto" Margin="0,0,1,0">
-                    <TextBlock Grid.Row="0" FontSize="9" HorizontalAlignment="Center" Text="{Binding Reading}" />
-                    <TextBlock Grid.Row="1" Text="{Binding Text}" TextWrapping="Wrap" />
-                  </Grid>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
+      <views:RubyTextView DataContext="{Binding PlayerCardDescriptionDocument}" />
       <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
         <StackPanel>
-          <TextBlock Classes="muted" FontSize="11" Text="Position" />
+          <TextBlock Classes="muted" FontSize="11" Text="{Binding WizardText.Position}" />
           <StackPanel Orientation="Horizontal" Spacing="6">
             <Image Width="24" Height="24" Source="{Binding PlayerCardPositionIcon}" Stretch="Uniform" />
             <TextBlock VerticalAlignment="Center" IsVisible="{Binding ShowPlayerCardPositionId}" Text="{Binding PlayerCardPosition}" />
           </StackPanel>
         </StackPanel>
         <StackPanel Grid.Column="1">
-          <TextBlock Classes="muted" FontSize="11" Text="Series" />
-          <TextBlock Text="{Binding PlayerCardSeries}" TextWrapping="Wrap" />
+          <TextBlock Classes="muted" FontSize="11" Text="{Binding WizardText.Series}" />
+          <TextBlock Text="{Binding PlayerCardSeries}" IsVisible="{Binding HasPlayerCardSeries}" TextWrapping="Wrap" />
         </StackPanel>
         <StackPanel Grid.Row="1">
-          <TextBlock Classes="muted" FontSize="11" Text="Gender / body" />
+          <TextBlock Classes="muted" FontSize="11" Text="{Binding WizardText.GenderAndBody}" />
           <StackPanel Orientation="Horizontal" Spacing="6">
             <Image Width="22" Height="22" Source="{Binding PlayerCardGenderIcon}" Stretch="Uniform" />
             <TextBlock VerticalAlignment="Center" IsVisible="{Binding ShowPlayerCardGenderId}" Text="{Binding PlayerCardGender, StringFormat='{}{0}'}" />
           </StackPanel>
           <StackPanel Orientation="Horizontal" Spacing="6">
             <Image Width="22" Height="22" Source="{Binding PlayerCardBodyTypeIcon}" Stretch="Uniform" />
-            <TextBlock Classes="muted" VerticalAlignment="Center" IsVisible="{Binding ShowPlayerCardBodyTypeId}" Text="{Binding PlayerCardBodyType, StringFormat='Body {0}'}" />
+            <TextBlock Classes="muted" VerticalAlignment="Center" IsVisible="{Binding ShowPlayerCardBodyTypeId}" Text="{Binding PlayerCardBodyType}" />
           </StackPanel>
         </StackPanel>
         <StackPanel Grid.Row="1" Grid.Column="1">
-          <TextBlock Classes="muted" FontSize="11" Text="Academic year" />
+          <TextBlock Classes="muted" FontSize="11" Text="{Binding WizardText.AcademicYear}" />
           <TextBlock Text="{Binding PlayerCardAcademicYear}" />
         </StackPanel>
         <StackPanel Grid.Row="2">
-          <TextBlock Classes="muted" FontSize="11" Text="Rank" />
+          <TextBlock Classes="muted" FontSize="11" Text="{Binding WizardText.Rank}" />
           <TextBlock Text="{Binding PlayerCardRank, StringFormat='{}{0}'}" />
         </StackPanel>
         <StackPanel Grid.Row="2" Grid.Column="1">
-          <TextBlock Classes="muted" FontSize="11" Text="Preview level" />
+          <TextBlock Classes="muted" FontSize="11" Text="{Binding WizardText.PreviewLevel}" />
           <NumericUpDown Minimum="1" Value="{Binding PlayerCardLevel}" />
           <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,4,0,0">
             <Button Padding="6,2" Command="{Binding SetVerifiedLevelCommand}" CommandParameter="1" Content="1" />

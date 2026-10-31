@@ -4,41 +4,91 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:vm="using:VictoryTool.Desktop.ViewModels"
-    Width="1040"
-    Height="620">
-  <Grid RowDefinitions="76,544" RowSpacing="14">
+    xmlns:characters="using:VictoryTool.Application.Characters"
+    xmlns:views="using:VictoryTool.Desktop.Views"
+    MaxWidth="1040"
+    HorizontalAlignment="Stretch"
+    VerticalAlignment="Stretch">
+  <Grid RowDefinitions="Auto,*" RowSpacing="14">
     <StackPanel Spacing="4">
-      <TextBlock Classes="page-title" Text="{Binding WizardText.SelectCharacter}" />
-      <TextBlock Classes="muted" Text="{Binding WizardText.SelectCharacterHint}" />
+      <TextBlock Classes="page-title" Text="{Binding BaseCharacterHeading}" />
     </StackPanel>
 
-    <Grid Grid.Row="1" ColumnDefinitions="570,456" ColumnSpacing="14">
+    <Grid Grid.Row="1" ColumnDefinitions="1.25*,*" ColumnSpacing="14">
       <Border Classes="panel" Padding="14">
           <Grid RowDefinitions="44,*" RowSpacing="10">
-          <Grid ColumnDefinitions="*,42,42" ColumnSpacing="8" VerticalAlignment="Center">
-            <Grid ColumnDefinitions="*,34" VerticalAlignment="Center">
-              <TextBox Text="{Binding SearchText}" PlaceholderText="{Binding WizardText.Search}" />
-              <TextBlock Grid.Column="1" Text="⌕" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" />
+          <Grid ColumnDefinitions="*,38,38,38" ColumnSpacing="6" VerticalAlignment="Center">
+            <Grid>
+              <TextBox x:Name="RosterSearch" Text="{Binding SearchText}" Padding="32,6,8,6" PlaceholderText="{Binding WizardText.Search}" />
+              <PathIcon Width="17" Height="17" Margin="9,0,0,0" HorizontalAlignment="Left" IsHitTestVisible="False" Data="M19.6,21l-6.3-6.3q-0.75,0.6-1.72,0.95T9.5,16q-2.72,0-4.61-1.89Q3,12.23 3,9.5Q3,6.77 4.89,4.89T9.5,3t4.61,1.89T16,9.5q0,1.1-0.35,2.07T14.7,13.3L21,19.6L19.6,21ZM9.5,14q1.88,0 3.19-1.31T14,9.5T12.69,6.31T9.5,5T6.31,6.31T5,9.5t1.31,3.19T9.5,14Z" />
             </Grid>
-            <Button Grid.Column="1" Width="42" Height="36" Padding="6" HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
-              <Image Width="20" Height="20" Source="avares://VictoryTool.Desktop/Assets/Ui/sort.png" />
+            <Button x:Name="RosterSortButton" Grid.Column="1" Width="38" Height="36" Padding="9" ToolTip.Tip="{Binding RosterSortLabel}" AutomationProperties.Name="{Binding RosterSortLabel}">
+              <PathIcon Data="M3,18V16H9v2H3Zm0-5V11H15v2H3ZM3,8V6H21V8H3Z" />
               <Button.Flyout>
                 <Flyout Placement="BottomEdgeAlignedLeft">
-                  <Border Padding="4" Background="{DynamicResource DockNavyBrush}">
-                    <ListBox ItemsSource="{Binding CharacterSorts}" SelectedItem="{Binding SelectedCharacterSort}" />
-                  </Border>
+                  <StackPanel Width="240" Spacing="10" Margin="6">
+                    <TextBlock FontWeight="SemiBold" Text="{Binding RosterSortLabel}" />
+                    <ComboBox x:Name="RosterSortChoice" HorizontalAlignment="Stretch" ItemsSource="{Binding CharacterSortChoices}" SelectedItem="{Binding SelectedCharacterSortChoice}" />
+                    <TextBlock Classes="muted" Text="{Binding RosterDirectionLabel}" />
+                    <ComboBox x:Name="RosterSortDirection" HorizontalAlignment="Stretch" ItemsSource="{Binding RosterDirectionChoices}" SelectedItem="{Binding SelectedRosterDirectionChoice}" />
+                  </StackPanel>
                 </Flyout>
               </Button.Flyout>
             </Button>
-            <Button Grid.Column="2" Width="42" Height="36" Padding="6" HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
-              <Image Width="20" Height="20" Source="avares://VictoryTool.Desktop/Assets/Ui/filter.png" />
+            <Button x:Name="RosterFilterButton" Grid.Column="2" Width="38" Height="36" Padding="9" ToolTip.Tip="{Binding RosterFiltersLabel}" AutomationProperties.Name="{Binding RosterFiltersLabel}">
+              <PathIcon Data="M11,20q-0.42,0-0.71-0.29Q10,19.43 10,19V13L4.2,5.6Q3.83,5.1 4.09,4.55T5,4H19q0.65,0 0.91,0.55T19.8,5.6L14,13v6q0,0.43-0.29,0.71T13,20H11Zm1-7.7L16.95,6H7.05L12,12.3Zm0,0Z" />
               <Button.Flyout>
                 <Flyout Placement="BottomEdgeAlignedRight">
-                  <Border Padding="4" Background="{DynamicResource DockNavyBrush}">
-                    <ListBox ItemsSource="{Binding CharacterAffinities}" SelectedItem="{Binding SelectedAffinity}" />
-                  </Border>
+                  <ScrollViewer MaxHeight="460" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Width="300" Spacing="8" Margin="6">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock FontWeight="SemiBold" Text="{Binding RosterFiltersLabel}" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Content="{Binding RosterResetFiltersLabel}" Command="{Binding ClearRosterFiltersCommand}" />
+                      </Grid>
+                      <TextBlock Classes="muted" Text="{Binding RosterOriginGameLabel}" />
+                      <ComboBox x:Name="RosterOriginGameFilter" HorizontalAlignment="Stretch" ItemsSource="{Binding RosterOriginGameChoices}" SelectedItem="{Binding SelectedRosterOriginGameChoice}" />
+                      <TextBlock Classes="muted" Text="{Binding RosterGenderLabel}" />
+                      <ComboBox x:Name="RosterGenderFilter" HorizontalAlignment="Stretch" ItemsSource="{Binding RosterGenderChoices}" SelectedItem="{Binding SelectedRosterGenderChoice}" />
+                      <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                        <StackPanel Spacing="8">
+                          <TextBlock Classes="muted" Text="{Binding WizardText.Position}" />
+                          <ComboBox x:Name="RosterPositionFilter" HorizontalAlignment="Stretch" ItemsSource="{Binding RosterPositionChoices}" SelectedItem="{Binding SelectedRosterPositionChoice}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="8">
+                          <TextBlock Classes="muted" Text="{Binding WizardText.Affinity}" />
+                          <ComboBox x:Name="RosterAffinityFilter" HorizontalAlignment="Stretch" ItemsSource="{Binding RosterAffinityChoices}" SelectedItem="{Binding SelectedRosterAffinityChoice}" />
+                        </StackPanel>
+                      </Grid>
+                      <TextBlock Classes="muted" Text="{Binding RosterTeamsLabel}" />
+                      <ItemsControl ItemsSource="{Binding SelectedRosterTeams}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="characters:LocalizedTeam">
+                            <Button Margin="0,0,5,5" Padding="7,4" Click="ToggleRosterTeam" Tag="{Binding}">
+                              <StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="{Binding Name}" /><TextBlock Text="×" /></StackPanel>
+                            </Button>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                      <TextBox x:Name="RosterTeamSearch" Text="{Binding TeamFilterSearch}" PlaceholderText="{Binding RosterTeamSearchLabel}" />
+                      <ListBox x:Name="RosterTeamResults" MaxHeight="150"
+                               ItemsSource="{Binding RosterTeamChoices}"
+                               SelectionChanged="SelectRosterTeam"
+                               AutomationProperties.Name="{Binding RosterTeamsLabel}"
+                               ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                          <DataTemplate x:DataType="characters:LocalizedTeam">
+                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                          </DataTemplate>
+                        </ListBox.ItemTemplate>
+                      </ListBox>
+                    </StackPanel>
+                  </ScrollViewer>
                 </Flyout>
               </Button.Flyout>
+            </Button>
+            <Button Grid.Column="3" Width="38" Height="36" Padding="9" Command="{Binding ResetCharacterSearchCommand}" ToolTip.Tip="{Binding ResetCharacterSearchLabel}" AutomationProperties.Name="{Binding ResetCharacterSearchLabel}">
+              <PathIcon Data="M12,20q-3.35,0-5.68-2.32T4,12T6.33,6.32T12,4q1.73,0 3.3,0.71Q16.88,5.43 18,6.75V4h2v7H13V9h4.2q-0.8-1.4-2.19-2.2T12,6Q9.5,6 7.75,7.75T6,12t1.75,4.25T12,18q1.93,0 3.48-1.1T17.65,14h2.1q-0.7,2.65-2.85,4.32T12,20Z" />
             </Button>
           </Grid>
           <ListBox Grid.Row="1" Classes="roster" ItemsSource="{Binding RosterRows}" SelectedItem="{Binding SelectedRosterRow}">
@@ -52,49 +102,45 @@
                     </Grid>
                   </Border>
                   <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                    <TextBlock FontWeight="SemiBold" Text="{Binding Character.DisplayName}" TextTrimming="CharacterEllipsis" />
+                    <views:RubyTextView FontWeight="SemiBold" DataContext="{Binding DisplayNameDocument}" />
                     <TextBlock Classes="muted" FontSize="11" Text="{Binding Character.Id}" />
                   </StackPanel>
-                  <TextBlock Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Classes="muted" Text="{Binding Character.Position}" />
+                  <TextBlock Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Classes="muted" Text="{Binding Position}" />
                 </Grid>
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
+          <StackPanel Grid.Row="1" x:Name="EmptyRosterNotice" IsVisible="{Binding !HasRosterCharacters}" VerticalAlignment="Center" Spacing="12">
+            <TextBlock Text="{Binding EmptyRosterMessage}" TextWrapping="Wrap" HorizontalAlignment="Center" />
+            <Button x:Name="ResetCharacterSearchButton" Content="{Binding ResetCharacterSearchLabel}" Command="{Binding ResetCharacterSearchCommand}" HorizontalAlignment="Center" />
+          </StackPanel>
         </Grid>
       </Border>
 
       <Border Grid.Column="1" Classes="panel" Padding="16">
-        <Grid RowDefinitions="44,260,Auto,*" RowSpacing="10">
-          <StackPanel Spacing="0">
-            <TextBlock Classes="section-title" Text="{Binding WizardText.Preview}" />
-            <TextBlock Classes="muted" FontSize="11" Text="{Binding WizardText.SelectedCharacterData}" />
-          </StackPanel>
-
-          <Border Grid.Row="1" Background="{DynamicResource RaisedBlueBrush}" CornerRadius="8" ClipToBounds="True">
+        <Grid RowDefinitions="260,Auto,*" RowSpacing="10">
+          <Border Grid.Row="0" Background="{DynamicResource RaisedBlueBrush}" CornerRadius="8" ClipToBounds="True">
             <Grid>
               <Image Source="{Binding PlayerCardBackPortrait}" Stretch="Uniform" />
               <Image Source="{Binding PlayerCardUniform}"
-                     Stretch="Uniform"
-                     HorizontalAlignment="Center"
-                     VerticalAlignment="Bottom"
-                     Width="220"
-                     Height="220" />
+                     Stretch="Uniform" />
               <Image Source="{Binding PlayerCardFrontPortrait}" Stretch="Uniform" />
             </Grid>
           </Border>
 
-          <StackPanel Grid.Row="2" Spacing="3" IsVisible="{Binding HasSelectedCharacter}">
-            <TextBlock FontSize="23" FontWeight="SemiBold" Text="{Binding PlayerCardDisplayName}" TextTrimming="CharacterEllipsis" />
-            <TextBlock Classes="muted" Text="{Binding PlayerCardSeries}" TextTrimming="CharacterEllipsis" />
+          <StackPanel Grid.Row="1" Spacing="3" IsVisible="{Binding HasSelectedCharacter}">
+            <views:RubyTextView FontSize="23" FontWeight="SemiBold" DataContext="{Binding PlayerCardDisplayNameDocument}" />
+            <TextBlock Classes="muted" Text="{Binding PlayerCardSeries}" IsVisible="{Binding HasPlayerCardSeries}" TextTrimming="CharacterEllipsis" />
+
           </StackPanel>
 
-          <Grid Grid.Row="3" RowDefinitions="Auto,Auto" ColumnDefinitions="*,*" ColumnSpacing="18" RowSpacing="10" IsVisible="{Binding HasSelectedCharacter}">
+          <Grid Grid.Row="2" RowDefinitions="Auto,Auto" ColumnDefinitions="*,*" ColumnSpacing="18" RowSpacing="10" IsVisible="{Binding HasSelectedCharacter}">
             <StackPanel><TextBlock Classes="muted" FontSize="11" Text="{Binding WizardText.Affinity}" /><TextBlock FontWeight="SemiBold" Text="{Binding PlayerCardAffinityName}" /></StackPanel>
             <StackPanel Grid.Column="1"><TextBlock Classes="muted" FontSize="11" Text="{Binding WizardText.Position}" /><TextBlock FontWeight="SemiBold" Text="{Binding PlayerCardPosition}" /></StackPanel>
-            <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Classes="muted" Text="{Binding PlayerCardDescriptionDocument.AccessibleText}" TextWrapping="Wrap" MaxLines="3" />
+            <views:RubyTextView Grid.Row="1" Grid.ColumnSpan="2" Foreground="{DynamicResource MutedTextBrush}" FontWeight="Normal" DataContext="{Binding PlayerCardDescriptionDocument}" />
           </Grid>
 
-          <TextBlock Grid.Row="3" HorizontalAlignment="Center" VerticalAlignment="Center" Classes="muted" Text="{Binding WizardText.SelectCharacterFromList}" IsVisible="{Binding !HasSelectedCharacter}" TextWrapping="Wrap" />
+          <TextBlock Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center" Classes="muted" Text="{Binding WizardText.SelectCharacterFromList}" IsVisible="{Binding !HasSelectedCharacter}" TextWrapping="Wrap" />
         </Grid>
       </Border>
     </Grid>

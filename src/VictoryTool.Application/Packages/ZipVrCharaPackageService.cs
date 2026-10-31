@@ -1,7 +1,9 @@
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
+using SkiaSharp;
 using VictoryTool.Application.Characters;
 using VictoryTool.Application.Profiles;
 using VictoryTool.Application.Assets;
@@ -52,6 +54,8 @@ public interface IVrCharaPackageService
     Task SaveAsync(string path, CharacterDraft draft, CancellationToken cancellationToken);
     Task SaveAsync(string path, VrCharaPackage package, CancellationToken cancellationToken);
     Task<VrCharaManifest> LoadManifestAsync(string path, CancellationToken cancellationToken);
+    Task<VrCharaManifest> LoadMetadataAsync(string path, CancellationToken cancellationToken) =>
+        LoadManifestAsync(path, cancellationToken);
     Task<VrCharaPackage> LoadPackageAsync(string path, CancellationToken cancellationToken);
     PackageValidationResult Validate(VrCharaManifest manifest);
     PackageValidationResult ValidateAgainstDump(VrCharaManifest manifest, GameDumpProfile profile);
@@ -90,10 +94,14 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
         return package.Manifest;
     }
 
-    public async Task<VrCharaPackage> LoadPackageAsync(string path, CancellationToken cancellationToken)
+    public async Task<VrCharaManifest> LoadMetadataAsync(string path, CancellationToken cancellationToken)
     {
-        using var operation = GlobalLog.BeginOperation("vrchara_package_load");
         using var archive = ZipFile.OpenRead(path);
+        return await ReadManifestMetadataAsync(archive, cancellationToken);
+    }
+
+    private async Task<VrCharaManifest> ReadManifestMetadataAsync(ZipArchive archive, CancellationToken cancellationToken)
+    {
         var manifests = archive.Entries.Where(entry => entry.FullName == "manifest.json").ToArray();
         if (manifests.Length != 1)
         {
@@ -150,6 +158,14 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
 
         var validation = Validate(manifest);
         if (!validation.IsValid) throw new InvalidDataException(string.Join(" ", validation.Errors));
+        return manifest;
+    }
+
+    public async Task<VrCharaPackage> LoadPackageAsync(string path, CancellationToken cancellationToken)
+    {
+        using var operation = GlobalLog.BeginOperation("vrchara_package_load");
+        using var archive = ZipFile.OpenRead(path);
+        var manifest = await ReadManifestMetadataAsync(archive, cancellationToken);
         var requestedResourcePaths = manifest.Resources
             .Select(resource => $"resources/{resource.VirtualPath}")
             .ToHashSet(StringComparer.Ordinal);
@@ -382,7 +398,7 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             ["isDirty"] = draft.IsDirty,
             ["hasCustomModel"] = draft.Models?.HeadModelPath?.Contains("99_CUSTOM", StringComparison.OrdinalIgnoreCase) == true,
         });
-        var (normalizedDraft, authoredResources) = PrepareAuthoredResources(draft);
+        var (normalizedDraft, authoredResources) = await PrepareAuthoredResourcesAsync(draft, cancellationToken);
         var draftLocalization = normalizedDraft.Localization ?? new CharacterDraftLocalization(
             null, null, GameLocaleCatalog.CreateEmptyLocalizations());
         var localizations = draftLocalization.Locales.ToDictionary(
@@ -418,7 +434,8 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
         });
     }
 
-    private static (CharacterDraft Draft, IReadOnlyList<AuthoredResource> Resources) PrepareAuthoredResources(CharacterDraft draft)
+    private static async Task<(CharacterDraft Draft, IReadOnlyList<AuthoredResource> Resources)> PrepareAuthoredResourcesAsync(
+        CharacterDraft draft, CancellationToken cancellationToken)
     {
         var resources = new List<AuthoredResource>();
         var normalized = EnsurePackageInternalName(NormalizeDraft(draft));
@@ -434,15 +451,27 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
                      .ToArray())
             sourceFields.Remove(key);
         sourceFields.Remove("Assets.PortraitPayloadFormat");
+        sourceFields.Remove("Assets.PortraitIncludesUniform");
+        foreach (var selectedPortrait in new[] { sourceStandardPortrait, sourceUniformPortrait })
+            if (IsPngPath(selectedPortrait) && Path.IsPathRooted(selectedPortrait!) && !File.Exists(selectedPortrait))
+                throw new FileNotFoundException("The selected custom portrait is missing.", selectedPortrait);
         var hasStandardPng = IsPngPath(sourceStandardPortrait)
             && Path.IsPathRooted(sourceStandardPortrait!)
             && File.Exists(sourceStandardPortrait);
         var hasUniformPng = IsPngPath(sourceUniformPortrait)
             && Path.IsPathRooted(sourceUniformPortrait!)
             && File.Exists(sourceUniformPortrait);
-        if (hasStandardPng)
+        var standardFallback = hasStandardPng ? null
+            : await CreateBasePortraitResourceAsync(normalized, "standard", cancellationToken);
+        var uniformFallback = hasUniformPng ? null
+            : await CreateBasePortraitResourceAsync(normalized, "uniform", cancellationToken);
+        if (standardFallback is not null) resources.Add(standardFallback);
+        if (uniformFallback is not null) resources.Add(uniformFallback);
+        var hasStandardPortrait = hasStandardPng || standardFallback is not null;
+        var hasUniformPortrait = hasUniformPng || uniformFallback is not null;
+        if (hasStandardPortrait)
         {
-            AddSourcePortraitResource(resources, sourceStandardPortrait, "standard");
+            if (hasStandardPng) AddSourcePortraitResource(resources, sourceStandardPortrait, "standard");
             sourceFields["Assets.StandardPortraitPath"] = "assets/portraits/standard.png";
             sourceFields["Assets.StandardPortraitSourcePath"] = "assets/portraits/standard.png";
         }
@@ -451,9 +480,9 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             sourceFields.Remove("Assets.StandardPortraitPath");
             sourceFields.Remove("Assets.StandardPortraitSourcePath");
         }
-        if (hasUniformPng)
+        if (hasUniformPortrait)
         {
-            AddSourcePortraitResource(resources, sourceUniformPortrait, "uniform");
+            if (hasUniformPng) AddSourcePortraitResource(resources, sourceUniformPortrait, "uniform");
             sourceFields["Assets.UniformPortraitPath"] = "assets/portraits/uniform.png";
             sourceFields["Assets.UniformPortraitSourcePath"] = "assets/portraits/uniform.png";
         }
@@ -466,8 +495,8 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
         {
             Assets = (normalized.Assets ?? new CharacterDraftAssets(null, null)) with
             {
-                StandardPortraitPath = hasStandardPng ? "assets/portraits/standard.png" : null,
-                UniformPortraitPath = hasUniformPng ? "assets/portraits/uniform.png" : null,
+                StandardPortraitPath = hasStandardPortrait ? "assets/portraits/standard.png" : null,
+                UniformPortraitPath = hasUniformPortrait ? "assets/portraits/uniform.png" : null,
             },
             Fields = sourceFields,
         };
@@ -501,6 +530,46 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             "_uniform",
             "custom shoes model");
         return (normalized, resources);
+    }
+
+    private static async Task<AuthoredResource?> CreateBasePortraitResourceAsync(
+        CharacterDraft draft, string variant, CancellationToken cancellationToken)
+    {
+        var containers = new[] { "Assets.Pc.PortraitContainer", "Assets.PortraitContainer", "Assets.Switch.PortraitContainer" }
+            .Select(key => draft.Fields.GetValueOrDefault(key))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .ToArray();
+        if (containers.Length == 0) return null;
+        var path = containers.FirstOrDefault(File.Exists)
+            ?? throw new FileNotFoundException("The base character portrait is missing.", containers[0]);
+        var document = G4TxDocument.Read(await File.ReadAllBytesAsync(path!, cancellationToken));
+        var entryName = draft.Fields.GetValueOrDefault(variant == "standard"
+            ? "Assets.StandardPortraitEntry" : "Assets.UniformPortraitEntry");
+        var texture = string.IsNullOrWhiteSpace(entryName)
+            ? variant == "standard" ? document.Textures.FirstOrDefault() : document.Textures.ElementAtOrDefault(1)
+            : document.Textures.FirstOrDefault(entry => entry.Name == entryName);
+        var includesUniform = bool.TryParse(draft.Fields.GetValueOrDefault("Assets.PortraitIncludesUniform"), out var complete)
+            ? complete : path!.Replace('\\', '/').Contains("/aura_armed/", StringComparison.OrdinalIgnoreCase);
+        DecodedTexture decoded;
+        if (variant == "uniform" && document.Textures.Count > 0
+            && (includesUniform || texture is null && string.IsNullOrWhiteSpace(entryName) && document.Textures.Count == 1))
+        {
+            // A portrait that already includes the uniform needs no additional front layer.
+            var standard = document.Textures[0];
+            decoded = new DecodedTexture(standard.Width, standard.Height, standard.Width * 4,
+                new byte[checked(standard.Width * standard.Height * 4)]);
+        }
+        else
+        {
+            if (texture is null)
+                throw new InvalidDataException($"The base character {variant} portrait entry '{entryName}' is missing.");
+            decoded = await new BcnG4TextureDecoder().DecodeAsync(texture, cancellationToken);
+        }
+        using var bitmap = new SKBitmap(new SKImageInfo(decoded.Width, decoded.Height,
+            SKColorType.Bgra8888, SKAlphaType.Unpremul));
+        Marshal.Copy(decoded.BgraPixels, 0, bitmap.GetPixels(), decoded.BgraPixels.Length);
+        using var encoded = bitmap.Encode(SKEncodedImageFormat.Png, 100);
+        return new AuthoredResource($"assets/portraits/{variant}.png", encoded.ToArray());
     }
 
     private static CharacterDraft PackCustomModelFamily(
@@ -1051,6 +1120,9 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             || profile.SchemaVersion is not (1 or 2 or 3 or 4 or 5 or 6 or 7) || profile.Producer != "G4_Blender"
             || !profile.ModelStem.Equals(expectedStem, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException($"Unsupported or mismatched animation config for model '{expectedStem}'.");
+        if (profile.SourceRigBinding is not null
+            && (profile.SourceRigBinding != "dump" || profile.SchemaVersion != 7 || profile.AvatarRecipe is null))
+            throw new InvalidDataException("Animation source rig binding requires a schema 7 avatar recipe and the 'dump' binding.");
         if (!IsSha256(profile.SourceRig.Sha256) || !IsSha256(profile.TargetRig.Sha256))
             throw new InvalidDataException($"Animation config for '{expectedStem}' has an invalid rig hash.");
         if (!IsSafeVirtualPath(profile.ModelPath)

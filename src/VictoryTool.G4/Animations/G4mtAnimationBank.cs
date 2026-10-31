@@ -80,8 +80,15 @@ public sealed class G4mtAnimationBank
         if (channel.Keys.Count == 0)
             return [];
         var right = 0;
-        while (right < channel.Keys.Count && channel.Keys[right] <= frame)
-            right++;
+        var end = channel.Keys.Count;
+        while (right < end)
+        {
+            var middle = right + (end - right) / 2;
+            if (channel.Keys[middle] <= frame)
+                right = middle + 1;
+            else
+                end = middle;
+        }
         if (right == 0)
             return DecodeKey(channelIndex, 0);
         var left = right - 1;

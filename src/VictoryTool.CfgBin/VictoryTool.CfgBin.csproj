@@ -2,4 +2,8 @@
   <PropertyGroup>
     <RootNamespace>VictoryTool.CfgBin</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="CFGBINManager" GeneratePathProperty="true" ExcludeAssets="contentFiles" />
+    <EmbeddedResource Include="$(PkgCFGBINManager)/contentFiles/any/any/data/structure.cfg" LogicalName="VictoryTool.CfgBin.structure.cfg" />
+  </ItemGroup>
 </Project>

@@ -106,10 +106,25 @@ public sealed class GameTaxonomyIndex
             equipment?.ToArray() ?? [],
             teams?.ToArray() ?? []);
 
-    public string ResolveSeries(uint id, string locale) =>
-        _series.TryGetValue(id, out var item) && ResolveText(item.NameTextId, locale) is { } text
-            ? text
-            : $"Unknown series (0x{id:X8})";
+    public string ResolveSeries(uint id, string locale)
+    {
+        if (!_series.TryGetValue(id, out var item))
+            return $"Unknown series (0x{id:X8})";
+        if (CharacterOriginGameCatalog.ResolveAssociationIndex(item.NameTextId) is { } index)
+            return CharacterOriginGameCatalog.ResolveName(index, locale);
+        return ResolveText(item.NameTextId, locale) ?? $"Unknown series (0x{id:X8})";
+    }
+
+    public string ResolveRarity(int rarity, string locale) =>
+        CharacterRarityCatalog.ResolveNameTextId(rarity) is { } textId
+            ? CharacterRarityCatalog.FormatName(ResolveText(textId, locale)
+                ?? CharacterRarityCatalog.ResolveName(rarity, locale))
+            : CharacterRarityCatalog.ResolveName(rarity, locale);
+
+    public string ResolveSpecialRarity(int specialRarity, string locale) => specialRarity == 0
+        // The regular parameter row serves every rarity before the separate Hero rows.
+        ? $"{ResolveRarity(0, locale)}–{ResolveRarity(4, locale)}"
+        : ResolveRarity(specialRarity, locale);
 
     public string ResolveAcademicYear(uint id, string locale)
     {
@@ -173,6 +188,8 @@ public sealed class GameTaxonomyIndex
 
     private string ResolveEquipmentName(EquipmentTextReference item, string locale)
     {
+        if (item.Category == EquipmentCategory.Shoes && item.ResourceKey == "s000001")
+            return locale.Equals("es", StringComparison.OrdinalIgnoreCase) ? "Sin zapatillas" : "No shoes";
         var text = item.NameTextId != 0
             ? ResolveText(item.NameTextId, locale)
             : null;
@@ -390,7 +407,7 @@ public static class GameTaxonomyLoader
         {
             cancellationToken.ThrowIfCancellationRequested();
             var texts = new Dictionary<uint, string>();
-            foreach (var fileName in new[] { "chara_add_info_text.cfg.bin", "skill_text.cfg.bin", "item_text.cfg.bin", "team_text.cfg.bin" })
+            foreach (var fileName in new[] { "chara_add_info_text.cfg.bin", "skill_text.cfg.bin", "item_text.cfg.bin", "team_text.cfg.bin", "system_text.cfg.bin" })
             {
                 var path = Path.Combine(localeDirectory, fileName);
                 if (!File.Exists(path)) continue;

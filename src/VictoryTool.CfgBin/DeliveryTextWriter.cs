@@ -19,13 +19,6 @@ public sealed class DeliveryTextWriter
         if (begin.Values.Count == 0 || GetSigned(begin.Values[0]) != end.Index - begin.Index - 1)
             throw new InvalidDataException("The post text counted list is inconsistent.");
 
-        object countValue;
-        if (document.ValueWidth == CfgBinValueWidth.Int32)
-            countValue = checked((int)GetSigned(begin.Values[0]) + 1);
-        else
-            countValue = checked(GetSigned(begin.Values[0]) + 1);
-        var updated = CfgBinDocument.Read(document.WriteWithValueEdits(
-            [new CfgBinValueEdit(begin.Index, 0, countValue)]));
         var values = template.Values.Select(value => value.Value).ToArray();
         if (document.ValueWidth == CfgBinValueWidth.Int32)
             values[0] = unchecked((int)titleId);
@@ -33,7 +26,7 @@ public sealed class DeliveryTextWriter
             values[0] = (long)titleId;
         values[1] = document.ValueWidth == CfgBinValueWidth.Int32 ? (object)0 : 0L;
         values[2] = title;
-        var result = updated.WriteWithInsertedEntries(
+        var result = document.WriteWithInsertedEntries(
             [new CfgBinEntryInsert(end.Index, template.Index, values)]);
         var restored = CfgBinDocument.Read(result);
         if (!restored.Entries.Any(entry => entry.Name == "TEXT_INFO"

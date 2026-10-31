@@ -31,7 +31,8 @@ public sealed class ModProjectDocument
         int schemaVersion,
         IEnumerable<BatchEntry>? batch = null,
         IEnumerable<ProjectDraftEntry>? drafts = null,
-        string? functionalBankReferenceDataRoot = null)
+        string? functionalBankReferenceDataRoot = null,
+        ProjectEditorState? editorState = null)
     {
         Id = id;
         Name = name;
@@ -39,6 +40,7 @@ public sealed class ModProjectDocument
         if (batch is not null) _batch.AddRange(batch);
         if (drafts is not null) _drafts.AddRange(drafts);
         FunctionalBankReferenceDataRoot = NormalizeReferenceRoot(functionalBankReferenceDataRoot);
+        EditorState = editorState;
     }
 
     public Guid Id { get; }
@@ -50,6 +52,7 @@ public sealed class ModProjectDocument
     public IReadOnlyList<BatchEntry> Batch => _batch;
     public IReadOnlyList<ProjectDraftEntry> Drafts => _drafts;
     public string? FunctionalBankReferenceDataRoot { get; private set; }
+    public ProjectEditorState? EditorState { get; }
 
     public static ModProjectDocument Create(string name)
     {

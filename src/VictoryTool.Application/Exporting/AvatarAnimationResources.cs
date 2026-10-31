@@ -17,8 +17,7 @@ internal static class AvatarAnimationResources
         var banks = new List<AnimationBankSource>();
         if (recipe.ExportChr)
         {
-            banks.AddRange(resolver.ResolveBanks(dumpRoot, family, profile)
-                .Where(bank => HasIdentifier(bank.ResourcePath, recipe.ChrFamily)));
+            banks.AddRange(resolver.ResolveBanks(dumpRoot, family, profile));
             if (banks.Count == 0)
                 throw new InvalidDataException($"No registered CHR routes match the selected family '{recipe.ChrFamily}'.");
         }
@@ -33,12 +32,15 @@ internal static class AvatarAnimationResources
         cancellationToken.ThrowIfCancellationRequested();
         var banks = new List<AnimationBankSource>();
         var eventRoot = Path.Combine(dumpRoot, "common", "event");
-        if (!Directory.Exists(eventRoot)) return banks;
-        var files = Directory.EnumerateFiles(eventRoot, "*", SearchOption.AllDirectories)
+        var files = (Directory.Exists(eventRoot)
+                ? Directory.EnumerateFiles(eventRoot, "*", SearchOption.AllDirectories)
+                : [])
             .Where(path => { cancellationToken.ThrowIfCancellationRequested(); return Path.GetExtension(path).ToLowerInvariant() is ".g4pk" or ".g4mt"; })
             .Select(path => (Path: path, Relative: Path.GetRelativePath(dumpRoot, path).Replace('\\', '/')))
             .OrderBy(file => file.Relative, StringComparer.OrdinalIgnoreCase).ToArray();
         var selected = files.Where(file => HasIdentifier(file.Relative, eventSkeleton)).ToArray();
+        if (selected.Length == 0)
+            throw new InvalidDataException($"No EVENT animation banks match source skeleton '{eventSkeleton}' in the selected dump. Check the dump or disable EVENT animations.");
         var groups = selected.Select(file => EventGroup(file.Relative)).Where(group => group is not null)
             .ToHashSet(StringComparer.Ordinal);
         foreach (var file in files)
@@ -56,17 +58,18 @@ internal static class AvatarAnimationResources
         return banks;
     }
 
-    public static string RenameIdentifiers(string value, string sourceIdentifier, string destinationIdentifier) =>
-        Identifier.Replace(value, match => match.Value.Equals(sourceIdentifier, StringComparison.OrdinalIgnoreCase)
-            ? destinationIdentifier : match.Value);
+    public static byte[] Export(byte[] source, AnimationBankSource bank, G4AvatarRecipe recipe,
+        CancellationToken cancellationToken) => Export(source, bank, recipe, 1, cancellationToken);
 
     public static byte[] Export(byte[] source, AnimationBankSource bank, G4AvatarRecipe recipe,
-        string generatedFamilyName, CancellationToken cancellationToken)
+        int clipWorkers, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (IsNativeEventEffect(bank)) return source;
         if (source.AsSpan().StartsWith("G4MT"u8))
-            return G4HumanoidAnimationExporter.Export(G4mtAnimationBank.Read(source), recipe, cancellationToken);
+            return bank.IsEvent
+                ? G4HumanoidAnimationExporter.ExportEvent(G4mtAnimationBank.Read(source), recipe, clipWorkers, cancellationToken)
+                : G4HumanoidAnimationExporter.Export(G4mtAnimationBank.Read(source), recipe, clipWorkers, cancellationToken);
         var package = G4pkAnimationPackage.Read(source);
         var outputPackage = package;
         var output = source;
@@ -74,9 +77,11 @@ internal static class AvatarAnimationResources
         {
             cancellationToken.ThrowIfCancellationRequested();
             var bankData = G4mtAnimationBank.Read(resource.Content.Span);
-            var content = G4HumanoidAnimationExporter.Export(bankData, recipe, cancellationToken);
+            var content = bank.IsEvent
+                ? G4HumanoidAnimationExporter.ExportEvent(bankData, recipe, clipWorkers, cancellationToken)
+                : G4HumanoidAnimationExporter.Export(bankData, recipe, clipWorkers, cancellationToken);
             var name = bank.IsEvent
-                ? RenameIdentifiers(resource.Name, recipe.EventSkeleton, generatedFamilyName)
+                ? resource.Name
                 : $"{Path.GetFileNameWithoutExtension(bank.DestinationResourcePath)}.g4mt";
             output = outputPackage.ReplaceResource(resource.PackageIndex, name, content);
             outputPackage = G4pkAnimationPackage.Read(output);

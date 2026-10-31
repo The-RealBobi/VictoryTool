@@ -5,27 +5,62 @@ namespace VictoryTool.G4.Animations;
 
 public static class G4HumanoidAnimationExporter
 {
-    public static byte[] Export(G4mtAnimationBank bank, G4AvatarRecipe recipe, CancellationToken cancellationToken)
+    public static byte[] Export(G4mtAnimationBank bank, G4AvatarRecipe recipe, CancellationToken cancellationToken) =>
+        Export(bank, recipe, 1, cancellationToken);
+
+    public static byte[] Export(G4mtAnimationBank bank, G4AvatarRecipe recipe, int clipWorkers, CancellationToken cancellationToken) =>
+        ExportBank(bank, recipe, false, clipWorkers, cancellationToken);
+
+    public static byte[] ExportEvent(G4mtAnimationBank bank, G4AvatarRecipe recipe, CancellationToken cancellationToken) =>
+        ExportEvent(bank, recipe, 1, cancellationToken);
+
+    public static byte[] ExportEvent(G4mtAnimationBank bank, G4AvatarRecipe recipe, int clipWorkers, CancellationToken cancellationToken) =>
+        ExportBank(bank, recipe, true, clipWorkers, cancellationToken);
+
+    private static byte[] ExportBank(G4mtAnimationBank bank, G4AvatarRecipe recipe,
+        bool preserveNativeTracks, int clipWorkers, CancellationToken cancellationToken)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(clipWorkers, 1);
         recipe.Validate();
         var rig = new PreparedRig(recipe);
-        if (bank.Clips.All(clip => (clip.Flags & 1) != 0)) return bank.Source.ToArray();
+        var clips = bank.Clips.Where(clip => (clip.Flags & 1) == 0).ToArray();
+        if (clips.Length == 0) return bank.Source.ToArray();
+        G4mtClipSamples Sample(G4mtClip clip)
+        {
+            try { return SampleClip(bank, clip, rig, preserveNativeTracks, cancellationToken); }
+            catch (InvalidDataException exception)
+            { throw new InvalidDataException($"Animation clip '{clip.Name}' ({clip.Index}) failed: {exception.Message}", exception); }
+        }
         IEnumerable<G4mtClipSamples> Samples()
         {
-            foreach (var clip in bank.Clips)
+            for (var offset = 0; offset < clips.Length;)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if ((clip.Flags & 1) != 0) continue;
-                G4mtClipSamples samples;
-                try { samples = SampleClip(bank, clip, rig, cancellationToken); }
-                catch (InvalidDataException exception)
+                var count = Math.Min(clipWorkers, clips.Length - offset);
+                if (count == 1)
                 {
-                    throw new InvalidDataException($"Animation clip '{clip.Name}' ({clip.Index}) failed: {exception.Message}", exception);
+                    yield return Sample(clips[offset++]);
+                    continue;
                 }
-                yield return samples;
+                var batch = new G4mtClipSamples[count];
+                try
+                {
+                    Parallel.For(0, count, new ParallelOptions
+                    {
+                        MaxDegreeOfParallelism = count, CancellationToken = cancellationToken,
+                    }, index => batch[index] = Sample(clips[offset + index]));
+                }
+                catch (AggregateException exception) when (exception.InnerExceptions.All(error => error is InvalidDataException))
+                {
+                    throw new InvalidDataException(string.Join("; ", exception.InnerExceptions.Select(error => error.Message)), exception);
+                }
+                foreach (var samples in batch) yield return samples;
+                offset += count;
             }
         }
-        return G4mtAnimationFamilyWriter.WritePreservingAdditiveStreaming(bank, Samples(), cancellationToken);
+        return preserveNativeTracks
+            ? G4mtAnimationFamilyWriter.WritePreservingNativeTracksStreaming(bank, Samples(), cancellationToken)
+            : G4mtAnimationFamilyWriter.WritePreservingAdditiveStreaming(bank, Samples(), cancellationToken);
     }
 
     public static G4mtClipSamples SampleClip(G4mtAnimationBank bank, G4mtClip clip,
@@ -33,17 +68,25 @@ public static class G4HumanoidAnimationExporter
     {
         recipe.Validate();
         if ((clip.Flags & 1) != 0) throw new InvalidDataException("Additive clips retain their native payload.");
-        return SampleClip(bank, clip, new PreparedRig(recipe), cancellationToken);
+        return SampleClip(bank, clip, new PreparedRig(recipe), false, cancellationToken);
     }
 
     private static G4mtClipSamples SampleClip(G4mtAnimationBank bank, G4mtClip clip,
-        PreparedRig rig, CancellationToken cancellationToken)
+        PreparedRig rig, bool preserveScenePlacement, CancellationToken cancellationToken)
     {
         var infos = bank.TargetInfos.Skip(clip.TargetInfoStart).Take(clip.TargetInfoCount)
             .ToDictionary(info => bank.TargetHashes[info.TargetIndex]);
         var sourceInfos = rig.Source.Select(node => infos.GetValueOrDefault(Crc32(node.Name))).ToArray();
         if (!sourceInfos.Any(info => info is not null && info.ChannelCount > 0))
             throw new InvalidDataException($"Animation clip '{clip.Name}' has no tracks for its source rig.");
+        var sourceTrackRests = rig.Source.Select(node => node.TrackRest!.ToRest()).ToArray();
+        var sourceChannels = sourceInfos.Select(info =>
+        {
+            var types = info is null ? []
+                : bank.Channels.Skip(info.ChannelStart).Take(info.ChannelCount).Select(channel => channel.Type).ToArray();
+            return (Translation: types.Any(type => type is 10 or 11 or 12),
+                Rotation: types.Any(type => type == 9), Scale: types.Any(type => type is 1 or 2 or 3));
+        }).ToArray();
         var frames = clip.EndFrame - clip.StartFrame + 1;
         var samples = rig.Target.Select(_ => new List<G4mtJointRest>(frames)).ToArray();
         var sourceLocals = new Matrix4x4[rig.Source.Length];
@@ -56,7 +99,7 @@ public static class G4HumanoidAnimationExporter
         {
             cancellationToken.ThrowIfCancellationRequested();
             for (var index = 0; index < rig.Source.Length; index++)
-                sourceRaw[index] = ReadTrack(bank, sourceInfos[index], rig.Source[index].TrackRest!.ToRest(), frame);
+                sourceRaw[index] = ReadTrack(bank, sourceInfos[index], sourceTrackRests[index], frame);
             for (var index = 0; index < rig.Source.Length; index++)
             {
                 var node = rig.Source[index];
@@ -71,12 +114,12 @@ public static class G4HumanoidAnimationExporter
                     var correction = rig.SourceCorrections[index];
                     var delta = correction * ToMatrix(raw) * rig.SourceTrackRestInverse[index] * rig.SourceCorrectionInverses[index];
                     var basis = Decompose(delta);
-                    var channels = bank.Channels.Skip(info.ChannelStart).Take(info.ChannelCount).Select(c => c.Type).ToHashSet();
+                    var channels = sourceChannels[index];
                     basis = basis with
                     {
-                        Translation = channels.Any(type => type is 10 or 11 or 12) ? basis.Translation : Vector3.Zero,
-                        Rotation = channels.Contains(9) ? basis.Rotation : Quaternion.Identity,
-                        Scale = channels.Any(type => type is 1 or 2 or 3) ? basis.Scale : Vector3.One,
+                        Translation = channels.Translation ? basis.Translation : Vector3.Zero,
+                        Rotation = channels.Rotation ? basis.Rotation : Quaternion.Identity,
+                        Scale = channels.Scale ? basis.Scale : Vector3.One,
                     };
                     local = ToMatrix(basis) * local;
                 }
@@ -92,6 +135,11 @@ public static class G4HumanoidAnimationExporter
                 var basis = parent >= 0 ? rig.TargetLocals[index] * desired[parent] : rig.TargetLocals[index];
                 if (rig.MappedSources.TryGetValue(index, out var sourceIndex))
                 {
+                    if (preserveScenePlacement && rig.TargetRoles[index] == "c_global_0_0")
+                    {
+                        desired[index] = parent >= 0 ? sourceLocals[sourceIndex] * desired[parent] : sourceLocals[sourceIndex];
+                        continue;
+                    }
                     var sourcePose = sourceGlobals[sourceIndex];
                     var delta = Q(sourcePose) * Quaternion.Inverse(Q(rig.SourceRests[sourceIndex]));
                     var rotation = Quaternion.Normalize(alignment * delta * inverseAlignment * rig.ReferenceRotations[index]);
@@ -105,8 +153,21 @@ public static class G4HumanoidAnimationExporter
                         var parentPose = sourceParent >= 0 ? sourceGlobals[sourceParent] : Matrix4x4.Identity;
                         var expected = rig.SourceLocals[sourceIndex] * parentPose;
                         var displacement = sourcePose.Translation - expected.Translation;
-                        var proportion = role == "c_c_1_0" ? rig.Recipe.HipScale : rig.Recipe.SegmentScales[rig.Target[index].Name];
-                        position += Vector3.Transform(displacement, alignment) * proportion;
+                        Vector3 scaledDisplacement;
+                        if (role == "c_c_1_0" && preserveScenePlacement)
+                        {
+                            // EVENT pelvis translations position actors in camera/prop space.
+                            // Body proportions and rest-pose alignment must not move that staging.
+                            scaledDisplacement = displacement;
+                        }
+                        else if (role == "c_c_1_0")
+                        {
+                            var vertical = rig.SourceUp * Vector3.Dot(displacement, rig.SourceUp);
+                            scaledDisplacement = (displacement - vertical) * rig.Recipe.BodyScale + vertical * rig.Recipe.HipScale;
+                        }
+                        else scaledDisplacement = displacement * rig.Recipe.SegmentScales[rig.Target[index].Name];
+                        position += role == "c_c_1_0" && preserveScenePlacement
+                            ? scaledDisplacement : Vector3.Transform(scaledDisplacement, alignment);
                         if (role == "c_c_1_0" && rig.TargetRoot < 0)
                             position += Vector3.Transform(rootDisplacement, alignment) * rig.Recipe.BodyScale;
                     }
@@ -137,7 +198,9 @@ public static class G4HumanoidAnimationExporter
             for (var index = 0; index < rig.Target.Length; index++)
             {
                 var parent = rig.TargetParents[index];
-                var local = parent >= 0 ? desired[index] * Inverse(desired[parent]) : desired[index];
+                var animated = rig.MappedSources.ContainsKey(index) || rig.Twists.ContainsKey(index);
+                var local = !animated ? rig.TargetLocals[index]
+                    : parent >= 0 ? desired[index] * Inverse(desired[parent]) : desired[index];
                 if (rig.PreservedSources.TryGetValue(index, out var preservedIndex))
                     local = sourceLocals[preservedIndex];
                 var rest = Decompose(local);
@@ -256,6 +319,8 @@ public static class G4HumanoidAnimationExporter
                 var rotation = recipe.ReferenceRotations[target];
                 ReferenceRotations[index] = Quaternion.Normalize(new(rotation[0], rotation[1], rotation[2], rotation[3]));
             }
+            SourceUp = Vector3.Normalize(SourceRests[sourceIndices[recipe.SourceMapping["c_head_1_0"]]].Translation
+                - SourceRests[sourceIndices[recipe.SourceMapping["c_c_1_0"]]].Translation);
             SourceRoot = recipe.SourceMapping.TryGetValue("c_global_0_0", out var root) ? sourceIndices[root] : -1;
             TargetRoot = recipe.TargetMapping.TryGetValue("c_global_0_0", out root) ? targetIndices[root] : -1;
             foreach (var twist in recipe.Twists)
@@ -290,6 +355,7 @@ public static class G4HumanoidAnimationExporter
         public Dictionary<int, Quaternion> ReferenceRotations { get; } = [];
         public Dictionary<int, (int Driver, int End, float Fraction)> Twists { get; } = [];
         public Dictionary<int, int> PreservedSources { get; } = [];
+        public Vector3 SourceUp { get; }
         public int SourceRoot { get; }
         public int TargetRoot { get; }
         public int[] Order { get; }

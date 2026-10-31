@@ -27,7 +27,15 @@ public static class G4mtAnimationFamilyWriter
     }
 
     public static byte[] WritePreservingAdditiveStreaming(G4mtAnimationBank template,
-        IEnumerable<G4mtClipSamples> clips, CancellationToken cancellationToken)
+        IEnumerable<G4mtClipSamples> clips, CancellationToken cancellationToken) =>
+        WriteStreaming(template, clips, false, cancellationToken);
+
+    public static byte[] WritePreservingNativeTracksStreaming(G4mtAnimationBank template,
+        IEnumerable<G4mtClipSamples> clips, CancellationToken cancellationToken) =>
+        WriteStreaming(template, clips, true, cancellationToken);
+
+    private static byte[] WriteStreaming(G4mtAnimationBank template,
+        IEnumerable<G4mtClipSamples> clips, bool preserveNativeTracks, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(template);
         ArgumentNullException.ThrowIfNull(clips);
@@ -138,6 +146,16 @@ public static class G4mtAnimationFamilyWriter
         using var channelsOut = new MemoryStream();
         using var keys = new MemoryStream();
         using var data = new MemoryStream();
+        var keyOffsets = new Dictionary<byte[], uint>(new BytesComparer());
+        var dataOffsets = new Dictionary<byte[], uint>(new BytesComparer());
+        static uint AppendPayload(MemoryStream stream, Dictionary<byte[], uint> offsets, byte[] payload)
+        {
+            if (offsets.TryGetValue(payload, out var existing)) return existing;
+            var offset = checked((uint)stream.Length);
+            stream.Write(payload);
+            offsets.Add(payload, offset);
+            return offset;
+        }
         using var infoWriter = new BinaryWriter(infos, Encoding.UTF8, true);
         using var channelWriter = new BinaryWriter(channelsOut, Encoding.UTF8, true);
         var blocks = new Dictionary<(bool Native, int Start, int Count), int>();
@@ -146,13 +164,20 @@ public static class G4mtAnimationFamilyWriter
             cancellationToken.ThrowIfCancellationRequested();
             var infoStart = checked((int)(infos.Length / 8));
             Check24(infoStart, "target-info");
-            var native = (clip.Flags & 1) != 0;
-            var count = native ? clip.TargetInfoCount : generated[clip.Index].Length;
+            var additive = (clip.Flags & 1) != 0;
+            var nativeCount = additive || preserveNativeTracks ? clip.TargetInfoCount : 0;
+            var nativeHashes = template.TargetInfos.Skip(clip.TargetInfoStart).Take(nativeCount)
+                .Select(info => template.TargetHashes[info.TargetIndex]).ToHashSet();
+            var generatedTracks = additive ? [] : generated[clip.Index]
+                .Where(track => !preserveNativeTracks || !nativeHashes.Contains(Crc32(track.Name))).ToArray();
+            var count = nativeCount + generatedTracks.Length;
+            if (count > ushort.MaxValue) throw new InvalidDataException("G4MT clip exceeds the target-track limit.");
             for (var index = 0; index < count; index++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                var native = index < nativeCount;
                 G4mtTargetInfo? info = native ? template.TargetInfos[clip.TargetInfoStart + index] : null;
-                var track = native ? null : generated[clip.Index][index];
+                var track = native ? null : generatedTracks[index - nativeCount];
                 var blockKey = native ? (true, info!.ChannelStart, (int)info.ChannelCount) : (false, track!.Block, track.Channels.Length);
                 if (!blocks.TryGetValue(blockKey, out var channelStart))
                 {
@@ -179,12 +204,10 @@ public static class G4mtAnimationFamilyWriter
                             keyBytes = channel.Keys;
                             dataBytes = channel.Data;
                         }
-                        Put32(record, 8, checked((uint)(keys.Length / 2)));
-                        Put32(record, 12, checked((uint)data.Length));
+                        Put32(record, 8, AppendPayload(keys, keyOffsets, keyBytes) / 2);
+                        Put32(record, 12, AppendPayload(data, dataOffsets, dataBytes));
                         Put32(record, 16, (uint)(keyBytes.Length / 2));
                         channelWriter.Write(record);
-                        keys.Write(keyBytes);
-                        data.Write(dataBytes);
                     }
                 }
                 var hash = native ? template.TargetHashes[info!.TargetIndex] : Crc32(track!.Name);

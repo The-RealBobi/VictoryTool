@@ -112,7 +112,7 @@ public static class CharacterUniformVariantCatalog
     public static int Resolve(int gender, int bodyType, int chestSize) =>
         gender switch
         {
-            1 when bodyType is 1 or 2 or 5 => ThinMaleMember,
+            1 when bodyType is 0 or 1 or 2 or 5 => ThinMaleMember,
             1 when bodyType is 3 or 4 or 6 => LargeMaleMember,
             2 when chestSize >= 2 => LargerFemaleMember,
             2 when chestSize is >= 0 and <= 1 => SmallerFemaleMember,
@@ -140,21 +140,83 @@ public static class CharacterOriginGameCatalog
         return null;
     }
 
+    private static readonly uint[] NameTextIds =
+        [3872459131, 2144884929, 148858967, 379636987, 2410257729, 4172197335, 3728061436, 2625647118, 1952491984];
+
+    private static readonly IReadOnlyDictionary<string, string[]> Names =
+        new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["en"] =
+            [
+                "Inazuma Eleven",
+                "Inazuma Eleven 2",
+                "Inazuma Eleven 3",
+                "Inazuma Eleven GO",
+                "Inazuma Eleven GO Chrono Stones",
+                "Inazuma Eleven GO Galaxy",
+                "Inazuma Eleven Ares",
+                "Inazuma Eleven Orion",
+                "Inazuma Eleven Heroes' Victory Road",
+            ],
+            ["ja"] =
+            [
+                "イナズマイレブン",
+                "イナズマイレブン２",
+                "イナズマイレブン３",
+                "イナズマイレブンＧＯ",
+                "イナズマイレブンＧＯ２ クロノ・ストーン",
+                "イナズマイレブンＧＯ ギャラクシー",
+                "イナズマイレブン アレスの天秤",
+                "イナズマイレブン オリオンの刻印",
+                "イナズマイレブン 英雄たちのヴィクトリーロード",
+            ],
+            ["zh_hans"] =
+            [
+                "闪电十一人",
+                "闪电十一人2",
+                "闪电十一人3",
+                "闪电十一人GO",
+                "闪电十一人GO2",
+                "闪电十一人GO 银河",
+                "闪电十一人 阿瑞斯的天秤",
+                "闪电十一人 俄里翁的刻印",
+                "闪电十一人 英雄们的胜利之路",
+            ],
+            ["zh_hant"] =
+            [
+                "閃電十一人",
+                "閃電十一人2",
+                "閃電十一人3",
+                "閃電十一人GO",
+                "閃電十一人GO2",
+                "閃電十一人GO 銀河",
+                "閃電十一人 阿瑞斯的天秤",
+                "閃電十一人 獵戶座的刻印",
+                "閃電十一人 英雄們的勝利之路",
+            ],
+        };
+
+    internal static int? ResolveAssociationIndex(uint nameTextId)
+    {
+        var offset = Array.IndexOf(NameTextIds, nameTextId);
+        return offset >= 0 ? FirstAssociationIndex + offset : null;
+    }
+
     public static string ResolveName(int index, string locale = "en")
     {
-        var spanish = string.Equals(locale, "es", StringComparison.OrdinalIgnoreCase);
-        return index switch
+        if (index < FirstAssociationIndex || index > LastAssociationIndex)
+            return string.Equals(locale, "es", StringComparison.OrdinalIgnoreCase)
+                ? $"Juego {index}" : $"Game {index}";
+        if (Names.TryGetValue(locale, out var names))
+            return names[index - FirstAssociationIndex];
+        return (locale.ToLowerInvariant(), index) switch
         {
-            22 => "Inazuma Eleven 1",
-            23 => "Inazuma Eleven 2",
-            24 => "Inazuma Eleven 3",
-            25 => "Inazuma Eleven GO 1",
-            26 => "Inazuma Eleven GO 2",
-            27 => "Inazuma Eleven GO 3",
-            28 => "Inazuma Eleven ARES",
-            29 => "Inazuma Eleven Orion",
-            30 => "Inazuma Eleven Victory Road",
-            _ => spanish ? $"Juego {index}" : $"Game {index}",
+            ("es", 29) => "Inazuma Eleven Orión",
+            ("fr", 28) => "Inazuma Eleven Arès",
+            ("de", 30) => "Inazuma Eleven Helden der Siegesstraße",
+            ("pt", 29) => "Inazuma Eleven Órion",
+            ("fr" or "it" or "pt", 30) => "Inazuma Eleven Victory Road",
+            _ => Names["en"][index - FirstAssociationIndex],
         };
     }
 }
@@ -261,7 +323,8 @@ public sealed record CharacterPortraitMetadata(
     bool HasStandardPortrait,
     bool HasUniformPortrait,
     string? StandardPortraitEntryName = null,
-    string? UniformPortraitEntryName = null);
+    string? UniformPortraitEntryName = null,
+    bool IncludesUniform = false);
 
 public sealed record CharacterBaseMetadata(
     int BaseId,
@@ -369,6 +432,10 @@ public static class CharacterSemanticMapper
             .Where(entry => entry.Name == "CHARA_BODY_INFO" && entry.Values.Count >= 7)
             .GroupBy(entry => GetInteger(entry, 0))
             .ToDictionary(group => group.Key, group => group.First());
+        var paletteColors = modelEntries
+            .Where(entry => entry.Name == "CHARA_PARTS_COLOR" && entry.Values.Count >= 2)
+            .GroupBy(entry => GetInteger(entry, 0))
+            .ToDictionary(group => group.Key, group => unchecked((uint)GetInteger(group.First(), 1)));
         var bases = new Dictionary<int, CharacterBaseMetadata>();
         foreach (var entry in baseEntries.Where(entry => entry.Name == "CHARA_BASE_INFO" && entry.Values.Count >= 20))
         {
@@ -382,6 +449,9 @@ public static class CharacterSemanticMapper
             bodies.TryGetValue(bodyModelId, out var body);
             var bodyType = body is null ? GetInteger(entry, 12) : GetInteger(body, 5);
             var chestSize = model is null ? 0 : GetInteger(model, 31);
+            var skinColor = model is null || model.Values.Count <= 16 ? 0u : unchecked((uint)GetInteger(model, 16));
+            if (skinColor == 0 && model is not null)
+                paletteColors.TryGetValue(GetInteger(model, 8), out skinColor);
             bases.TryAdd(baseId, new CharacterBaseMetadata(
                 baseId,
                 internalName,
@@ -404,9 +474,7 @@ public static class CharacterSemanticMapper
                 GetInteger(entry, 18),
                 model is null ? null : GetString(model, 10),
                 body is null ? null : GetString(body, 2),
-                model is null || model.Values.Count <= 16
-                    ? 0u
-                    : unchecked((uint)GetInteger(model, 16)),
+                skinColor,
                 model is null ? 0 : GetInteger(model, 5),
                 model is null ? 0 : GetInteger(model, 6),
                 model is null ? 0 : GetInteger(model, 7),
@@ -536,6 +604,7 @@ public sealed record CharacterAnimationProfile(
     IReadOnlyList<CharacterAnimationJoint> Joints)
 {
     public G4AvatarRecipe? AvatarRecipe { get; init; }
+    public string? SourceRigBinding { get; init; }
     public IReadOnlyList<CharacterAnimationBank> GeneratedBanks { get; init; } = [];
     public IReadOnlyList<CharacterAnimationPackage> GeneratedPackages { get; init; } = [];
 }
@@ -658,6 +727,50 @@ public sealed record CharacterDraftVariant(
 /// </summary>
 public static class CharacterRarityCatalog
 {
+    private static readonly uint[] NameTextIds =
+        [2710282920, 1750677610, 2616443864, 3294756336, 2463340583, 2534936534, 3347152796];
+
+    private static readonly IReadOnlyDictionary<string, string[]> Names =
+        new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["en"] = ["Common", "Growing", "Advanced", "Top", "Legendary", "Hero", "Fabled"],
+            ["es"] = ["COMÚN", "EMERGENTE", "ÉLITE", "ESTRELLA", "LEYENDA", "ÍDOLO", "DIAMANTE"],
+            ["fr"] = ["NORMAL", "EN PROGRESSION", "EXPÉRIMENTÉ", "ÉMÉRITE", "LÉGENDAIRE", "HÉROS", "BASARA"],
+            ["de"] = ["GEWÖHNLICHER", "AUFSTREBENDER", "ERFAHRENER", "SPITZE", "LEGENDE", "HELD", "BASARA"],
+            ["it"] = ["COMUNE", "IN CRESCITA", "ESPERTO", "SUPER", "LEGGENDARIO", "EROE", "MITO"],
+            ["pt"] = ["COMUM", "PROMISSOR", "DESTAQUE", "FENÔMENO", "LENDA", "ÍCONE", "TITÃ"],
+            ["ja"] = ["ＮＯＲＭＡＬ", "ＧＲＯＷＩＮＧ", "ＡＤＶＡＮＣＥＤ", "ＴＯＰ", "ＬＥＧＥＮＤＡＲＹ", "ＨＥＲＯ", "ＢＡＳＡＲＡ"],
+            ["zh_hans"] = ["普通", "潜力", "资深", "超凡", "传奇", "英雄", "无双"],
+            ["zh_hant"] = ["普通", "潛力", "資深", "超凡", "傳奇", "英雄", "無雙"],
+        };
+
+    public static uint? ResolveNameTextId(int rarity) => ResolveNameIndex(rarity) is { } index
+        ? NameTextIds[index]
+        : null;
+
+    public static string ResolveName(int rarity, string locale)
+    {
+        if (ResolveNameIndex(rarity) is not { } index)
+            return $"Unknown rarity ({rarity})";
+        var names = Names.GetValueOrDefault(locale) ?? Names["en"];
+        return FormatName(names[index]);
+    }
+
+    internal static string FormatName(string name)
+    {
+        if (name.Length == 0) return name;
+        var normalized = name.Normalize(System.Text.NormalizationForm.FormKC).ToLowerInvariant();
+        return char.ToUpperInvariant(normalized[0]) + normalized[1..];
+    }
+
+    private static int? ResolveNameIndex(int rarity) => rarity switch
+    {
+        >= 0 and <= 4 => rarity,
+        >= 5 and <= 7 => 5,
+        8 => 6,
+        _ => null,
+    };
+
     public static IReadOnlyList<CharacterDraftVariant>? EnsureDraftVariants(
         IReadOnlyList<CharacterDraftVariant>? variants)
         => variants;

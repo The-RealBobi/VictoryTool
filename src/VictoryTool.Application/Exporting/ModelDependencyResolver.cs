@@ -55,13 +55,19 @@ public sealed class ModelDependencyResolver : IModelDependencyResolver
             .Where(path => !Path.GetRelativePath(categoryRoot, path).Replace('\\', '/')
                 .StartsWith("99_CUSTOM/", StringComparison.OrdinalIgnoreCase))
             .ToArray();
+        if (sourceConfigs.Length == 0)
+        {
+            // Match G4_Blender's character-local skeleton and collision template.
+            var template = Path.Combine(categoryRoot, "11_VICTORY", "c11010010", "c11010010.objbin");
+            if (!File.Exists(template))
+                return MissingMetadata(modelPath,
+                    $"The character metadata template required for custom face '{stem}' is missing.");
+            sourceConfigs = [template];
+        }
         if (sourceConfigs.Length != 1)
-            return MissingMetadata(modelPath, sourceConfigs.Length == 0
-                ? $"No source OBJBIN was found for custom face '{stem}'."
-                : $"More than one source OBJBIN was found for custom face '{stem}'.");
+            return MissingMetadata(modelPath, $"More than one source OBJBIN was found for custom face '{stem}'.");
 
-        var sourceDirectory = Path.GetDirectoryName(sourceConfigs[0])!;
-        var sourceClobin = Path.Combine(sourceDirectory, $"{stem}.clobin");
+        var sourceClobin = Path.ChangeExtension(sourceConfigs[0], ".clobin");
         if (!File.Exists(sourceClobin))
             return MissingMetadata(modelPath, $"The source face metadata for '{stem}' has no CLOBIN companion.");
 

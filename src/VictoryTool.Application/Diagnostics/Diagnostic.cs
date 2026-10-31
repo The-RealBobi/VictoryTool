@@ -11,4 +11,7 @@ public sealed record Diagnostic(
     string Code,
     DiagnosticSeverity Severity,
     string Message,
-    string? RecoveryAction = null);
+    string? RecoveryAction = null)
+{
+    public IReadOnlyList<string> MessageArguments { get; init; } = [];
+}

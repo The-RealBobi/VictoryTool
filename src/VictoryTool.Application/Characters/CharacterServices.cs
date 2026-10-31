@@ -84,13 +84,15 @@ public sealed partial class FileSystemCharacterCatalogService : ICharacterCatalo
                 characterDataRoot, "chara_param_*.cfg.bin", "CHARA_PARAM_INFO", cancellationToken, out var rejectedParameterTables);
             var modelDocument = ReadLargestTable(
                 characterDataRoot, "chara_model_*.cfg.bin", "CHARA_MODEL_INFO", cancellationToken, out var rejectedModelTables);
-            rejectedCharacterTables = rejectedBaseTables + rejectedParameterTables + rejectedModelTables;
+            var colorDocument = ReadLargestTable(
+                characterDataRoot, "chara_parts*.cfg.bin", "CHARA_PARTS_COLOR", cancellationToken, out var rejectedColorTables);
+            rejectedCharacterTables = rejectedColorTables + rejectedBaseTables + rejectedParameterTables + rejectedModelTables;
             if (baseDocument is not null && parameterDocument is not null)
             {
                 semanticRecords = CharacterSemanticMapper.Map(
                     baseDocument.Entries,
                     parameterDocument.Entries,
-                    modelDocument?.Entries ?? [],
+                    (modelDocument?.Entries ?? []).Concat(colorDocument?.Entries ?? []),
                     cancellationToken);
                 progress?.Report(new IndexProgress(IndexStage.Localization, 0, 1, "Reading character localization tables."));
                 localizationReported = true;
@@ -182,16 +184,17 @@ public sealed partial class FileSystemCharacterCatalogService : ICharacterCatalo
         if (!localizationReported)
             progress?.Report(new IndexProgress(IndexStage.Localization, 0, 1, "Reading character localization tables."));
         progress?.Report(new IndexProgress(IndexStage.Assets, 0, 1, "Reading character portrait containers."));
-        var paths = new[]
-        {
-            (CharacterAssetPlatform.Pc, Path.Combine(
-                profile.RootPath, "dx11", "menu", "200_icon", "10_icon_chr", "face")),
-            (CharacterAssetPlatform.Switch, Path.Combine(
-                profile.RootPath, "nx", "menu", "200_icon", "10_icon_chr", "face")),
-        };
+        var paths = new[] { "face", "aura_armed" }
+            .SelectMany(folder => new[]
+            {
+                (CharacterAssetPlatform.Pc, Path.Combine(
+                    profile.RootPath, "dx11", "menu", "200_icon", "10_icon_chr", folder), folder == "aura_armed"),
+                (CharacterAssetPlatform.Switch, Path.Combine(
+                    profile.RootPath, "nx", "menu", "200_icon", "10_icon_chr", folder), folder == "aura_armed"),
+            });
         var invalidPortraitCount = 0;
         var validPortraitCount = 0;
-        foreach (var (platform, directory) in paths.Where(path => Directory.Exists(path.Item2)))
+        foreach (var (platform, directory, includesUniform) in paths.Where(path => Directory.Exists(path.Item2)))
         {
             foreach (var path in Directory.EnumerateFiles(directory, "*_l.g4tx", SearchOption.TopDirectoryOnly))
             {
@@ -218,9 +221,10 @@ public sealed partial class FileSystemCharacterCatalogService : ICharacterCatalo
                                 _ => "Unknown",
                             },
                             container.TextureCount >= 1,
-                            container.TextureCount >= 2,
+                            !includesUniform && container.TextureCount >= 2,
                             container.Textures.ElementAtOrDefault(0)?.Name,
-                            container.Textures.ElementAtOrDefault(1)?.Name);
+                            includesUniform ? null : container.Textures.ElementAtOrDefault(1)?.Name,
+                            IncludesUniform: includesUniform);
                         validPortraitCount++;
                     }
                 }
@@ -230,6 +234,7 @@ public sealed partial class FileSystemCharacterCatalogService : ICharacterCatalo
                     GlobalLog.Warn("character_portrait_index_failed", exception: exception);
                 }
 
+                if (includesUniform && portraitMetadata is null) continue;
                 characters.TryGetValue(id, out var existingCharacter);
                 var portraits = existingCharacter?.Portraits?.ToDictionary() ??
                     new Dictionary<CharacterAssetPlatform, CharacterPortraitAsset>();
@@ -253,6 +258,27 @@ public sealed partial class FileSystemCharacterCatalogService : ICharacterCatalo
                         AssetAvailability = CharacterAssetAvailability.FromPortraits(portraits),
                     };
             }
+        }
+
+        foreach (var character in characters.Values.ToArray())
+        {
+            if (character.PortraitResourcePath is not null) continue;
+            var headModel = Path.GetFileNameWithoutExtension(character.BaseMetadata?.HeadModelPath?.Replace('\\', '/'));
+            CharacterCatalogItem? owner = null;
+            // Restricted variants share the regular portrait even when their head model differs.
+            if (character.Id.EndsWith("_5000", StringComparison.Ordinal))
+                characters.TryGetValue(character.Id[..^5], out owner);
+            if (owner?.PortraitResourcePath is null && !string.IsNullOrEmpty(headModel))
+                characters.TryGetValue(headModel, out owner);
+            if (owner?.PortraitResourcePath is null)
+                continue;
+            characters[character.Id] = character with
+            {
+                PortraitResourcePath = owner.PortraitResourcePath,
+                PortraitMetadata = owner.PortraitMetadata,
+                Portraits = owner.Portraits,
+                AssetAvailability = owner.AssetAvailability,
+            };
         }
 
         ApplyUniformPreviewAssets(profile, semanticRecords, characters, taxonomy, cancellationToken);
@@ -358,11 +384,18 @@ public sealed partial class FileSystemCharacterCatalogService : ICharacterCatalo
             cancellationToken.ThrowIfCancellationRequested();
             if (!record.Base.InternalName.StartsWith('c')) continue;
             var id = record.Base.InternalName[1..];
+            var suffix = record.Base.UniformPortraitVariant switch
+            {
+                0 => "00", 1 => "02", 2 => "03", 3 => "01", _ => null,
+            };
             foreach (var platform in platforms)
             {
                 var directory = Path.Combine(
                     profile.RootPath, platform, "menu", "200_icon", "10_icon_chr", "uniform");
-                foreach (var fileName in new[] { $"u{id}_l.g4tx", $"u{id}_00_l.g4tx", $"u{id}_10_00_l.g4tx" })
+                var fileNames = suffix is null
+                    ? new[] { $"u{id}_l.g4tx" }
+                    : new[] { $"u{id}_l.g4tx", $"u{id}_{suffix}_l.g4tx", $"u{id}_10_{suffix}_l.g4tx" };
+                foreach (var fileName in fileNames)
                 {
                     var path = Path.Combine(directory, fileName);
                     if (!File.Exists(path)) continue;
@@ -395,6 +428,7 @@ public sealed partial class FileSystemCharacterCatalogService : ICharacterCatalo
         foreach (var record in semanticRecords)
         {
             if (!characters.TryGetValue(record.Base.InternalName, out var character)) continue;
+            if (character.PortraitMetadata?.IncludesUniform == true) continue;
             var asset = exactAssets.GetValueOrDefault(record.Base.InternalName);
             if (asset is null)
             {
@@ -407,6 +441,8 @@ public sealed partial class FileSystemCharacterCatalogService : ICharacterCatalo
                     assetCache,
                     record.Variants.FirstOrDefault()?.MainPosition == 1,
                     cancellationToken);
+                if (asset is not null && modelCatalog.IsArmorModel(record.Base.UniformModel))
+                    asset = asset with { DiagnosticCode = "uniform.armor_preview_unavailable" };
             }
             if (asset is null
                 && record.Base.UniformModel != 0
@@ -437,9 +473,9 @@ public sealed partial class FileSystemCharacterCatalogService : ICharacterCatalo
         var suffixes = variant switch
         {
             0 => new[] { "00" },
-            1 => new[] { "02", "00" },
-            2 => new[] { "03", "00" },
-            3 => new[] { "01", "00" },
+            1 => new[] { "02" },
+            2 => new[] { "03" },
+            3 => new[] { "01" },
             _ => Array.Empty<string>(),
         };
         if (suffixes.Length == 0) return null;
@@ -721,7 +757,7 @@ public sealed class CharacterCloneService : ICharacterCloneService
             ["hasSourceVariants"] = source.Variants is { Count: > 0 },
             ["fieldCount"] = source.Fields.Count,
         });
-        var fields = new Dictionary<string, string?>(source.Fields, StringComparer.Ordinal);
+        var fields = CopyCloneFields(source.Fields);
         return new CharacterDraft(
             CreateSymbolicId(),
             source.Id,
@@ -778,7 +814,7 @@ public sealed class CharacterCloneService : ICharacterCloneService
         {
             SymbolicId = CreateSymbolicId(),
             DisplayName = $"{source.DisplayName} Copy",
-            Fields = new Dictionary<string, string?>(source.Fields, StringComparer.Ordinal),
+            Fields = CopyCloneFields(source.Fields),
             Assets = source.Assets is { } assets
                 ? assets with { }
                 : new CharacterDraftAssets(null, null),
@@ -794,6 +830,17 @@ public sealed class CharacterCloneService : ICharacterCloneService
                 ? null
                 : source.Variants.Select(CloneVariant).ToArray(),
         };
+    }
+
+    private static Dictionary<string, string?> CopyCloneFields(IReadOnlyDictionary<string, string?> source)
+    {
+        var fields = new Dictionary<string, string?>(source, StringComparer.Ordinal);
+        if (fields.GetValueOrDefault("Identity.Gender") is "0" or "4")
+        {
+            fields["Identity.Gender"] = "5";
+            fields["Identity.GenderName"] = CharacterGenderCatalog.ResolveName(5, "en");
+        }
+        return fields;
     }
 
     private static string CreateSymbolicId() => $"custom.{Guid.NewGuid():N}";
@@ -910,11 +957,12 @@ public sealed class CharacterDraftService : ICharacterDraftService
     {
         ArgumentNullException.ThrowIfNull(draft);
         ArgumentException.ThrowIfNullOrWhiteSpace(field);
-        GlobalLog.Debug("character_draft_field_update", new Dictionary<string, object?>
+        if (!draft.Fields.TryGetValue(field, out var previousValue) || previousValue != value)
+            GlobalLog.Info("parameter_changed", new Dictionary<string, object?>
         {
             ["field"] = field,
-            ["hasValue"] = value is not null,
-            ["valueLength"] = value?.Length ?? 0,
+            ["character"] = draft.DisplayName,
+            ["value"] = value,
         });
         var fields = new Dictionary<string, string?>(draft.Fields, StringComparer.Ordinal)
         {

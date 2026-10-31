@@ -122,6 +122,7 @@ if ($RuntimeIdentifier -like "osx-*") {
 "@
     Set-Content -Path (Join-Path $appRoot "Contents\Info.plist") -Value $plist -Encoding UTF8
     if ($IsMacOS) { & chmod +x (Join-Path $macOsRoot "VictoryTool") }
+    Copy-Item -Path (Join-Path $repositoryRoot "licenses") -Destination (Join-Path $resourcesRoot "licenses") -Recurse
     Compress-Archive -Path $appRoot -DestinationPath $archive
 }
 else {
@@ -130,6 +131,8 @@ else {
         $paths = $publishedFiles | ForEach-Object { $_.FullName }
         throw "Single-file publish produced $($publishedFiles.Count) files in $publishRoot.`n$($paths -join "`n")"
     }
-    Compress-Archive -Path $publishedFiles[0].FullName -DestinationPath $archive
+    $licensesRoot = Join-Path $publishRoot "licenses"
+    Copy-Item -Path (Join-Path $repositoryRoot "licenses") -Destination $licensesRoot -Recurse
+    Compress-Archive -Path @($publishedFiles[0].FullName, $licensesRoot) -DestinationPath $archive
 }
 Write-Output "Created $archive"

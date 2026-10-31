@@ -8,7 +8,8 @@ namespace VictoryTool.Application.Assets;
 public sealed record UniformAssetDescriptor(
     string RelativeContainerPath,
     string ShirtTextureEntryName,
-    string SkinMaskTextureEntryName);
+    string SkinMaskTextureEntryName,
+    string? DiagnosticCode = null);
 
 public sealed record UniformPreviewRequest(
     int Gender,
@@ -72,20 +73,25 @@ public sealed class UniformPreviewResolver : IUniformPreviewResolver
             ["uniformModel"] = request.UniformModel,
             ["hasExactAsset"] = request.ExactAsset is not null,
         });
-        var provenance = UniformPreviewProvenance.Exact;
+        var previewDiagnostic = request.ExactAsset?.DiagnosticCode;
+        var provenance = previewDiagnostic is null ? UniformPreviewProvenance.Exact : UniformPreviewProvenance.BodyCompatibleDefault;
         var descriptor = request.ExactAsset;
         var uniformVariant = request.UniformVariant
             ?? CharacterUniformVariantCatalog.Resolve(request.Gender, request.BodyType, request.ChestSize);
         if (descriptor is null)
         {
-            var catalog = GetDefaults(profile, cancellationToken);
+            var catalog = await Task.Run(() => GetDefaults(profile, cancellationToken), cancellationToken);
             if (request.UniformModel is { } uniformModel
                 && catalog.TryResolveModel(
                     uniformModel, request.Gender, uniformVariant, out descriptor))
                 provenance = UniformPreviewProvenance.ModelMapped;
-            else if (catalog.TryResolve(
-                         request.Gender, uniformVariant, out descriptor))
+            else if (catalog.TryResolve(request.Gender, uniformVariant, out descriptor))
+            {
                 provenance = UniformPreviewProvenance.BodyCompatibleDefault;
+                if (request.UniformModel is { } requested && requested != 0)
+                    previewDiagnostic = catalog.IsArmorModel(requested)
+                        ? "uniform.armor_preview_unavailable" : "uniform.compatible_default";
+            }
             else
             {
                 GlobalLog.Warn("uniform_preview_mapping_unverified");
@@ -149,7 +155,8 @@ public sealed class UniformPreviewResolver : IUniformPreviewResolver
         });
         return new UniformPreviewResult(
             TextureCompositor.ApplySkinMask(shirt.Texture, mask.Texture, request.SkinColorArgb),
-            provenance);
+            provenance,
+            previewDiagnostic);
     }
 
     private DefaultUniformCatalog GetDefaults(

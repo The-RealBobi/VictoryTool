@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
-using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -22,17 +22,9 @@ public static class GlobalLog
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static StreamWriter? _writer;
-    private static TraceListener? _traceListener;
     private static string? _logPath;
-    private static string _sessionId = "uninitialized";
+    private static ConditionalWeakTable<Exception, object> _reportedErrors = new();
     private static long _bytesWritten;
-    private static bool _limitReported;
-
-    private static bool DebugLoggingEnabled =>
-        string.Equals(
-            Environment.GetEnvironmentVariable("VICTORYTOOL_LOG_LEVEL"),
-            "debug",
-            StringComparison.OrdinalIgnoreCase);
 
     public static string? FilePath
     {
@@ -48,15 +40,10 @@ public static class GlobalLog
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(operationName);
         var parent = Context.Value;
-        var context = new LogContext(
-            parent?.CorrelationId ?? CreateIdentifier(),
-            CreateIdentifier(),
-            operationName);
+        var context = new LogContext(operationName);
         Context.Value = context;
-        Debug("operation_started", Merge(data, new Dictionary<string, object?>
-        {
-            ["operation"] = operationName,
-        }));
+        if (IsSummaryOperation(operationName))
+            Info("phase", new Dictionary<string, object?> { ["name"] = operationName, ["state"] = "started" });
         return new OperationScope(
             parent,
             context,
@@ -66,7 +53,6 @@ public static class GlobalLog
 
     public static void StartSession(string appVersion, string? rootOverride = null)
     {
-        string? logPath;
         lock (Gate)
         {
             if (_writer is not null) return;
@@ -84,19 +70,14 @@ public static class GlobalLog
                 {
                     AutoFlush = true,
                 };
-                _sessionId = Guid.NewGuid().ToString("N")[..12];
+                _reportedErrors = new();
                 _bytesWritten = 0;
-                _limitReported = false;
-                var listener = new GlobalTraceListener();
-                _traceListener = listener;
-                Trace.Listeners.Add(listener);
-                logPath = _logPath;
+                File.Delete(_logPath + ".previous");
             }
             catch (Exception exception) when (
                 exception is IOException or UnauthorizedAccessException or ArgumentException)
             {
                 _writer = null;
-                _traceListener = null;
                 _logPath = null;
                 global::System.Diagnostics.Debug.WriteLine(
                     $"VictoryTool log could not be initialized: {exception.Message}");
@@ -104,49 +85,39 @@ public static class GlobalLog
             }
         }
 
-        Info("log_initialized", new Dictionary<string, object?>
+        Info("phase", new Dictionary<string, object?>
         {
-            ["path"] = logPath,
-            ["storage"] = OperatingSystem.IsWindows()
-                ? "local_application_data"
-                : OperatingSystem.IsMacOS()
-                    ? "macos_application_support"
-                    : "application_data",
-        });
-        Info("application_started", new Dictionary<string, object?>
-        {
-            ["appVersion"] = appVersion,
-            ["osDescription"] = RuntimeInformation.OSDescription,
-            ["osVersion"] = Environment.OSVersion.VersionString,
-            ["osArchitecture"] = RuntimeInformation.OSArchitecture.ToString(),
-            ["processArchitecture"] = RuntimeInformation.ProcessArchitecture.ToString(),
-            ["runtime"] = RuntimeInformation.FrameworkDescription,
-            ["culture"] = CultureInfo.CurrentCulture.Name,
-            ["uiCulture"] = CultureInfo.CurrentUICulture.Name,
-            ["is64BitProcess"] = Environment.Is64BitProcess,
-            ["is64BitOperatingSystem"] = Environment.Is64BitOperatingSystem,
+            ["name"] = "application_started",
+            ["version"] = appVersion,
         });
     }
 
     public static void Info(string eventName, IReadOnlyDictionary<string, object?>? data = null) =>
         Write("info", eventName, data);
 
-    public static void Debug(string eventName, IReadOnlyDictionary<string, object?>? data = null)
-    {
-        if (DebugLoggingEnabled) Write("debug", eventName, data);
-    }
+    public static void Debug(string eventName, IReadOnlyDictionary<string, object?>? data = null) { }
 
     public static void Warn(
         string eventName,
         IReadOnlyDictionary<string, object?>? data = null,
-        Exception? exception = null) =>
-        Write("warn", eventName, AddException(data, exception));
+        Exception? exception = null) { }
 
     public static void Error(
         string eventName,
         Exception? exception = null,
-        IReadOnlyDictionary<string, object?>? data = null) =>
-        Write("error", eventName, AddException(data, exception));
+        IReadOnlyDictionary<string, object?>? data = null)
+    {
+        lock (Gate)
+        {
+            if (_writer is null) return;
+            if (exception is not null)
+            {
+                if (_reportedErrors.TryGetValue(exception, out _)) return;
+                _reportedErrors.Add(exception, new object());
+            }
+            Write("error", eventName, AddException(data, exception));
+        }
+    }
 
     public static void WriteTrace(string message) =>
         Debug("framework_trace", new Dictionary<string, object?>
@@ -156,17 +127,10 @@ public static class GlobalLog
 
     public static void Shutdown()
     {
-        Info("application_stopped");
+        Info("phase", new Dictionary<string, object?> { ["name"] = "application_stopped" });
 
         lock (Gate)
         {
-            if (_traceListener is not null)
-            {
-                Trace.Listeners.Remove(_traceListener);
-                _traceListener.Dispose();
-                _traceListener = null;
-            }
-
             try
             {
                 _writer?.Flush();
@@ -202,10 +166,9 @@ public static class GlobalLog
     }
 
     private static bool IsSummaryOperation(string operationName) =>
-        operationName is not "asset_preview_load"
-            and not "character_portrait_load"
-            and not "texture_decode"
-            and not "portrait_png_convert";
+        operationName is "ui_initialize" or "ui_dump_load" or "ui_package_add"
+            or "ui_export_preview" or "ui_export_execute" or "vrchara_draft_save"
+            or "project_load" or "project_save";
 
     private static string GetMacApplicationSupportDirectory()
     {
@@ -226,9 +189,7 @@ public static class GlobalLog
         var result = data is null
             ? new Dictionary<string, object?>()
             : new Dictionary<string, object?>(data);
-        result["exceptionType"] = exception.GetType().FullName;
-        result["exceptionMessage"] = exception.Message;
-        result["stackTrace"] = exception.ToString();
+        result["exception"] = exception.ToString();
         return result;
     }
 
@@ -237,21 +198,19 @@ public static class GlobalLog
         string eventName,
         IReadOnlyDictionary<string, object?>? data)
     {
+        if (level != "error" && eventName is not ("phase" or "character_selected" or "parameter_changed")) return;
         lock (Gate)
         {
             if (_writer is null) return;
 
             var record = new Dictionary<string, object?>
             {
-                ["timestampUtc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                ["t"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
                 ["level"] = level,
                 ["event"] = eventName,
-                ["sessionId"] = _sessionId,
-                ["correlationId"] = Context.Value?.CorrelationId ?? _sessionId,
             };
             if (Context.Value is { } context)
             {
-                record["operationId"] = context.OperationId;
                 record["operation"] = context.Operation;
             }
             if (data is not null)
@@ -264,25 +223,16 @@ public static class GlobalLog
 
             var line = JsonSerializer.Serialize(record, JsonOptions);
             var lineBytes = Encoding.UTF8.GetByteCount(line) + Environment.NewLine.Length;
-            if (_bytesWritten + lineBytes > MaximumLogBytes)
-            {
-                if (_limitReported) return;
-                _limitReported = true;
-                line = JsonSerializer.Serialize(new Dictionary<string, object?>
-                {
-                    ["timestampUtc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
-                    ["level"] = "warn",
-                    ["event"] = "log_limit_reached",
-                    ["sessionId"] = _sessionId,
-                    ["data"] = new Dictionary<string, object?>
-                    {
-                        ["maximumBytes"] = MaximumLogBytes,
-                    },
-                }, JsonOptions);
-            }
-
             try
             {
+                if (_bytesWritten + lineBytes > MaximumLogBytes)
+                {
+                    _writer.Dispose();
+                    File.Move(_logPath!, _logPath + ".previous", overwrite: true);
+                    _writer = new StreamWriter(new FileStream(_logPath!, FileMode.Create, FileAccess.Write, FileShare.Read),
+                        new UTF8Encoding(false)) { AutoFlush = true };
+                    _bytesWritten = 0;
+                }
                 _writer.WriteLine(line);
                 _bytesWritten += Encoding.UTF8.GetByteCount(line) + Environment.NewLine.Length;
             }
@@ -307,19 +257,6 @@ public static class GlobalLog
         _ => Sanitize(value.ToString() ?? string.Empty),
     };
 
-    private static IReadOnlyDictionary<string, object?>? Merge(
-        IReadOnlyDictionary<string, object?>? first,
-        IReadOnlyDictionary<string, object?> second)
-    {
-        var result = first is null
-            ? new Dictionary<string, object?>()
-            : new Dictionary<string, object?>(first);
-        foreach (var pair in second) result[pair.Key] = pair.Value;
-        return result;
-    }
-
-    private static string CreateIdentifier() => Guid.NewGuid().ToString("N")[..12];
-
     private static string Sanitize(string value)
     {
         var sanitized = value;
@@ -342,13 +279,6 @@ public static class GlobalLog
         return AbsolutePathPattern.Replace(sanitized, "<path>");
     }
 
-    private sealed class GlobalTraceListener : TraceListener
-    {
-        public override void Write(string? message) => WriteTrace(message ?? string.Empty);
-
-        public override void WriteLine(string? message) => WriteTrace(message ?? string.Empty);
-    }
-
     private sealed class OperationScope(
         LogContext? parent,
         LogContext context,
@@ -363,27 +293,15 @@ public static class GlobalLog
             _disposed = true;
             var elapsedMs = Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
             if (writeSummary)
-            {
-                Info("operation_finished", new Dictionary<string, object?>
+                Info("phase", new Dictionary<string, object?>
                 {
-                    ["operation"] = context.Operation,
-                    ["elapsedMs"] = Math.Round(elapsedMs, 2),
+                    ["name"] = context.Operation,
+                    ["state"] = "finished",
+                    ["ms"] = (long)elapsedMs,
                 });
-            }
-            else
-            {
-                Debug("operation_finished", new Dictionary<string, object?>
-                {
-                    ["operation"] = context.Operation,
-                    ["elapsedMs"] = Math.Round(elapsedMs, 2),
-                });
-            }
             Context.Value = parent;
         }
     }
 
-    private sealed record LogContext(
-        string CorrelationId,
-        string OperationId,
-        string Operation);
+    private sealed record LogContext(string Operation);
 }

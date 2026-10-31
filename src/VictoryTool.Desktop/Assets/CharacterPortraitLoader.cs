@@ -1,8 +1,10 @@
+using System.Buffers.Binary;
 using Avalonia;
 using Avalonia.Media.Imaging;
 using VictoryTool.Application.Assets;
 using VictoryTool.Application.Characters;
 using VictoryTool.Application.Diagnostics;
+using VictoryTool.G4.Textures;
 
 namespace VictoryTool.Desktop.Assets;
 
@@ -52,6 +54,7 @@ public sealed class CharacterPortraitLoader : ICharacterPortraitLoader
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
         var character = request.Character;
         ArgumentNullException.ThrowIfNull(character);
         using var operation = GlobalLog.BeginOperation("character_portrait_load", new Dictionary<string, object?>
@@ -60,6 +63,9 @@ public sealed class CharacterPortraitLoader : ICharacterPortraitLoader
             ["hasStandardPath"] = character.StandardPortraitResourcePath is not null,
             ["hasUniformPath"] = character.UniformPortraitResourcePath is not null,
         });
+        if (request.Kind == CharacterPortraitKind.UniformCompatible
+            && character.PortraitMetadata?.IncludesUniform == true)
+            return new CharacterPortraitLoadResult(null, null);
         var portraitPath = request.Kind == CharacterPortraitKind.UniformCompatible
             ? character.UniformPortraitResourcePath ?? character.PortraitResourcePath
             : character.StandardPortraitResourcePath ?? character.PortraitResourcePath;
@@ -70,13 +76,39 @@ public sealed class CharacterPortraitLoader : ICharacterPortraitLoader
         }
 
         if (portraitPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
-            return LoadPng(portraitPath, request.Kind);
+        {
+            var result = await Task.Run(() => LoadPng(portraitPath, request.Kind, cancellationToken), cancellationToken);
+            if (cancellationToken.IsCancellationRequested)
+            {
+                result.Dispose();
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            return result;
+        }
 
         var entryName = request.Kind == CharacterPortraitKind.UniformCompatible
             ? character.PortraitMetadata?.UniformPortraitEntryName
                 ?? character.PortraitMetadata?.StandardPortraitEntryName
             : character.PortraitMetadata?.StandardPortraitEntryName
                 ?? character.PortraitMetadata?.UniformPortraitEntryName;
+        if (character.PortraitMetadata is null && File.Exists(portraitPath))
+        {
+            try
+            {
+                var container = G4TxDocument.Read(await File.ReadAllBytesAsync(portraitPath, cancellationToken));
+                entryName = (request.Kind == CharacterPortraitKind.UniformCompatible
+                    ? container.Textures.ElementAtOrDefault(1)
+                    : container.Textures.FirstOrDefault())?.Name
+                    ?? container.Textures.FirstOrDefault()?.Name;
+                if (string.IsNullOrWhiteSpace(entryName))
+                    return new CharacterPortraitLoadResult(null, "assets.portrait_entry_missing");
+            }
+            catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException)
+            {
+                GlobalLog.Warn("character_portrait_container_invalid", exception: exception);
+                return new CharacterPortraitLoadResult(null, "assets.source_invalid");
+            }
+        }
         if (character.PortraitMetadata is not null && string.IsNullOrWhiteSpace(entryName))
         {
             GlobalLog.Warn("character_portrait_entry_missing");
@@ -109,34 +141,53 @@ public sealed class CharacterPortraitLoader : ICharacterPortraitLoader
                 null);
     }
 
-    private static CharacterPortraitLoadResult LoadPng(string path, CharacterPortraitKind kind)
+    private static CharacterPortraitLoadResult LoadPng(
+        string path,
+        CharacterPortraitKind kind,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!File.Exists(path))
         {
             GlobalLog.Warn("character_portrait_png_missing");
             return new CharacterPortraitLoadResult(null, "assets.source_missing");
         }
 
+        Bitmap? bitmap = null;
         try
         {
-            var source = new Bitmap(path);
-            if (kind != CharacterPortraitKind.RosterThumbnail)
-                return new CharacterPortraitLoadResult(source, null);
+            if (kind == CharacterPortraitKind.RosterThumbnail)
+            {
+                using var stream = File.OpenRead(path);
+                Span<byte> header = stackalloc byte[24];
+                stream.ReadExactly(header);
+                if (!header[..8].SequenceEqual(new byte[] {137, 80, 78, 71, 13, 10, 26, 10})
+                    || !header[12..16].SequenceEqual("IHDR"u8))
+                    throw new InvalidDataException("Invalid PNG header.");
+                var width = BinaryPrimitives.ReadInt32BigEndian(header[16..20]);
+                var height = BinaryPrimitives.ReadInt32BigEndian(header[20..24]);
+                if (width <= 0 || height <= 0) throw new InvalidDataException("Invalid PNG dimensions.");
+                stream.Position = 0;
+                bitmap = width >= height
+                    ? Bitmap.DecodeToWidth(stream, 48, BitmapInterpolationMode.HighQuality)
+                    : Bitmap.DecodeToHeight(stream, 48, BitmapInterpolationMode.HighQuality);
+            }
+            else bitmap = new Bitmap(path);
+            cancellationToken.ThrowIfCancellationRequested();
 
-            var sourceSize = source.PixelSize;
-            var scale = Math.Min(48d / sourceSize.Width, 48d / sourceSize.Height);
-            var targetSize = new PixelSize(
-                Math.Max(1, (int)Math.Round(sourceSize.Width * scale)),
-                Math.Max(1, (int)Math.Round(sourceSize.Height * scale)));
-            var thumbnail = source.CreateScaledBitmap(targetSize, BitmapInterpolationMode.HighQuality);
-            source.Dispose();
-            return new CharacterPortraitLoadResult(thumbnail, null);
+            var result = new CharacterPortraitLoadResult(bitmap, null);
+            bitmap = null;
+            return result;
         }
         catch (Exception exception) when (
-            exception is IOException or UnauthorizedAccessException or ArgumentException)
+            exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidDataException)
         {
             GlobalLog.Warn("character_portrait_png_invalid", exception: exception);
             return new CharacterPortraitLoadResult(null, "assets.source_invalid");
+        }
+        finally
+        {
+            bitmap?.Dispose();
         }
     }
 }

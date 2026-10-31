@@ -102,6 +102,8 @@ if [[ "$rid" == osx-* ]]; then
 </dict>
 </plist>
 EOF
+    mkdir -p "$app_root/Contents/Resources/licenses"
+    cp "$script_root"/licenses/*.txt "$app_root/Contents/Resources/licenses/"
     chmod +x "$app_root/Contents/MacOS/VictoryTool"
     (cd "$publish_root" && zip -q -r "$archive" "VictoryTool.app")
 else
@@ -112,6 +114,8 @@ else
         exit 1
     fi
     published_file="$(find "$publish_root" -type f -print -quit)"
-    (cd "$publish_root" && zip -q "$archive" "$(basename "$published_file")")
+    mkdir -p "$publish_root/licenses"
+    cp "$script_root"/licenses/*.txt "$publish_root/licenses/"
+    (cd "$publish_root" && zip -q -r "$archive" "$(basename "$published_file")" licenses)
 fi
 echo "Created $archive"

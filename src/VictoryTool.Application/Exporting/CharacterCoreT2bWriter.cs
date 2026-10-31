@@ -39,6 +39,9 @@ public sealed record CharacterCoreWriteRequest(
 
 public sealed record CharacterCoreWriteResult(byte[] BaseTable, byte[] ParameterTable);
 
+public sealed record CharacterCoreWriteSource(
+    CharacterCoreWriteRequest Request, ReadOnlyMemory<byte> BaseTable, ReadOnlyMemory<byte> ParameterTable);
+
 public interface ICharacterCoreT2bWriter
 {
     CharacterCoreWriteResult Append(
@@ -53,6 +56,18 @@ public interface ICharacterCoreT2bWriter
         ReadOnlySpan<byte> sourceParameterTable,
         CharacterCoreWriteRequest request) =>
         Append(destinationBaseTable, destinationParameterTable, request);
+
+    CharacterCoreWriteResult AppendBatch(ReadOnlySpan<byte> baseTable, ReadOnlySpan<byte> parameterTable,
+        IReadOnlyList<CharacterCoreWriteSource> sources, CancellationToken cancellationToken)
+    {
+        var result = new CharacterCoreWriteResult(baseTable.ToArray(), parameterTable.ToArray());
+        foreach (var source in sources)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            result = Append(result.BaseTable, result.ParameterTable, source.BaseTable.Span, source.ParameterTable.Span, source.Request);
+        }
+        return result;
+    }
 }
 
 public sealed class CharacterCoreT2bWriter : ICharacterCoreT2bWriter
@@ -69,15 +84,166 @@ public sealed class CharacterCoreT2bWriter : ICharacterCoreT2bWriter
         ReadOnlySpan<byte> sourceBaseTable,
         ReadOnlySpan<byte> sourceParameterTable,
         CharacterCoreWriteRequest request)
+        => AppendBatch(destinationBaseTable, destinationParameterTable,
+            [new CharacterCoreWriteSource(request, sourceBaseTable.ToArray(), sourceParameterTable.ToArray())], CancellationToken.None);
+
+    public CharacterCoreWriteResult AppendBatch(ReadOnlySpan<byte> destinationBaseTable,
+        ReadOnlySpan<byte> destinationParameterTable, IReadOnlyList<CharacterCoreWriteSource> sources, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        cancellationToken.ThrowIfCancellationRequested();
+        foreach (var source in sources) ValidateRequest(source.Request);
+        if (sources.Count == 0) return new(destinationBaseTable.ToArray(), destinationParameterTable.ToArray());
+        var baseDocument = CfgBinDocument.Read(destinationBaseTable);
+        var parameterDocument = CfgBinDocument.Read(destinationParameterTable);
+        var sourceDocuments = new Dictionary<ReadOnlyMemory<byte>, CfgBinDocument>();
+        CfgBinDocument ReadSource(ReadOnlyMemory<byte> bytes) => sourceDocuments.TryGetValue(bytes, out var document)
+            ? document : sourceDocuments[bytes] = CfgBinDocument.Read(bytes.Span);
+        var baseInserts = new List<CfgBinEntryInsert>();
+        var parameterInserts = new List<CfgBinEntryInsert>();
+        var nextBattleReference = baseDocument.Entries.Count(entry => entry.Name == "CHARA_BASE_BATTLE");
+        int? nextBaseIndex = null;
+        int? nextSeriesIndex = null;
+        var writtenBaseRows = 0;
+        var writtenSeriesRows = 0;
+        foreach (var source in sources)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var request = source.Request;
+            var sourceBaseDocument = source.BaseTable.Span.SequenceEqual(destinationBaseTable)
+                ? baseDocument : ReadSource(source.BaseTable);
+            var sourceParameterDocument = source.ParameterTable.Span.SequenceEqual(destinationParameterTable)
+                ? parameterDocument : ReadSource(source.ParameterTable);
+            var sourceBase = FindSingleSource(sourceBaseDocument, "CHARA_BASE_INFO", 34, request.SourceBaseId, 0);
+            var sourceParameter = FindSingleSource(
+                sourceParameterDocument, "CHARA_PARAM_INFO", 43, request.SourceParameterId, 0);
+            if (request.EnforceIdentityHash)
+            {
+                if (GetInteger(sourceBase.Values[31]) != 0)
+                    throw new InvalidDataException("The source character is restricted and cannot seed a playable custom identity.");
+                if (!sourceBase.Values.Skip(21).Take(10).Any(value => GetInteger(value) != 0))
+                    throw new InvalidDataException("The source character has no series-category association.");
+            }
+            if (GetInteger(sourceParameter.Values[1]) != request.SourceBaseId)
+                throw new InvalidDataException("The source parameter row is not linked to the requested base row.");
+
+            var sourceBaseCompanion = sourceBaseDocument.Entries.ElementAtOrDefault(sourceBase.Index + 1);
+            var isMinimalBaseFixture = sourceBaseDocument.EntryCount == 1;
+            if (!isMinimalBaseFixture && sourceBaseCompanion?.Name != "CHARA_BASE_INFO_REF_BATTLE")
+                throw new InvalidDataException("The source character base row has no adjacent battle-reference row.");
+            if (sourceBaseCompanion?.Name == "CHARA_BASE_INFO_REF_BATTLE" && sourceBaseCompanion.Values.Count != 2)
+                throw new InvalidDataException("The source character battle reference must contain an offset and count.");
+
+            int? newBattleReference = null;
+            if (request.WritesBaseRow && sourceBaseCompanion?.Name == "CHARA_BASE_INFO_REF_BATTLE"
+                && GetInteger(sourceBaseCompanion.Values[1]) != 0)
+            {
+                var sourceBattleRows = sourceBaseDocument.Entries.Where(entry => entry.Name == "CHARA_BASE_BATTLE").ToArray();
+                var reference = checked((int)GetInteger(sourceBaseCompanion.Values[0]));
+                var count = checked((int)GetInteger(sourceBaseCompanion.Values[1]));
+                if (reference < 0 || count < 0 || reference > sourceBattleRows.Length - count)
+                    throw new InvalidDataException("The source character battle reference is outside CHARA_BASE_BATTLE.");
+                var template = baseDocument.Entries.FirstOrDefault(entry => entry.Name == "CHARA_BASE_BATTLE")
+                    ?? throw new InvalidDataException("The destination base table has no battle-row template.");
+                newBattleReference = nextBattleReference;
+                nextBattleReference = checked(nextBattleReference + count);
+                baseInserts.AddRange(T2bCountedListWriter.PrepareClones(baseDocument, template,
+                    sourceBattleRows.Skip(reference).Take(count)
+                        .Select(row => (IReadOnlyList<object?>)row.Values.Select(value => value.Value).ToArray()).ToArray(),
+                    "CHARA_BASE_BATTLE_LIST_BEG", "CHARA_BASE_BATTLE_LIST_END", null, null));
+            }
+
+            var baseValues = sourceBase.Values.Select(value => value.Value).ToArray();
+            SetUnsigned(baseDocument, baseValues, 0, request.CharacterId);
+            baseValues[1] = request.InternalName;
+            SetSigned(baseDocument, baseValues, 2, checked((nextBaseIndex ??= AllocateNextPositiveValue(baseDocument, "CHARA_BASE_INFO", 2)) + writtenBaseRows));
+            SetUnsigned(baseDocument, baseValues, 3, request.FullNameTextId);
+            SetUnsigned(baseDocument, baseValues, 4, request.ShortNameTextId);
+            SetUnsigned(baseDocument, baseValues, 5, request.UpperNameTextId);
+            if (request.ModelId is { } modelId) SetUnsigned(baseDocument, baseValues, 6, modelId);
+            SetUnsigned(baseDocument, baseValues, 19, request.DescriptionTextId);
+            SetOptionalSigned(baseDocument, baseValues, 11, request.Gender);
+            SetOptionalSigned(baseDocument, baseValues, 13, request.AcademicYear);
+            SetOptionalSigned(baseDocument, baseValues, 15, request.SourceSeries);
+            SetOptionalSigned(baseDocument, baseValues, 16, request.TeamAssociation1);
+            SetOptionalSigned(baseDocument, baseValues, 17, request.TeamAssociation2);
+            SetOptionalSigned(baseDocument, baseValues, 18, request.TeamAssociation3);
+            ApplyOriginGameAssociation(baseDocument, baseValues, request.OriginGameAssociationIndex);
+            if (GetInteger(baseValues[21]) != 0)
+                SetSigned(baseDocument, baseValues, 21, checked((nextSeriesIndex ??= AllocateNextPositiveValue(baseDocument, "CHARA_BASE_INFO", 21)) + writtenSeriesRows));
+
+            var parameterValues = sourceParameter.Values.Select(value => value.Value).ToArray();
+            SetUnsigned(parameterDocument, parameterValues, 0, request.ParameterId);
+            SetUnsigned(parameterDocument, parameterValues, 1, request.CharacterId);
+            SetSigned(parameterDocument, parameterValues, 2, request.Affinity);
+            SetSigned(parameterDocument, parameterValues, 3, request.MainPosition);
+            SetSigned(parameterDocument, parameterValues, 4, request.SubPosition);
+            SetOptionalSigned(parameterDocument, parameterValues, 8, request.PlayStyle);
+            SetOptionalSigned(parameterDocument, parameterValues, 7, request.Growth);
+            SetOptionalSigned(parameterDocument, parameterValues, 9, request.Rank);
+            SetOptionalSigned(parameterDocument, parameterValues, 10, request.AbilityBoardId);
+            SetOptionalSigned(parameterDocument, parameterValues, 41, request.SpecialRarity);
+            SetOptionalSigned(parameterDocument, parameterValues, 39, request.SkillsUnlocked is true ? 1 : request.SkillsUnlocked is false ? 0 : null);
+            ApplySkills(parameterDocument, parameterValues, request.Skills);
+
+            var destinationBaseTemplate = baseDocument.Entries.FirstOrDefault(entry => entry.Name == "CHARA_BASE_INFO")
+                ?? throw new InvalidDataException("The destination base table has no character-row template.");
+            var destinationParameterTemplate = parameterDocument.Entries.FirstOrDefault(entry => entry.Name == "CHARA_PARAM_INFO")
+                ?? throw new InvalidDataException("The destination parameter table has no character-row template.");
+            var baseCompanion = baseDocument.Entries.ElementAtOrDefault(destinationBaseTemplate.Index + 1);
+            IReadOnlyList<object?>? baseCompanionValues = null;
+            if (baseCompanion?.Name == "CHARA_BASE_INFO_REF_BATTLE")
+            {
+                if (sourceBaseCompanion is null)
+                    throw new InvalidDataException("The source character has no battle reference to clone.");
+                var values = sourceBaseCompanion.Values.Select(value => value.Value).ToArray();
+                if (newBattleReference is { } battleReference)
+                    SetSigned(baseDocument, values, 0, battleReference);
+                baseCompanionValues = values;
+            }
+            var parameterInsertion = parameterDocument.EntryCount == 1
+                ? (int?)null
+                : parameterDocument.Entries
+                    .Skip(parameterDocument.Entries.First(entry => entry.Name == "CHARA_PARAM_INFO").Index)
+                    .First(entry => entry.Name != "CHARA_PARAM_INFO").Index;
+
+            if (request.WritesBaseRow)
+            {
+                baseInserts.AddRange(T2bCountedListWriter.PrepareClones(
+                    baseDocument, destinationBaseTemplate, [baseValues],
+                    "CHARA_BASE_INFO_LIST_BEG", "CHARA_BASE_INFO_LIST_END", null,
+                    baseCompanion?.Name == "CHARA_BASE_INFO_REF_BATTLE" ? [(baseCompanion, baseCompanionValues!)] : null));
+                writtenBaseRows++;
+                if (GetInteger(baseValues[21]) != 0) writtenSeriesRows++;
+            }
+            parameterInserts.AddRange(T2bCountedListWriter.PrepareClones(
+                parameterDocument, destinationParameterTemplate, [parameterValues],
+                "CHARA_PARAM_INFO_LIST_BEG", "CHARA_PARAM_INFO_LIST_END", parameterInsertion, null));
+        }
+        parameterInserts.AddRange(PrepareParameterSortIndices(parameterDocument, sources));
+        cancellationToken.ThrowIfCancellationRequested();
+        var result = new CharacterCoreWriteResult(
+            baseDocument.WriteWithInsertedEntries(baseInserts), parameterDocument.WriteWithInsertedEntries(parameterInserts));
+        var restoredBase = CfgBinDocument.Read(result.BaseTable);
+        var restoredParameters = CfgBinDocument.Read(result.ParameterTable);
+        T2bCountedListWriter.ValidateBatchCount(baseDocument, restoredBase,
+            "CHARA_BASE_INFO_LIST_BEG", "CHARA_BASE_INFO_LIST_END", "CHARA_BASE_INFO", writtenBaseRows);
+        T2bCountedListWriter.ValidateBatchCount(baseDocument, restoredBase,
+            "CHARA_BASE_BATTLE_LIST_BEG", "CHARA_BASE_BATTLE_LIST_END", "CHARA_BASE_BATTLE",
+            nextBattleReference - baseDocument.Entries.Count(entry => entry.Name == "CHARA_BASE_BATTLE"));
+        T2bCountedListWriter.ValidateBatchCount(parameterDocument, restoredParameters,
+            "CHARA_PARAM_INFO_LIST_BEG", "CHARA_PARAM_INFO_LIST_END", "CHARA_PARAM_INFO", sources.Count);
+        foreach (var source in sources.Where(source => source.Request.WritesBaseRow))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ValidateReadBack(restoredBase, restoredParameters, source.Request);
+        }
+        return result;
+    }
+
+    private static void ValidateRequest(CharacterCoreWriteRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        using var operation = GlobalLog.BeginOperation("character_core_write", new Dictionary<string, object?>
-        {
-            ["sourceBaseId"] = request.SourceBaseId,
-            ["sourceParameterId"] = request.SourceParameterId,
-            ["specialRarity"] = request.SpecialRarity,
-            ["writesBaseRow"] = request.WritesBaseRow,
-        });
         if (string.IsNullOrWhiteSpace(request.InternalName))
             throw new ArgumentException("An internal character name is required.", nameof(request));
         if (request.EnforceIdentityHash && !IsCanonicalInternalName(request.InternalName))
@@ -90,122 +256,6 @@ public sealed class CharacterCoreT2bWriter : ICharacterCoreT2bWriter
             throw new InvalidDataException(
                 "The character parameter ID must equal CRC32 of the internal parameter key.");
         }
-
-        var baseDocument = CfgBinDocument.Read(destinationBaseTable);
-        var parameterDocument = CfgBinDocument.Read(destinationParameterTable);
-        var sourceBaseDocument = CfgBinDocument.Read(sourceBaseTable);
-        var sourceParameterDocument = CfgBinDocument.Read(sourceParameterTable);
-        var sourceBase = FindSingleSource(sourceBaseDocument, "CHARA_BASE_INFO", 34, request.SourceBaseId, 0);
-        var sourceParameter = FindSingleSource(
-            sourceParameterDocument, "CHARA_PARAM_INFO", 43, request.SourceParameterId, 0);
-        if (request.EnforceIdentityHash)
-        {
-            if (GetInteger(sourceBase.Values[31]) != 0)
-                throw new InvalidDataException("The source character is restricted and cannot seed a playable custom identity.");
-            if (!sourceBase.Values.Skip(21).Take(10).Any(value => GetInteger(value) != 0))
-                throw new InvalidDataException("The source character has no series-category association.");
-        }
-        if (GetInteger(sourceParameter.Values[1]) != request.SourceBaseId)
-            throw new InvalidDataException("The source parameter row is not linked to the requested base row.");
-
-        var sourceBaseCompanion = sourceBaseDocument.Entries.ElementAtOrDefault(sourceBase.Index + 1);
-        var isMinimalBaseFixture = sourceBaseDocument.EntryCount == 1;
-        if (!isMinimalBaseFixture && sourceBaseCompanion?.Name != "CHARA_BASE_INFO_REF_BATTLE")
-            throw new InvalidDataException("The source character base row has no adjacent battle-reference row.");
-
-        int? newBattleReference = null;
-        if (sourceBaseCompanion?.Name == "CHARA_BASE_INFO_REF_BATTLE"
-            && GetInteger(sourceBaseCompanion.Values[0]) != 0)
-        {
-            var sourceBattleRows = sourceBaseDocument.Entries.Where(entry => entry.Name == "CHARA_BASE_BATTLE").ToArray();
-            var sourceBattleReference = checked((int)GetInteger(sourceBaseCompanion.Values[0]));
-            if ((uint)sourceBattleReference >= (uint)sourceBattleRows.Length)
-                throw new InvalidDataException("The source character battle reference is outside CHARA_BASE_BATTLE.");
-            var destinationBattleTemplate = baseDocument.Entries.FirstOrDefault(entry => entry.Name == "CHARA_BASE_BATTLE")
-                ?? throw new InvalidDataException("The destination base table has no battle-row template.");
-            newBattleReference = baseDocument.Entries.Count(entry => entry.Name == "CHARA_BASE_BATTLE");
-            var sourceBattle = sourceBattleRows[sourceBattleReference];
-            var withBattle = T2bCountedListWriter.InsertClones(
-                baseDocument,
-                destinationBattleTemplate,
-                [sourceBattle.Values.Select(value => value.Value).ToArray()],
-                "CHARA_BASE_BATTLE_LIST_BEG",
-                "CHARA_BASE_BATTLE_LIST_END");
-            baseDocument = CfgBinDocument.Read(withBattle);
-        }
-
-        var baseValues = sourceBase.Values.Select(value => value.Value).ToArray();
-        SetUnsigned(baseDocument, baseValues, 0, request.CharacterId);
-        baseValues[1] = request.InternalName;
-        SetSigned(baseDocument, baseValues, 2, AllocateNextPositiveValue(baseDocument, "CHARA_BASE_INFO", 2));
-        SetUnsigned(baseDocument, baseValues, 3, request.FullNameTextId);
-        SetUnsigned(baseDocument, baseValues, 4, request.ShortNameTextId);
-        SetUnsigned(baseDocument, baseValues, 5, request.UpperNameTextId);
-        if (request.ModelId is { } modelId) SetUnsigned(baseDocument, baseValues, 6, modelId);
-        SetUnsigned(baseDocument, baseValues, 19, request.DescriptionTextId);
-        SetOptionalSigned(baseDocument, baseValues, 11, request.Gender);
-        SetOptionalSigned(baseDocument, baseValues, 13, request.AcademicYear);
-        SetOptionalSigned(baseDocument, baseValues, 15, request.SourceSeries);
-        SetOptionalSigned(baseDocument, baseValues, 16, request.TeamAssociation1);
-        SetOptionalSigned(baseDocument, baseValues, 17, request.TeamAssociation2);
-        SetOptionalSigned(baseDocument, baseValues, 18, request.TeamAssociation3);
-        ApplyOriginGameAssociation(baseDocument, baseValues, request.OriginGameAssociationIndex);
-        if (GetInteger(baseValues[21]) != 0)
-            SetSigned(baseDocument, baseValues, 21, AllocateNextPositiveValue(baseDocument, "CHARA_BASE_INFO", 21));
-
-        var parameterValues = sourceParameter.Values.Select(value => value.Value).ToArray();
-        SetUnsigned(parameterDocument, parameterValues, 0, request.ParameterId);
-        SetUnsigned(parameterDocument, parameterValues, 1, request.CharacterId);
-        SetSigned(parameterDocument, parameterValues, 2, request.Affinity);
-        SetSigned(parameterDocument, parameterValues, 3, request.MainPosition);
-        SetSigned(parameterDocument, parameterValues, 4, request.SubPosition);
-        SetOptionalSigned(parameterDocument, parameterValues, 8, request.PlayStyle);
-        SetOptionalSigned(parameterDocument, parameterValues, 7, request.Growth);
-        SetOptionalSigned(parameterDocument, parameterValues, 9, request.Rank);
-        SetOptionalSigned(parameterDocument, parameterValues, 10, request.AbilityBoardId);
-        SetOptionalSigned(parameterDocument, parameterValues, 41, request.SpecialRarity);
-        SetOptionalSigned(parameterDocument, parameterValues, 39, request.SkillsUnlocked is true ? 1 : request.SkillsUnlocked is false ? 0 : null);
-        ApplySkills(parameterDocument, parameterValues, request.Skills);
-
-        var destinationBaseTemplate = baseDocument.Entries.FirstOrDefault(entry => entry.Name == "CHARA_BASE_INFO")
-            ?? throw new InvalidDataException("The destination base table has no character-row template.");
-        var destinationParameterTemplate = parameterDocument.Entries.FirstOrDefault(entry => entry.Name == "CHARA_PARAM_INFO")
-            ?? throw new InvalidDataException("The destination parameter table has no character-row template.");
-        var baseCompanion = baseDocument.Entries.ElementAtOrDefault(destinationBaseTemplate.Index + 1);
-        IReadOnlyList<object?>? baseCompanionValues = null;
-        if (baseCompanion?.Name == "CHARA_BASE_INFO_REF_BATTLE")
-        {
-            var values = baseCompanion.Values.Select(value => value.Value).ToArray();
-            if (newBattleReference is { } battleReference)
-                SetSigned(baseDocument, values, 0, battleReference);
-            baseCompanionValues = values;
-        }
-        var parameterInsertion = parameterDocument.EntryCount == 1
-            ? (int?)null
-            : parameterDocument.Entries
-                .Skip(parameterDocument.Entries.First(entry => entry.Name == "CHARA_PARAM_INFO").Index)
-                .First(entry => entry.Name != "CHARA_PARAM_INFO").Index;
-
-        var writtenBaseTable = request.WritesBaseRow
-            ? T2bCountedListWriter.InsertClones(
-                baseDocument, destinationBaseTemplate, [baseValues],
-                "CHARA_BASE_INFO_LIST_BEG", "CHARA_BASE_INFO_LIST_END",
-                companionRows: baseCompanion?.Name == "CHARA_BASE_INFO_REF_BATTLE"
-                    ? [(baseCompanion, baseCompanionValues!)] : null)
-            : destinationBaseTable.ToArray();
-        var writtenParameterTable = T2bCountedListWriter.InsertClones(
-                parameterDocument, destinationParameterTemplate, [parameterValues],
-                "CHARA_PARAM_INFO_LIST_BEG", "CHARA_PARAM_INFO_LIST_END",
-                insertionIndex: parameterInsertion);
-        writtenParameterTable = InsertParameterSortIndex(writtenParameterTable, request.ParameterId);
-        var result = new CharacterCoreWriteResult(writtenBaseTable, writtenParameterTable);
-        if (request.WritesBaseRow) ValidateReadBack(result, request);
-        GlobalLog.Debug("character_core_written", new Dictionary<string, object?>
-        {
-            ["baseTableBytes"] = result.BaseTable.Length,
-            ["parameterTableBytes"] = result.ParameterTable.Length,
-        });
-        return result;
     }
 
     private static int AllocateNextPositiveValue(CfgBinDocument document, string entryName, int fieldIndex)
@@ -221,32 +271,27 @@ public sealed class CharacterCoreT2bWriter : ICharacterCoreT2bWriter
         return checked((int)maximum + 1);
     }
 
-    private static byte[] InsertParameterSortIndex(byte[] parameterTable, uint parameterId)
+    private static IEnumerable<CfgBinEntryInsert> PrepareParameterSortIndices(
+        CfgBinDocument document, IReadOnlyList<CharacterCoreWriteSource> sources)
     {
-        var document = CfgBinDocument.Read(parameterTable);
-        var parameterRows = document.Entries.Where(entry => entry.Name == "CHARA_PARAM_INFO").ToArray();
+        var rows = document.Entries.Where(entry => entry.Name == "CHARA_PARAM_INFO").ToArray();
         var sortRows = document.Entries.Where(entry => entry.Name == "__SORT_INDEX").ToArray();
-        if (sortRows.Length == 0) return parameterTable;
-        if (sortRows.Length != parameterRows.Length - 1)
+        if (sortRows.Length == 0) yield break;
+        if (sortRows.Length != rows.Length)
             throw new InvalidDataException("The character parameter sort index is not aligned with its primary rows.");
-
-        var newRowIndex = parameterRows.Length - 1;
-        var insertionOffset = parameterRows.Take(newRowIndex)
-            .Count(row => unchecked((uint)GetInteger(row.Values[0])) < parameterId);
-        var insertionIndex = insertionOffset == sortRows.Length
-            ? sortRows[^1].Index + 1
-            : sortRows[insertionOffset].Index;
-        object encodedIndex = document.ValueWidth == CfgBinValueWidth.Int32
-            ? (object)newRowIndex
-            : (long)newRowIndex;
-        return document.WriteWithInsertedEntries(
-            [new CfgBinEntryInsert(insertionIndex, sortRows[0].Index, [encodedIndex])]);
+        foreach (var item in sources.Select((source, index) => (Id: source.Request.ParameterId, Index: rows.Length + index))
+                     .OrderBy(item => item.Id))
+        {
+            var offset = rows.Count(row => unchecked((uint)GetInteger(row.Values[0])) < item.Id);
+            var before = offset == sortRows.Length ? sortRows[^1].Index + 1 : sortRows[offset].Index;
+            object value = document.ValueWidth == CfgBinValueWidth.Int32 ? (object)item.Index : (long)item.Index;
+            yield return new CfgBinEntryInsert(before, sortRows[0].Index, [value]);
+        }
     }
 
-    private static void ValidateReadBack(CharacterCoreWriteResult result, CharacterCoreWriteRequest request)
+    private static void ValidateReadBack(CfgBinDocument baseDocument, CfgBinDocument parameterDocument,
+        CharacterCoreWriteRequest request)
     {
-        var baseDocument = CfgBinDocument.Read(result.BaseTable);
-        var parameterDocument = CfgBinDocument.Read(result.ParameterTable);
         var baseRow = FindSingleWrittenSource(
             baseDocument, "CHARA_BASE_INFO", 34, request.CharacterId);
         var parameterRow = FindSingleWrittenSource(
@@ -276,7 +321,8 @@ public sealed class CharacterCoreT2bWriter : ICharacterCoreT2bWriter
 
             var battleCompanion = baseDocument.Entries[baseRow.Index + 1];
             var battleReference = checked((int)GetInteger(battleCompanion.Values[0]));
-            if ((uint)battleReference >= (uint)battleRows.Length)
+            var battleCount = checked((int)GetInteger(battleCompanion.Values[1]));
+            if (battleReference < 0 || battleCount < 0 || battleReference > battleRows.Length - battleCount)
                 throw new InvalidDataException("The written character battle reference is outside CHARA_BASE_BATTLE.");
         }
         if (parameterDocument.Entries.Any(entry => entry.Name != "CHARA_PARAM_INFO"))
@@ -284,7 +330,7 @@ public sealed class CharacterCoreT2bWriter : ICharacterCoreT2bWriter
             var firstParameterAuxiliary = parameterDocument.Entries.First(entry =>
                 entry.Index > parameterDocument.Entries.First(row => row.Name == "CHARA_PARAM_INFO").Index
                 && entry.Name != "CHARA_PARAM_INFO");
-            if (parameterRow.Index != firstParameterAuxiliary.Index - 1)
+            if (parameterRow.Index >= firstParameterAuxiliary.Index)
                 throw new InvalidDataException("The written character parameter row lies outside the runtime parameter range.");
             var parameterRows = parameterDocument.Entries.Where(entry => entry.Name == "CHARA_PARAM_INFO").ToArray();
             var sortIndexes = parameterDocument.Entries.Where(entry => entry.Name == "__SORT_INDEX")

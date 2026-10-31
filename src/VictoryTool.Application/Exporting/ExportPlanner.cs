@@ -74,6 +74,7 @@ public sealed record AnimationGenerationRequest(Guid BatchEntryId, string Packag
     string? GeneratedFamilyName = null, uint? GeneratedFamilyCrc32 = null)
 {
     public string? GeneratedUniformName { get; init; }
+    public G4AvatarRecipe? EventRecipe { get; init; }
 }
 
 public sealed record ExportResourceOperation(
@@ -383,7 +384,7 @@ public sealed class ExportPlanner : IExportPlanner
                 plan,
                 "export.id_assignment_failed",
                 $"Numeric character IDs could not be assigned: {exception.Message}",
-                "Verify the active dump before exporting.");
+                "Verify the active dump before exporting.", exception.Message);
         }
 
         try
@@ -471,17 +472,33 @@ public sealed class ExportPlanner : IExportPlanner
                     {
                         if (animationProfile.AvatarRecipe is not null && animationSelection is { Enabled: true, Chr: false, Event: false })
                             throw new InvalidDataException("Select CHR animations, EVENT animations, or both.");
+                        var sourceCharacterId = animationProfile.SourceRigBinding == "dump"
+                            ? manifest.Character.SourceCharacterId ?? animationProfile.SourceModelStem
+                            : animationProfile.SourceModelStem ?? manifest.Character.SourceCharacterId;
                         var family = new CharacterMotionFamilyResolver().Resolve(
-                            profile.RootPath,
-                            animationProfile.SourceModelStem ?? manifest.Character.SourceCharacterId
+                            profile.RootPath, sourceCharacterId
                                 ?? throw new InvalidDataException("The character package has no source character ID for motion-family routing."));
-                        ValidateAnimationRigProfile(profile.RootPath, manifest, family, animationProfile);
+                        animationProfile = ResolveAnimationRigProfile(profile.RootPath, manifest, family, animationProfile);
                         var resolver = new CharacterMotionFamilyResolver();
-                        var resolvedBanks = animationProfile.AvatarRecipe is { } recipe
-                            ? AvatarAnimationResources.Select(profile.RootPath,
-                                animationSelection is { Enabled: true }
-                                    ? recipe with { ExportChr = animationSelection.Chr, ExportEvent = animationSelection.Event }
-                                    : recipe,
+                        G4AvatarRecipe? eventRecipe = null;
+                        var selectedRecipe = animationProfile.AvatarRecipe;
+                        if (selectedRecipe is not null)
+                        {
+                            if (animationSelection is { Enabled: true })
+                                selectedRecipe = selectedRecipe with { ExportChr = animationSelection.Chr, ExportEvent = animationSelection.Event };
+                            if (selectedRecipe.ExportEvent)
+                            {
+                                var runtimeFamily = resolver.Resolve(profile.RootPath,
+                                    manifest.Character.SourceCharacterId ?? animationProfile.SourceModelStem!);
+                                var skeletonPath = runtimeFamily.BodySkeletonResourcePath ?? runtimeFamily.SkeletonResourcePath;
+                                var skeletonId = Path.GetFileNameWithoutExtension(skeletonPath);
+                                eventRecipe = selectedRecipe.WithSourceSkeleton(
+                                    File.ReadAllBytes(Path.Combine(profile.RootPath, skeletonPath.Replace('/', Path.DirectorySeparatorChar))), skeletonId);
+                                selectedRecipe = selectedRecipe with { EventSkeleton = skeletonId };
+                            }
+                        }
+                        var resolvedBanks = selectedRecipe is not null
+                            ? AvatarAnimationResources.Select(profile.RootPath, selectedRecipe,
                                 resolver, family, animationProfile, cancellationToken)
                             : resolver.ResolveBanks(profile.RootPath, family, animationProfile);
                         var packageByRoute = new Dictionary<string, CharacterAnimationPackage>(StringComparer.OrdinalIgnoreCase);
@@ -534,7 +551,7 @@ public sealed class ExportPlanner : IExportPlanner
                         if (banks.Length == 0)
                             throw new InvalidDataException("No generated G4_Blender banks match the character's resolved motion routes.");
                         animationRequests.Add(new AnimationGenerationRequest(
-                            entry.Id, entry.PackagePath, profile.RootPath, "All", animationProfile, family, banks));
+                            entry.Id, entry.PackagePath, profile.RootPath, "All", animationProfile, family, banks) { EventRecipe = eventRecipe });
                     }
                     catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException or NotSupportedException)
                     {
@@ -951,7 +968,7 @@ public sealed class ExportPlanner : IExportPlanner
                 plan,
                 "export.package_invalid",
                 $"An enabled .vrchara package is invalid, unreadable, or incompatible: {exception.Message}",
-                "Upgrade, repair, or disable the incompatible package before exporting.");
+                "Upgrade, repair, or disable the incompatible package before exporting.", exception.Message);
         }
     }
 
@@ -1241,9 +1258,9 @@ public sealed class ExportPlanner : IExportPlanner
     {
         operation = null;
         diagnostic = null;
-        if (manifest.Character.Fields.TryGetValue("Models.BodyModelPath", out var bodyPathField)
-            && string.IsNullOrWhiteSpace(bodyPathField))
-            return true;
+        var bodyPathWasExplicitlyCleared = manifest.Character.Fields.TryGetValue(
+                "Models.BodyModelPath", out var bodyPathField)
+            && string.IsNullOrWhiteSpace(bodyPathField);
         var requestedBodyPath = NormalizeBodyModelPath(manifest.Character.Models?.BodyModelPath);
         var isCustomBody = requestedBodyPath?.StartsWith("_uniform/99_CUSTOM/", StringComparison.OrdinalIgnoreCase) == true;
         var uniformPath = manifest.Character.Models?.UniformModelPath?.Replace('\\', '/').TrimStart('/');
@@ -1273,6 +1290,9 @@ public sealed class ExportPlanner : IExportPlanner
         var useUniformSkeleton = hasUniformSkeleton && !useFaceSkeleton;
         var skeletonPath = useUniformSkeleton ? uniformSkeletonPath : faceSkeletonPath;
         var hasCustomSkeleton = useUniformSkeleton || (hasFaceG4sk && hasFaceObjectConfig);
+        // Clearing the native body mesh must not discard a custom uniform skeleton.
+        if (bodyPathWasExplicitlyCleared && !hasCustomSkeleton)
+            return true;
         if (isCustomUniform && !useUniformSkeleton && hasFaceG4sk && !hasFaceObjectConfig)
         {
             diagnostic = new Diagnostic(
@@ -1287,15 +1307,6 @@ public sealed class ExportPlanner : IExportPlanner
 
         var bodyModelId = TryReadInt(manifest.Character.Fields, "Advanced.BodyModelId")
             ?? TryReadInt(manifest.Character.Fields, "Models.UniformModel");
-        if (bodyModelId is null)
-        {
-            diagnostic = new Diagnostic(
-                "export.custom_body_id_missing",
-                DiagnosticSeverity.Error,
-                $"Character '{manifest.Character.SymbolicId}' has a custom body model but no original body model ID.",
-                "Preserve Advanced.BodyModelId or the original Models.UniformModel ID when authoring a new body model.");
-            return false;
-        }
 
         var tablePath = Path.Combine(
             profile.RootPath,
@@ -1303,6 +1314,24 @@ public sealed class ExportPlanner : IExportPlanner
         try
         {
             var document = CfgBinDocument.Read(File.ReadAllBytes(tablePath));
+            if (bodyModelId is null && hasCustomSkeleton)
+            {
+                var sourceModel = document.Entries.SingleOrDefault(entry =>
+                    entry.Name == "CHARA_MODEL_INFO"
+                    && entry.Values.Count >= 5
+                    && GetCfgInteger(entry.Values[0]) == modelOperation.SourceModelId);
+                if (sourceModel is not null)
+                    bodyModelId = checked((int)GetCfgInteger(sourceModel.Values[4]));
+            }
+            if (bodyModelId is null)
+            {
+                diagnostic = new Diagnostic(
+                    "export.custom_body_id_missing",
+                    DiagnosticSeverity.Error,
+                    $"Character '{manifest.Character.SymbolicId}' has a custom body model but no original body model ID.",
+                    "Preserve Advanced.BodyModelId or the original Models.UniformModel ID when authoring a new body model.");
+                return false;
+            }
             var existing = document.Entries
                 .Where(entry => entry.Name == "CHARA_BODY_INFO" && entry.Values.Count >= 7)
                 .Where(entry => GetCfgInteger(entry.Values[0]) == bodyModelId.Value)
@@ -1909,7 +1938,7 @@ public sealed class ExportPlanner : IExportPlanner
         return normalized;
     }
 
-    private static void ValidateAnimationRigProfile(
+    internal static CharacterAnimationProfile ResolveAnimationRigProfile(
         string dumpRoot,
         VrCharaManifest manifest,
         CharacterMotionFamily family,
@@ -1926,8 +1955,20 @@ public sealed class ExportPlanner : IExportPlanner
             || !File.Exists(bodySkeletonPath))
             throw new InvalidDataException($"The assigned body skeleton '{family.BodySkeletonResourcePath}' is unavailable.");
 
-        var assignedSkeletonHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(bodySkeletonPath)))
-            .ToLowerInvariant();
+        var assignedSkeleton = File.ReadAllBytes(bodySkeletonPath);
+        var assignedSkeletonHash = Convert.ToHexString(SHA256.HashData(assignedSkeleton)).ToLowerInvariant();
+        if (animationProfile.SourceRigBinding == "dump")
+        {
+            if (animationProfile.SchemaVersion != 7 || animationProfile.AvatarRecipe is null)
+                throw new InvalidDataException("Dump source rig binding requires a schema 7 avatar recipe.");
+            animationProfile = animationProfile with
+            {
+                SourceRig = new(family.BodySkeletonResourcePath, assignedSkeletonHash),
+                SourceModelStem = manifest.Character.SourceCharacterId ?? animationProfile.SourceModelStem,
+                AvatarRecipe = animationProfile.AvatarRecipe.WithSourceSkeleton(assignedSkeleton,
+                    Path.GetFileNameWithoutExtension(bodySkeletonPath)) with { ChrFamily = family.Name },
+            };
+        }
         if (!assignedSkeletonHash.Equals(animationProfile.SourceRig.Sha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException(
                 $"Animation source rig hash does not match the body's assigned G4SK '{family.BodySkeletonResourcePath}'.");
@@ -1944,11 +1985,12 @@ public sealed class ExportPlanner : IExportPlanner
             if (!animationProfile.TargetRig.Sha256.Equals(assignedSkeletonHash, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException(
                     "The animation profile changes the target G4SK but the custom model package has no matching G4SK resource.");
-            return;
+            return animationProfile;
         }
 
         if (!targetSkeleton.Checksum.Equals(animationProfile.TargetRig.Sha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("The animation target rig hash does not match the packaged custom G4SK.");
+        return animationProfile;
     }
 
     private static bool IsRuntimeBodyRecord(CfgBinEntry entry) =>
@@ -2159,14 +2201,15 @@ public sealed class ExportPlanner : IExportPlanner
         ExportPlan plan,
         string code,
         string message,
-        string recoveryAction) =>
+        string recoveryAction,
+        params string[] messageArguments) =>
         plan with
         {
             Diagnostics = plan.Diagnostics.Append(new Diagnostic(
                 code,
                 DiagnosticSeverity.Error,
                 message,
-                recoveryAction)).ToArray(),
+                recoveryAction) { MessageArguments = messageArguments }).ToArray(),
         };
 
     private static void AddDependencyDiagnostics(
@@ -2771,7 +2814,7 @@ public sealed class ExportPlanner : IExportPlanner
         string? generatedUniformName)
     {
         if (bank.IsEvent)
-            return AvatarAnimationResources.RenameIdentifiers(bank.ResourcePath, bank.SourceIdentifier!, generatedFamilyName);
+            return bank.ResourcePath;
         if (bank.ResourcePath.StartsWith("_uniform/", StringComparison.Ordinal))
         {
             if (string.IsNullOrWhiteSpace(generatedUniformName))
