@@ -2,27 +2,41 @@
 
 ## v1.4.1
 
-- Hide incomplete special technique kits and only show the variant picker when there is a choice.
-- Label standard technique kits Normal and keep hidden kits intact when applying a technique template.
-- Fill missing Japanese-origin names from the game’s romanized name data when editing source-based characters.
-- Keep discarded character edits from reappearing on restart.
-- Improve the locale selector layout and align the roster search placeholder.
-
+- Hide special technique kits with incomplete main slots and select the first complete kit when opening a character.
+- Show the technique variant picker in the editor and on the player card only when multiple complete kits are available. The player card uses the same localized labels as the editor.
+- Label standard technique kits **Normal** and preserve hidden special kits when applying a technique template to all visible variants.
+- Fill missing Japanese-origin names from the game's romanized name data when creating a character from the catalog or reopening a source-based package. Existing name edits are preserved.
+- Keep saved roster entries in sync after discarding changes and prevent the discarded editor session from reopening on restart.
+- Put the localized language label next to the locale picker and vertically align the roster search placeholder.
+- Use **No afiliado** for the unaffiliated team label in Spanish.
 
 ## v1.4.0
 
-- Added combined character filters for origin game, gender, position, affinity and multiple teams, with searchable team tags and ascending or descending sorting.
-- Replaced the roster search, sort, filter and refresh icons with Material Symbols.
-- Updated the language selector to show native language names. Character names, descriptions, positions, origin titles and interface labels follow the selected language.
-- Added Japanese furigana rendering and romaji fallback for Japanese names shown in Western languages.
-- Fixed premature line breaks in character descriptions.
-- Replaced animation generation controls with one checkbox and a Both/CHR/EVENT checklist. Generation starts disabled, with both families selected.
-- Moved incorporation export to the bottom navigation button and removed redundant buttons and status text.
-- Improved Back navigation between character creation, modification and the main menu.
-- Replaced numeric technique-variant labels with native rarity names. Repeated rarity names receive a numbered suffix.
-- Saving a character without custom icons now uses the base character's portrait layers.
-- Fixed discarded changes returning after restarting and limited automatic recovery to the latest saved session.
-- Reduced logging to errors, phases, selected characters and changed parameters.
-- Included the Apache 2.0 license and attribution for the Google Material Symbols icons.
-
-Windows x64 and macOS Apple Silicon builds are included. The Windows build was cross-compiled on macOS; Windows interaction and in-game playback were not rechecked for this release.
+- Fixed EVENT animation exports that were generated but not selected by the game.
+- Fixed missing shared CHR animation banks, which could leave a character frozen after an EVENT animation ended.
+- Fixed batch animation export failures when several custom characters shared an EVENT bank and used overlapping bone names.
+- Corrected EVENT movement offsets caused by applying custom character proportions to scene movement.
+- Improved support for animation profiles prepared from A-pose and mixed-pose (A & T-posed at the same time) models (yes, this exists).
+- Improved animation export time with parallel processing of banks and clips.
+- Reduced generated animation file sizes by sharing identical channel data.
+- Improved custom model registration and companion-file handling, including generating required object metadata when the source character lacks some data.
+- Fixed custom uniform and shoe selection, including cases where choosing a new item retained the source character’s equipment.
+- Change deliveries so that characters are all grouped in one single delivery.
+- Allowed characters to be exported again after a completed export.
+- Grouped batch configuration edits so shared tables are updated together, and moved expensive work off the interface thread.
+- Fixed crashes and selections reverting when changing uniforms in the Appearance tab.
+- Improved navigation between creation, modification and incorporation.
+- Improved save and recovery handling.
+- Added package thumbnails and improved package refresh handling in the incorporation list.
+- Replaced the Generate animations button with a checkbox.
+- Added search filters.
+- Improved team filtering with searchable selections and removable tags. The search clears when selecting the last matching team.
+- Improved portrait composition, skin tones, uniform compatibility, layer placement and support for special and armored portraits.
+- Used the base character’s icons when saving a character without replacement icons.
+- Hid special technique kits with incomplete main slots. Regular kits are labeled Normal, duplicate rarity names receive a numbered suffix, and variant controls are hidden when there is no choice to make.
+- Made character names, positions, affinities, origin games and other interface text follow the selected language more consistently.
+- Improved Japanese name display, reading annotations and romanized Japanese-origin names outside the Japanese interface.
+- Resolved game text tags such as MNT and FLL into readable names, and improved description wrapping.
+- Updated icons and language labels
+- Reduced logging to errors and several specific logs.
+- Implemented the CFGBINManager library.
