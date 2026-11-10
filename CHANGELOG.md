@@ -2,13 +2,13 @@
 
 ## v1.4.1
 
-- Hide special technique kits with incomplete main slots and select the first complete kit when opening a character.
-- Show the technique variant picker in the editor and on the player card only when multiple complete kits are available. The player card uses the same localized labels as the editor.
-- Label standard technique kits **Normal** and preserve hidden special kits when applying a technique template to all visible variants.
-- Fill missing Japanese-origin names from the game's romanized name data when creating a character from the catalog or reopening a source-based package. Existing name edits are preserved.
-- Keep saved roster entries in sync after discarding changes and prevent the discarded editor session from reopening on restart.
-- Put the localized language label next to the locale picker and vertically align the roster search placeholder.
-- Use **No afiliado** for the unaffiliated team label in Spanish.
+- Hid special technique kits with incomplete main slots and selected the first complete kit when opening a character.
+- Hid the variant picker in the editor and on the player card when fewer than two complete kits were available, and used the same localized labels in both views.
+- Labeled regular kits **Normal** and preserved hidden special kits when applying a technique template to all visible variants.
+- Filled missing Japanese-origin names from the game's romanized names when creating a character from the catalog or reopening a source-based package. Existing names were preserved.
+- Fixed discarded edits reappearing in the roster and discarded editor sessions reopening on restart.
+- Moved the localized language label next to the locale picker and aligned the roster search placeholder.
+- Updated the Spanish label for unaffiliated teams to **No afiliado**.
 
 ## v1.4.0
 
