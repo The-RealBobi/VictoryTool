@@ -162,11 +162,15 @@ public sealed partial class MainWindowViewModel
         {
             ActiveDraft = saved;
             PersistActiveDraft();
+            if (_activeDraftId is { } draftId) UpdateDraftRosterItem(draftId, saved);
         }
         else if (_activeDraftId is not null)
             RemoveActiveDraft();
-        else
-            ActiveDraft = null;
+        _activeDraftId = null;
+        ActiveDraft = null;
+        SelectedCharacter = null;
+        ResetModificationContext();
+        _resumeEditor = false;
         IsUnsavedChangesPromptVisible = false;
         QueueRecoverySave();
         next?.Invoke();
@@ -255,7 +259,12 @@ public sealed partial class MainWindowViewModel
             SetOperation(DesktopOperation.LoadingPackage);
             var loadedOrigin = await Task.Run(() => ReadSavedOrigin(path));
             var loaded = await Task.Run(() => _packageService.LoadAsync(path, CancellationToken.None));
-            var draft = loaded with { Diagnostics = _draftService.Validate(loaded) };
+            var source = Characters.FirstOrDefault(character => character.Id == loaded.SourceCharacterId);
+            var draft = source is null ? loaded : loaded with
+            {
+                Localization = CharacterLocalizationMapper.FillJapaneseNameFallback(loaded.Localization, source),
+            };
+            draft = draft with { Diagnostics = _draftService.Validate(draft) };
             _activeDraftId = null;
             SelectedCharacter = Characters.FirstOrDefault(item => item.Id == draft.SourceCharacterId);
             _savedDrafts[draft.SymbolicId] = draft;

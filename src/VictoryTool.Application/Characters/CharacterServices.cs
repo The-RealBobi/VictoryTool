@@ -758,6 +758,7 @@ public sealed class CharacterCloneService : ICharacterCloneService
             ["fieldCount"] = source.Fields.Count,
         });
         var fields = CopyCloneFields(source.Fields);
+        var japaneseName = CharacterLocalizationMapper.ResolveJapaneseName(fields);
         return new CharacterDraft(
             CreateSymbolicId(),
             source.Id,
@@ -790,7 +791,7 @@ public sealed class CharacterCloneService : ICharacterCloneService
                         source.Fields.GetValueOrDefault($"Localization.{locale}.FullName"),
                         source.Fields.GetValueOrDefault($"Localization.{locale}.Description"),
                         source.Fields.GetValueOrDefault($"Romanization.{locale}.FullName"),
-                        locale == "ja" ? source.Fields.GetValueOrDefault($"Localization.{locale}.FullName") : null,
+                        japaneseName,
                         source.Fields.GetValueOrDefault($"Localization.{locale}.ShortName"),
                         source.Fields.GetValueOrDefault($"Localization.{locale}.UpperName")),
                     StringComparer.OrdinalIgnoreCase)),
@@ -818,7 +819,7 @@ public sealed class CharacterCloneService : ICharacterCloneService
             Assets = source.Assets is { } assets
                 ? assets with { }
                 : new CharacterDraftAssets(null, null),
-            Localization = CloneLocalization(source.Localization),
+            Localization = CloneLocalization(source.Localization, source.Fields),
             Acquisition = source.Acquisition is { } acquisition
                 ? acquisition with { }
                 : new CharacterDraftAcquisition(null, null),
@@ -845,13 +846,17 @@ public sealed class CharacterCloneService : ICharacterCloneService
 
     private static string CreateSymbolicId() => $"custom.{Guid.NewGuid():N}";
 
-    private static CharacterDraftLocalization CloneLocalization(CharacterDraftLocalization? source)
+    private static CharacterDraftLocalization CloneLocalization(
+        CharacterDraftLocalization? source, IReadOnlyDictionary<string, string?> fields)
     {
-        if (source is null)
-            return new CharacterDraftLocalization(null, null, GameLocaleCatalog.CreateEmptyLocalizations());
+        source ??= new CharacterDraftLocalization(null, null, GameLocaleCatalog.CreateEmptyLocalizations());
+        var japaneseName = CharacterLocalizationMapper.ResolveJapaneseName(fields);
         var locales = source.Locales.ToDictionary(
             pair => pair.Key,
-            pair => pair.Value with { },
+            pair => pair.Value with
+            {
+                JapaneseName = string.IsNullOrWhiteSpace(pair.Value.JapaneseName) ? japaneseName : pair.Value.JapaneseName,
+            },
             StringComparer.OrdinalIgnoreCase);
         return source with { LocaleValues = locales };
     }

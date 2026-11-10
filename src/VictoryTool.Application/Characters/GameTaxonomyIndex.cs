@@ -122,8 +122,7 @@ public sealed class GameTaxonomyIndex
             : CharacterRarityCatalog.ResolveName(rarity, locale);
 
     public string ResolveSpecialRarity(int specialRarity, string locale) => specialRarity == 0
-        // The regular parameter row serves every rarity before the separate Hero rows.
-        ? $"{ResolveRarity(0, locale)}–{ResolveRarity(4, locale)}"
+        ? CharacterRarityCatalog.ResolveNormalName(locale)
         : ResolveRarity(specialRarity, locale);
 
     public string ResolveAcademicYear(uint id, string locale)
@@ -178,6 +177,8 @@ public sealed class GameTaxonomyIndex
 
     private string ResolveTeamName(TeamTextReference item, string locale)
     {
+        if (item.NameTextId == 3636813554 && locale.Equals("es", StringComparison.OrdinalIgnoreCase))
+            return "No afiliado";
         var text = item.NameTextId != 0 ? ResolveText(item.NameTextId, locale) : null;
         if (string.IsNullOrWhiteSpace(text))
             return locale.Equals("es", StringComparison.OrdinalIgnoreCase)

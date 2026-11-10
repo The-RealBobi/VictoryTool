@@ -5,6 +5,41 @@ namespace VictoryTool.Application.Characters;
 
 public static class CharacterLocalizationMapper
 {
+    public static string? ResolveJapaneseName(CharacterCatalogItem source)
+    {
+        var names = source.RomanizedNames;
+        var candidates = new[] { names?.GetValueOrDefault("ja")?.FullName, names?.GetValueOrDefault("en")?.FullName }
+            .Concat(names?.Values.Select(value => value.FullName) ?? []);
+        return ResolveJapaneseName(candidates, source.Localizations?.GetValueOrDefault("ja")?.FullName);
+    }
+
+    public static string? ResolveJapaneseName(IReadOnlyDictionary<string, string?> fields) =>
+        ResolveJapaneseName(new[] { "ja", "en" }.Concat(GameLocaleCatalog.SupportedCharacterLocales)
+            .Select(locale => fields.GetValueOrDefault($"Romanization.{locale}.FullName")),
+            fields.GetValueOrDefault("Localization.ja.FullName"));
+
+    public static CharacterDraftLocalization FillJapaneseNameFallback(
+        CharacterDraftLocalization? localization, CharacterCatalogItem source)
+    {
+        var current = localization ?? new CharacterDraftLocalization(null, null);
+        var name = ResolveJapaneseName(source);
+        if (string.IsNullOrWhiteSpace(name)) return current;
+        var locales = GameLocaleCatalog.SupportedCharacterLocales.ToDictionary(
+            locale => locale,
+            locale =>
+            {
+                var text = current.Locales.GetValueOrDefault(locale)
+                    ?? new CharacterDraftLocalizedText(null, null, null, null);
+                return string.IsNullOrWhiteSpace(text.JapaneseName) ? text with { JapaneseName = name } : text;
+            },
+            StringComparer.OrdinalIgnoreCase);
+        return current with { LocaleValues = locales };
+    }
+
+    private static string? ResolveJapaneseName(IEnumerable<string?> candidates, string? localizedJapaneseName) =>
+        candidates.Append(localizedJapaneseName).FirstOrDefault(value =>
+            !string.IsNullOrWhiteSpace(value) && !CharacterDisplayName.ContainsJapanese(value));
+
     public static IReadOnlyDictionary<int, CharacterLocalizedText> Map(
         string locale,
         IEnumerable<CharacterBaseMetadata> characters,

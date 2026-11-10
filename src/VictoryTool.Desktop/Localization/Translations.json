@@ -2864,5 +2864,15 @@
     "pt": "Nenhuma",
     "zh_hans": "无",
     "zh_hant": "無"
+  },
+  "Language:": {
+    "de": "Sprache:",
+    "es": "Idioma:",
+    "fr": "Langue :",
+    "it": "Lingua:",
+    "ja": "言語:",
+    "pt": "Idioma:",
+    "zh_hans": "语言：",
+    "zh_hant": "語言："
   }
 }

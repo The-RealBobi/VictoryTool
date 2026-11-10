@@ -607,6 +607,7 @@ public sealed class ExportExecutor : IExportExecutor
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 ReportProgress(progress, "config_write", Path.GetRelativePath(stagingPath, path));
+                ExportProvenance.MarkT2b(tables[path]);
                 await File.WriteAllBytesAsync(path, tables[path], cancellationToken);
             }
             tables.Clear();
@@ -1185,7 +1186,7 @@ public sealed class ExportExecutor : IExportExecutor
                     rigs.Add(rigKey);
                     bones.UnionWith(customBones);
                     Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-                    await File.WriteAllBytesAsync(destination, output, token);
+                    await File.WriteAllBytesAsync(destination, ExportProvenance.MarkG4pk(output), token);
                 }
                 lock (progressLock)
                 {

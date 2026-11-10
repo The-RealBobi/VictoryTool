@@ -108,12 +108,12 @@
           </ItemsControl.ItemTemplate>
         </ItemsControl>
       </StackPanel>
-      <StackPanel>
-        <TextBlock Classes="muted" FontSize="11" Text="Parameter variant" />
-        <ComboBox ItemsSource="{Binding SelectedVariants}" SelectedItem="{Binding SelectedVariant}">
+      <StackPanel IsVisible="{Binding HasMultipleTechniqueVariants}">
+        <TextBlock Classes="muted" FontSize="11" Text="{Binding WizardText.TechniqueVariant}" />
+        <ComboBox ItemsSource="{Binding TechniqueVariantChoices}" SelectedItem="{Binding SelectedTechniqueVariantChoice}">
           <ComboBox.ItemTemplate>
-            <DataTemplate x:DataType="characters:CharacterVariantSummary">
-              <TextBlock Text="{Binding DisplayLabel}" />
+            <DataTemplate x:DataType="vm:CharacterVariantChoice">
+              <TextBlock Text="{Binding Label}" />
             </DataTemplate>
           </ComboBox.ItemTemplate>
         </ComboBox>

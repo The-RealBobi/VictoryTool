@@ -20,7 +20,7 @@ public static class CharacterDisplayName
         && ContainsJapanese(localized) && !string.IsNullOrWhiteSpace(romanized) && !ContainsJapanese(romanized)
             ? romanized : localized;
 
-    private static bool ContainsJapanese(string text) => text.EnumerateRunes().Any(rune => rune.Value is
+    internal static bool ContainsJapanese(string text) => text.EnumerateRunes().Any(rune => rune.Value is
         >= 0x3040 and <= 0x30ff or >= 0x3400 and <= 0x9fff or >= 0xf900 and <= 0xfaff
         or >= 0x20000 and <= 0x323af);
 }

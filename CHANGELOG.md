@@ -1,3 +1,16 @@
+# VictoryTool changelog
+
+## v1.4.1
+
+- Hide incomplete special technique kits and only show the variant picker when there is a choice.
+- Label standard technique kits Normal and keep hidden kits intact when applying a technique template.
+- Fill missing Japanese-origin names from the game’s romanized name data when editing source-based characters.
+- Keep discarded character edits from reappearing on restart.
+- Improve the locale selector layout and align the roster search placeholder.
+
+
+## v1.4.0
+
 - Added combined character filters for origin game, gender, position, affinity and multiple teams, with searchable team tags and ascending or descending sorting.
 - Replaced the roster search, sort, filter and refresh icons with Material Symbols.
 - Updated the language selector to show native language names. Character names, descriptions, positions, origin titles and interface labels follow the selected language.

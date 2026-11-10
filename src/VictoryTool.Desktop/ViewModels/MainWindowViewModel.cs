@@ -966,7 +966,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 }
                 if (value?.Variants is { Count: > 0 } variants)
                 {
-                    SelectedVariant = variants[0];
+                    SelectedVariant = variants.FirstOrDefault(HasCompletePrimarySkills) ?? variants[0];
                     SetTechniqueVariantChoices(variants);
                 }
                 else if (ActiveDraft is null)
@@ -1016,6 +1016,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         : "Unresolved";
     public IReadOnlyList<CharacterVariantSummary> SelectedVariants => SelectedCharacter?.Variants ?? [];
     public IReadOnlyList<CharacterVariantChoice> TechniqueVariantChoices => _techniqueVariantChoices;
+    public bool HasMultipleTechniqueVariants => _techniqueVariantChoices.Count > 1;
 
     public CharacterVariantChoice? SelectedTechniqueVariantChoice
     {
@@ -2213,10 +2214,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         LocalizationEditorRows.Clear();
         if (ActiveDraft is null) return;
+        var localization = ActiveDraft.Localization ?? new CharacterDraftLocalization(
+            null, null, GameLocaleCatalog.CreateEmptyLocalizations());
+        var source = Characters.FirstOrDefault(character => character.Id == ActiveDraft.SourceCharacterId);
+        if (source is not null) localization = CharacterLocalizationMapper.FillJapaneseNameFallback(localization, source);
         foreach (var locale in GameLocaleCatalog.SupportedCharacterLocales)
         {
-            var localization = ActiveDraft.Localization ?? new CharacterDraftLocalization(
-                null, null, GameLocaleCatalog.CreateEmptyLocalizations());
             localization.Locales.TryGetValue(locale, out var text);
             var row = new CharacterLocalizationEditorRow(
                 locale,
@@ -2246,7 +2249,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void SetTechniqueVariantChoices(
         IReadOnlyList<CharacterVariantSummary> variants,
-        CharacterVariantSummary? selected = null)
+        CharacterVariantSummary? selected = null) =>
+        RefreshTechniqueVariantLabels(variants.Where(HasCompletePrimarySkills).ToArray(), selected);
+
+    private static bool HasCompletePrimarySkills(CharacterVariantSummary variant) =>
+        variant.SkillSlots.Count >= CharacterVariantSummary.MainSkillSlotCount
+        && variant.EnumerateMainSkillSlots().All(slot => slot.SkillId != 0);
+
+    private void RefreshTechniqueVariantLabels(
+        IReadOnlyList<CharacterVariantSummary> variants,
+        CharacterVariantSummary? selected)
     {
         var occurrences = new Dictionary<string, int>(StringComparer.Ordinal);
         _techniqueVariantChoices = variants.Select(variant =>
@@ -2257,9 +2269,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             return new CharacterVariantChoice(variant, count == 1 ? rarity : $"{rarity} ({count})");
         }).ToArray();
         OnPropertyChanged(nameof(TechniqueVariantChoices));
+        OnPropertyChanged(nameof(HasMultipleTechniqueVariants));
         var selectedVariant = selected ?? variants.FirstOrDefault();
         var choice = _techniqueVariantChoices.FirstOrDefault(item =>
-            selectedVariant is not null && SameVariant(item.Variant, selectedVariant));
+            selectedVariant is not null && SameVariant(item.Variant, selectedVariant))
+            ?? _techniqueVariantChoices.FirstOrDefault();
         SetProperty(ref _selectedTechniqueVariantChoice, choice, nameof(SelectedTechniqueVariantChoice));
     }
 
@@ -2391,11 +2405,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void SyncSelectedTechniqueVariant()
     {
-        if (ActiveDraft?.Variants is not { Count: > 0 } variants
-            || _selectedTechniqueVariantChoice is null)
+        if (ActiveDraft?.Variants is not { Count: > 0 } variants)
             return;
-        var sourceParameterId = _selectedTechniqueVariantChoice.Variant.ParameterId;
-        var specialRarity = _selectedTechniqueVariantChoice.Variant.SpecialRarity;
+        var sourceParameterId = _selectedTechniqueVariantChoice?.Variant.ParameterId ?? variants[0].SourceParameterId;
+        var specialRarity = _selectedTechniqueVariantChoice?.Variant.SpecialRarity ?? variants[0].Gameplay.SpecialRarity ?? 0;
         var updated = variants
             .Select(variant => variant.SourceParameterId == sourceParameterId
                 && (variant.Gameplay.SpecialRarity ?? 0) == specialRarity
@@ -2450,10 +2463,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (ActiveDraft?.Variants is not { Count: > 0 } variants) return;
         var skills = ActiveDraft.Skills ?? CharacterDraftSkills.FromLegacyFields(ActiveDraft.Fields);
+        var visibleVariants = _techniqueVariantChoices
+            .Select(choice => (choice.Variant.ParameterId, choice.Variant.SpecialRarity)).ToHashSet();
         ActiveDraft = ActiveDraft with
         {
             Skills = skills,
-            Variants = variants.Select(variant => variant with { Skills = skills }).ToArray(),
+            Variants = variants.Select(variant => visibleVariants.Contains(
+                (variant.SourceParameterId, variant.Gameplay.SpecialRarity ?? 0))
+                    ? variant with { Skills = skills } : variant).ToArray(),
         };
         if (_activeDraftId is { } draftId)
             Project.UpdateDraft(draftId, ActiveDraft);
@@ -2625,6 +2642,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    public string LocaleEditorLanguageLabel => Workflow("Language:");
     public string BothAnimationsLabel => Workflow("Both");
     public string AnimationTypesLabel => GenerateBothAnimations ? Workflow("Both")
         : GenerateChrAnimations ? "CHR" : GenerateEventAnimations ? "EVENT" : Workflow("None");
@@ -2777,6 +2795,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             Text = UiText.ForLocale(normalized);
             OnPropertyChanged(nameof(SelectedLanguageChoice));
             OnPropertyChanged(nameof(BothAnimationsLabel));
+            OnPropertyChanged(nameof(LocaleEditorLanguageLabel));
             OnPropertyChanged(nameof(AnimationTypesLabel));
             NotifyRosterFilterChoicesChanged();
             OnPropertyChanged(nameof(CharacterSortChoices));
@@ -2797,7 +2816,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             if (_techniqueVariantChoices.Count > 0)
             {
                 var selected = _selectedTechniqueVariantChoice?.Variant;
-                SetTechniqueVariantChoices(_techniqueVariantChoices.Select(choice => choice.Variant).ToArray(), selected);
+                RefreshTechniqueVariantLabels(_techniqueVariantChoices.Select(choice => choice.Variant).ToArray(), selected);
             }
             if (ActiveDraft is not null && !_isUpdatingSkillRow) RebuildSkillEditorRows();
             OnPropertyChanged(nameof(AppearanceUniformOptions));
@@ -3351,6 +3370,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 fields[$"Skills.Slot{index + 1}"] = $"{Invariant(skill.SkillId)}:{Invariant(skill.UnlockLevel)}";
             }
         }
+        if (SelectedCharacter.RomanizedNames is { } romanizedNames)
+            foreach (var (locale, names) in romanizedNames)
+                fields[$"Romanization.{locale}.FullName"] = names.FullName;
         var source = new CharacterSnapshot(
             SelectedCharacter.Id,
             SelectedCharacter.DisplayName,

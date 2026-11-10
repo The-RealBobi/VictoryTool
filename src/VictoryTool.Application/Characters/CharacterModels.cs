@@ -744,6 +744,13 @@ public static class CharacterRarityCatalog
             ["zh_hant"] = ["普通", "潛力", "資深", "超凡", "傳奇", "英雄", "無雙"],
         };
 
+    public static string ResolveNormalName(string locale) => locale.ToLowerInvariant() switch
+    {
+        "it" => "Normale",
+        "ja" or "zh_hans" or "zh_hant" => "通常",
+        _ => "Normal",
+    };
+
     public static uint? ResolveNameTextId(int rarity) => ResolveNameIndex(rarity) is { } index
         ? NameTextIds[index]
         : null;
