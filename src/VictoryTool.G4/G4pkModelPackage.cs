@@ -127,6 +127,21 @@ public sealed class G4pkModelPackage
             members);
     }
 
+    public ReadOnlyMemory<byte> GetModelMember(string stem, string extension, ReadOnlySpan<byte> magic)
+    {
+        var expectedName = stem + extension;
+        G4pkModelMember? match = null;
+        foreach (var member in Members)
+        {
+            if (!member.Name.Equals(expectedName, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (match is not null || !member.Content.Span[..4].SequenceEqual(magic))
+                throw new InvalidDataException($"The G4PKM member '{expectedName}' is duplicated or has invalid content.");
+            match = member;
+        }
+        return match?.Content ?? Members[FindUniqueMember(magic)].Content;
+    }
+
     public byte[] ReplaceCharacterModel(string modelStem, ReadOnlySpan<byte> skeleton, ReadOnlySpan<byte> model)
     {
         if (string.IsNullOrWhiteSpace(modelStem) || modelStem is "." or ".."

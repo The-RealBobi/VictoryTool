@@ -1,5 +1,10 @@
 # VictoryTool changelog
 
+## v1.4.2
+
+- Added G4PKM selection for custom heads, uniforms and shoes.
+- Packed embedded model and skeleton data into character packages and verified that animation profiles match the embedded rig.
+
 ## v1.4.1
 
 - Hid special technique kits with incomplete main slots and selected the first complete kit when opening a character.

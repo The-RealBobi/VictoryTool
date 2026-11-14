@@ -286,14 +286,14 @@ public sealed partial class MainWindow : Window
     private async void SelectHeadModel(object? sender, RoutedEventArgs eventArgs)
     {
         if (DataContext is ViewModels.MainWindowViewModel viewModel
-            && await SelectAppearanceFileAsync(viewModel.WizardText.Model3D, viewModel.WizardText.Model3D, "*.g4md") is { } path)
+            && await SelectAppearanceFileAsync(viewModel.WizardText.Model3D, viewModel.WizardText.Model3D, "*.g4md", "*.g4pkm") is { } path)
             viewModel.ActiveDraftHeadModelPath = path;
     }
 
     private async void SelectUniformModel(object? sender, RoutedEventArgs eventArgs)
     {
         if (DataContext is ViewModels.MainWindowViewModel viewModel
-            && await SelectAppearanceFileAsync(viewModel.WizardText.Uniform, viewModel.WizardText.Model3D, "*.g4md") is { } path)
+            && await SelectAppearanceFileAsync(viewModel.WizardText.Uniform, viewModel.WizardText.Model3D, "*.g4md", "*.g4pkm") is { } path)
         {
             viewModel.ActiveDraftUniformModelPath = path;
         }
@@ -302,7 +302,7 @@ public sealed partial class MainWindow : Window
     private async void SelectShoesModel(object? sender, RoutedEventArgs eventArgs)
     {
         if (DataContext is ViewModels.MainWindowViewModel viewModel
-            && await SelectAppearanceFileAsync(viewModel.WizardText.Shoes, viewModel.WizardText.Model3D, "*.g4md") is { } path)
+            && await SelectAppearanceFileAsync(viewModel.WizardText.Shoes, viewModel.WizardText.Model3D, "*.g4md", "*.g4pkm") is { } path)
             viewModel.ActiveDraftShoesModelPath = path;
     }
 

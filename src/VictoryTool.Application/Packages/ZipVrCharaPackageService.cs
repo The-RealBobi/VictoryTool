@@ -10,6 +10,7 @@ using VictoryTool.Application.Assets;
 using VictoryTool.Application.Diagnostics;
 using VictoryTool.G4.Textures;
 using VictoryTool.G4.Animations;
+using VictoryTool.G4.Packages;
 
 namespace VictoryTool.Application.Packages;
 
@@ -581,8 +582,9 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
         string description)
     {
         if (string.IsNullOrWhiteSpace(sourcePath) || !Path.IsPathRooted(sourcePath)) return draft;
-        if (!sourcePath.EndsWith(".g4md", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException($"A {description} must be a G4MD file.");
+        var packed = sourcePath.EndsWith(".g4pkm", StringComparison.OrdinalIgnoreCase);
+        if (!packed && !sourcePath.EndsWith(".g4md", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"A {description} must be a G4MD or G4PKM file.");
 
         var fullModelPath = Path.GetFullPath(sourcePath);
         var stem = Path.GetFileNameWithoutExtension(fullModelPath);
@@ -596,9 +598,28 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
         var texturePath = fullModelPath[..marker] + "/dx11/chr/" + fullModelPath[(marker + "/common/chr/".Length)..];
         texturePath = Path.ChangeExtension(texturePath, ".g4tx");
         var virtualStem = $"common/chr/{resourceCategory}/99_CUSTOM/{stem}/{stem}";
+        if (!File.Exists(fullModelPath))
+            throw new FileNotFoundException($"The {description} family is missing: {fullModelPath}");
+        if (new FileInfo(fullModelPath).Length > MaximumAuthoredResourceBytes)
+            throw new InvalidDataException($"The {description} exceeds the 256 MiB package resource limit: {fullModelPath}");
+        var modelFile = File.ReadAllBytes(fullModelPath);
+        ReadOnlyMemory<byte>? skeleton = null;
+        var skeletonPath = Path.ChangeExtension(fullModelPath, ".g4sk");
+        if (packed)
+        {
+            var package = G4pkModelPackage.Read(modelFile);
+            resources.Add(new AuthoredResource(virtualStem + ".g4md", package.GetModelMember(stem, ".g4md", "G4MD"u8)));
+            skeleton = package.GetModelMember(stem, ".g4sk", "G4SK"u8);
+        }
+        else
+        {
+            resources.Add(new AuthoredResource(virtualStem + ".g4md", modelFile));
+            if (File.Exists(skeletonPath))
+                skeleton = File.ReadAllBytes(skeletonPath);
+        }
+
         var files = new[]
         {
-            (fullModelPath, virtualStem + ".g4md"),
             (meshPath, virtualStem + ".g4mg"),
             (texturePath, $"dx11/chr/{resourceCategory}/99_CUSTOM/{stem}/{stem}.g4tx"),
         };
@@ -609,7 +630,10 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
             resources.Add(new AuthoredResource(file.Item2, File.ReadAllBytes(file.Item1)));
         }
 
-        foreach (var extension in new[] { ".g4sk", ".objbin", ".clobin" })
+        if (skeleton is { } skeletonContent)
+            resources.Add(new AuthoredResource(virtualStem + ".g4sk", skeletonContent));
+
+        foreach (var extension in new[] { ".objbin", ".clobin" })
         {
             var companionPath = Path.ChangeExtension(fullModelPath, extension);
             if (File.Exists(companionPath))
@@ -700,9 +724,8 @@ public sealed class ZipVrCharaPackageService : IVrCharaPackageService
                 GeneratedPackages = generatedPackages,
             };
             ValidateAnimationProfile(profile, stem);
-            var targetSkeletonPath = Path.ChangeExtension(fullModelPath, ".g4sk");
-            if (File.Exists(targetSkeletonPath)
-                && !Hash(File.ReadAllBytes(targetSkeletonPath)).Equals(profile.TargetRig.Sha256, StringComparison.OrdinalIgnoreCase))
+            if (skeleton is { } targetSkeleton
+                && !Hash(targetSkeleton.Span).Equals(profile.TargetRig.Sha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"The animation config does not match its model G4SK: {animationConfigPath}");
             var existing = draft.AnimationProfiles ?? [];
             var prior = existing.FirstOrDefault(item =>
